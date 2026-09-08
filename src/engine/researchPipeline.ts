@@ -8,6 +8,11 @@ import {
   ProviderHealth,
   ProviderMetadata,
 } from './dataProviders';
+import {
+  getProviderReadinessMatrix,
+  ProviderReadiness,
+  ResearchUseCase,
+} from './providerPolicy';
 
 /**
  * Snapshot delivered to application/UI consumers.
@@ -19,6 +24,7 @@ export interface ResearchPipelineSnapshot {
   featuresByTicker: Record<string, TickerFeatureVector>;
   provider: ProviderMetadata;
   providerHealth: ProviderHealth;
+  providerReadiness: Record<ResearchUseCase, ProviderReadiness>;
   generatedAt: string;
 }
 
@@ -54,9 +60,10 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    const [universe, providerHealth] = await Promise.all([
+    const [universe, providerHealth, providerReadiness] = await Promise.all([
       this.provider.getUniverse(),
       this.provider.getHealth(),
+      getProviderReadinessMatrix(this.provider),
     ]);
 
     const featuresByTicker = Object.fromEntries(
@@ -68,6 +75,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       featuresByTicker,
       provider: this.provider.metadata,
       providerHealth,
+      providerReadiness,
       generatedAt: new Date().toISOString(),
     };
   }
