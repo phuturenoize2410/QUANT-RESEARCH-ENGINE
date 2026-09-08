@@ -38,7 +38,6 @@ export class MLMetaStrategyRouter {
     const overnightSuitability = isBear ? 52 : breadth >= 55 ? 78 : 64;
     const breakoutSuitability = volatility > 24 ? 58 : isBull ? 74 : 64;
 
-    // Strategy suitabilities
     const strategies: StrategySuitability[] = [
       {
         strategyId: 'trend',
@@ -58,7 +57,7 @@ export class MLMetaStrategyRouter {
         recentRollingSharpe: 2.15,
         recentDrawdownPct: -2.8,
         status: !isBear && breadth >= 55 ? 'PRIMARY' : 'NEUTRAL',
-        rationale: `Overnight suitability reflects current market regime and breadth; execution still requires ticker-level cost and tail-risk checks.`
+        rationale: 'Overnight suitability reflects current market regime and breadth; execution still requires ticker-level cost and tail-risk checks.'
       },
       {
         strategyId: 'breakout',
@@ -126,12 +125,23 @@ export class MLMetaStrategyRouter {
     const primaryStrategy = ranked.find(strategy => strategy.status === 'PRIMARY') ?? ranked[0];
     const secondaryStrategy = ranked.find(strategy => strategy !== primaryStrategy && strategy.status === 'SECONDARY') ?? ranked[1];
     const avoidStrategies = strategies.filter(s => s.status === 'AVOID');
-    const volatilityRegime = volatility >= 30 ? 'HIGH' : volatility >= 20 ? 'ELEVATED' : volatility < 10 ? 'COMPRESSED' : 'NORMAL';
+    const volatilityRegime: MLStrategyRouterOutput['volatilityRegime'] = volatility >= 30
+      ? 'HIGH_VOLATILITY'
+      : volatility >= 20
+        ? 'ELEVATED'
+        : volatility < 10
+          ? 'LOW'
+          : 'NORMAL';
+    const liquidityState: MLStrategyRouterOutput['liquidityState'] = sampleStock && sampleStock.volumeRatio < 0.8
+      ? 'TIGHT'
+      : sampleStock && sampleStock.volumeRatio > 1.5
+        ? 'ABUNDANT'
+        : 'NORMAL';
 
     return {
       marketRegime: `${market.ihsgRegime} (Breadth: ${breadth}%)${resolvedContext.isSimulated ? ' — SIMULATED' : ''}`,
       volatilityRegime,
-      liquidityState: sampleStock && sampleStock.volumeRatio < 0.8 ? 'THIN' : 'NORMAL',
+      liquidityState,
       primaryStrategy,
       secondaryStrategy,
       avoidStrategies,
@@ -160,48 +170,31 @@ export class QuantMLEnsembleEngine {
     const gapRisk = GapRiskMLModel.predict(stock);
     const noTradeCheck = NoTradeModel.evaluate(stock);
 
-    // 1. Quant Rule Score (0-100)
     const quantRuleScore = stock.overnightEdgeScore;
-
-    // 2. Statistical Edge Score (0-100)
     const statisticalEdgeScore = Math.min(98, Math.max(15, Math.round(
       (stock.historicalStats.greenOpenRate * 0.75) +
       (stock.historicalStats.worstGap > -3 ? 20 : 10)
     )));
-
-    // 3. ML Probability (%)
     const mlProbability = overnightML.probNetPositiveOpen;
-
-    // 4. Historical Analog Score (0-100)
     const historicalAnalogScore = stock.bandarmology.score > 70 ? 84 : 72;
-
-    // 5. Regime Fit Score (0-100)
     const regimeFitScore = feat.ihsgRegime.includes('BULL') ? 92 : 64;
 
-    // 6. Tail Risk Assessment
     let tailRiskLevel: 'LOW' | 'MODERATE' | 'ELEVATED' | 'HIGH' | 'SEVERE' = 'LOW';
     if (gapRisk.gapRiskScore >= 80) tailRiskLevel = 'SEVERE';
     else if (gapRisk.gapRiskScore >= 65) tailRiskLevel = 'HIGH';
     else if (gapRisk.gapRiskScore >= 50) tailRiskLevel = 'ELEVATED';
     else if (gapRisk.gapRiskScore >= 30) tailRiskLevel = 'MODERATE';
-    else tailRiskLevel = 'LOW';
 
     const tailRiskScore = gapRisk.gapRiskScore;
-
-    // Weighted Ensemble Calculation:
-    // Quant Score (25%) + Statistical Edge (20%) + ML Prob (25%) + Analog (15%) + Regime (15%) - Tail Risk Penalty
     const weightedBase = 
       (quantRuleScore * 0.25) +
       (statisticalEdgeScore * 0.20) +
       (mlProbability * 0.25) +
       (historicalAnalogScore * 0.15) +
       (regimeFitScore * 0.15);
-
-    // Tail risk penalty deduction (0 to 30 points)
     const tailPenalty = Math.round((tailRiskScore / 100) * 22);
     const finalQuantMLEdge = Math.min(99, Math.max(5, Math.round(weightedBase - tailPenalty)));
 
-    // Model Agreement & Consensus Detection
     const quantSaysBuy = quantRuleScore >= 70;
     const mlSaysBuy = mlProbability >= 65;
     const quantSaysAvoid = quantRuleScore < 50;
@@ -217,7 +210,6 @@ export class QuantMLEnsembleEngine {
       agreementDetails = quantSaysBuy ? 'Quant filters show edge but ML model predicts heightened tail/negative open probability.' : 'ML signals statistical edge but classical quant thresholds are partially unmet.';
     }
 
-    // System Decision Verdict: 'QUALIFIED' | 'CAUTION' | 'CONFLICTING SIGNALS' | 'HIGH RISK' | 'NO TRADE'
     let systemDecision: SystemDecision;
     if (!noTradeCheck.shouldTrade || tailRiskLevel === 'SEVERE' || gapRisk.gapRiskScore >= 80) {
       systemDecision = 'NO TRADE';
@@ -231,7 +223,6 @@ export class QuantMLEnsembleEngine {
       systemDecision = 'CAUTION';
     }
 
-    // Position Sizing Recommendation
     let recommendedPositionSizePct = 0.0;
     if (systemDecision === 'QUALIFIED') {
       recommendedPositionSizePct = tailRiskLevel === 'LOW' ? 10.0 : 7.5;
@@ -239,11 +230,8 @@ export class QuantMLEnsembleEngine {
       recommendedPositionSizePct = 5.0;
     } else if (systemDecision === 'CONFLICTING SIGNALS') {
       recommendedPositionSizePct = 2.5;
-    } else {
-      recommendedPositionSizePct = 0.0;
     }
 
-    // Decision Rationale ("Why")
     const decisionRationale: string[] = [];
     if (feat.isMaAligned) decisionRationale.push('Pristine multi-timeframe moving average stack (MA5 > MA10 > MA20 > MA50)');
     if (stock.bandarmology.score >= 75) decisionRationale.push('Top institutional brokers actively absorbing late-session ask volume');
@@ -251,7 +239,6 @@ export class QuantMLEnsembleEngine {
     if (stock.historicalStats.greenOpenRate >= 65) decisionRationale.push(`Consistent historical overnight persistence (${stock.historicalStats.greenOpenRate}% win rate)`);
     if (decisionRationale.length === 0) decisionRationale.push('Baseline setup passes minimum liquidity and momentum filters.');
 
-    // Key Risks
     const keyRisks: string[] = [];
     if (gapRisk.gapRiskScore > 45) keyRisks.push(`Elevated gap-down risk score (${gapRisk.gapRiskScore}/100)`);
     if (feat.atrPct > 4.0) keyRisks.push(`Wide intraday ATR (${feat.atrPct.toFixed(1)}%) increases overnight dispersion`);
@@ -259,7 +246,6 @@ export class QuantMLEnsembleEngine {
     if (feat.ihsgRegime.includes('BEAR')) keyRisks.push('Broader IHSG market regime is under pressure');
     if (keyRisks.length === 0) keyRisks.push('Normal market execution and overnight gap risk apply.');
 
-    // Confidence Level
     const confidenceScore = overnightML.confidenceScore;
     let confidence: ConfidenceLevel = 'MODERATE';
     if (confidenceScore >= 85) confidence = 'VERY HIGH';
@@ -314,8 +300,6 @@ export class PortfolioMLRiskEngine {
     }
 
     const total = selectedStocks.length;
-
-    // Sector Concentration
     const sectorCounts: Record<string, number> = {};
     selectedStocks.forEach(s => {
       sectorCounts[s.sector] = (sectorCounts[s.sector] || 0) + 1;
@@ -327,18 +311,14 @@ export class PortfolioMLRiskEngine {
       maxAllowedPct: 35
     })).sort((a, b) => b.weightPct - a.weightPct);
 
-    // Strategy Distribution
     const strategyConcentrations = [
       { strategy: 'Overnight Edge (BSJP)', weightPct: 65 },
       { strategy: 'Multi-MA Trend Stacking', weightPct: 25 },
       { strategy: 'Morning Intraday Momentum', weightPct: 10 }
     ];
 
-    // Correlation Risk: higher if multiple stocks are from the same sector
     const maxSectorWeight = Math.max(...sectorConcentrations.map(s => s.weightPct), 20);
     const correlationRiskScore = Math.min(100, Math.round(maxSectorWeight * 1.8));
-
-    // Portfolio Heat
     const avgTailRisk = selectedStocks.reduce((sum, s) => sum + (100 - s.historicalStats.greenOpenRate), 0) / total;
     const portfolioHeatScore = Math.min(100, Math.round((correlationRiskScore * 0.5) + (avgTailRisk * 1.2)));
 
@@ -346,7 +326,6 @@ export class PortfolioMLRiskEngine {
     if (portfolioHeatScore >= 75) portfolioHeatStatus = 'OVERHEATED';
     else if (portfolioHeatScore >= 55) portfolioHeatStatus = 'ELEVATED';
     else if (portfolioHeatScore >= 35) portfolioHeatStatus = 'MODERATE';
-    else portfolioHeatStatus = 'COOL';
 
     let recommendation = 'Portfolio allocations are well balanced across uncorrelated industry sectors.';
     if (maxSectorWeight > 40) {
