@@ -17,6 +17,10 @@ import {
   ProviderMetadata,
 } from './dataProviders';
 import {
+  CacheAwareMarketDataProvider,
+  ProviderCacheSnapshot,
+} from './providerCache';
+import {
   getProviderReadinessMatrix,
   ProviderReadiness,
   ResearchUseCase,
@@ -30,6 +34,7 @@ export interface ResearchPipelineSnapshot {
   provider: ProviderMetadata;
   providerHealth: ProviderHealth;
   providerReadiness: Record<ResearchUseCase, ProviderReadiness>;
+  providerCache?: ProviderCacheSnapshot;
   generatedAt: string;
 }
 
@@ -42,6 +47,13 @@ export type FeatureContextFactory = (
   universe: StockData[],
   provider: MarketDataProvider,
 ) => Promise<FeatureContext> | FeatureContext;
+
+function isCacheAwareProvider(
+  provider: MarketDataProvider,
+): provider is CacheAwareMarketDataProvider {
+  const candidate = provider as Partial<CacheAwareMarketDataProvider>;
+  return typeof candidate.getCacheSnapshot === 'function';
+}
 
 /**
  * Provider-driven orchestration boundary:
@@ -128,6 +140,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       provider: this.provider.metadata,
       providerHealth,
       providerReadiness,
+      providerCache: isCacheAwareProvider(this.provider)
+        ? this.provider.getCacheSnapshot()
+        : undefined,
       generatedAt: new Date().toISOString(),
     };
   }
