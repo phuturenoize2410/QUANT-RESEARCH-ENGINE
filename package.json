@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "validate:data": "tsx scripts/data-quality-smoke.ts",
+    "check": "npm run lint && npm run validate:data && npm run build"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
