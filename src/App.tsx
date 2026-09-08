@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TopMarketBar } from './components/TopMarketBar';
 import { StrategySettingsModal } from './components/StrategySettingsModal';
@@ -14,9 +14,12 @@ import { OpportunityMapView } from './components/OpportunityMapView';
 import { StrategyLeaderboardView } from './components/StrategyLeaderboardView';
 import { QuantLabView } from './components/QuantLabView';
 import { MLLabView } from './components/MLLabView';
-import { buildUniverse } from './data/mockStocks';
 import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
 import { buildMorningPositionFromStock } from './engine/execution';
+import {
+  createPrototypeResearchPipeline,
+  ResearchPipelineSnapshot,
+} from './engine/researchPipeline';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
 const INITIAL_MORNING_POSITIONS: MorningPosition[] = [
@@ -36,13 +39,42 @@ export default function App() {
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [positions, setPositions] = useState<MorningPosition[]>(INITIAL_MORNING_POSITIONS);
   const [notification, setNotification] = useState<string | null>(null);
+  const [researchSnapshot, setResearchSnapshot] = useState<ResearchPipelineSnapshot | null>(null);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
 
-  const universe = useMemo(() => buildUniverse(strategySettings), [strategySettings, refreshTrigger]);
+  const researchPipeline = useMemo(() => createPrototypeResearchPipeline(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPipelineError(null);
+
+    researchPipeline.refresh(strategySettings)
+      .then(snapshot => {
+        if (!cancelled) setResearchSnapshot(snapshot);
+      })
+      .catch(error => {
+        if (!cancelled) {
+          setPipelineError(error instanceof Error ? error.message : 'Research pipeline refresh failed.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [researchPipeline, strategySettings, refreshTrigger]);
+
+  const universe = researchSnapshot?.universe ?? [];
   const selectedStock = useMemo(() => universe.find(s => s.ticker === selectedTicker) || universe[0], [universe, selectedTicker]);
 
   const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
-  const handleRefreshData = useCallback(() => { setRefreshTrigger(prev => prev + 1); showNotification('Recalculated 54 IDX tickers with latest simulated pre-closing auction data.'); }, []);
+  const handleRefreshData = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+    const providerLabel = researchSnapshot
+      ? `${researchSnapshot.provider.name} (${researchSnapshot.provider.mode})`
+      : 'research pipeline';
+    showNotification(`Refreshing ${providerLabel}. Prototype market data remains simulated.`);
+  }, [researchSnapshot]);
 
   // UI delegates transaction assumptions, fees and simulated execution to the execution engine.
   const handleAddToJournal = useCallback((stock: StockData) => {
@@ -57,6 +89,25 @@ export default function App() {
 
   const shortlistCandidatesCount = useMemo(() => universe.filter(s => s.prefilterPassed && s.overnightEdgeScore >= 50).length, [universe]);
   const prefilterPassedCount = useMemo(() => universe.filter(s => s.prefilterPassed).length, [universe]);
+
+  if (pipelineError) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#07101F] text-slate-100 p-6">
+        <div className="max-w-xl rounded border border-red-500/40 bg-[#101B2D] p-5">
+          <div className="text-sm font-semibold text-red-300">Research pipeline unavailable</div>
+          <div className="mt-2 text-xs text-slate-300">{pipelineError}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!researchSnapshot) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-[#07101F] text-slate-100">
+        <div className="text-xs text-slate-400">Loading provider → feature pipeline…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-[#07101F] text-slate-100 font-sans selection:bg-emerald-500 selection:text-slate-950">
