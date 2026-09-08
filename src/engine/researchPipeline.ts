@@ -4,6 +4,10 @@ import {
   createPrototypeFeatureContext,
   FeatureContext,
 } from './featureContext';
+import {
+  buildFeatureProvenance,
+  FeatureProvenanceSnapshot,
+} from './featureProvenance';
 import { FeatureStore } from './ml/featureStore';
 import { TickerFeatureVector } from './ml/types';
 import {
@@ -21,6 +25,7 @@ import {
 export interface ResearchPipelineSnapshot {
   universe: StockData[];
   featuresByTicker: Record<string, TickerFeatureVector>;
+  featureProvenanceByTicker: Record<string, FeatureProvenanceSnapshot>;
   featureContext: FeatureContext;
   provider: ProviderMetadata;
   providerHealth: ProviderHealth;
@@ -94,9 +99,31 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       universe.map(stock => [stock.ticker, FeatureStore.get(stock, featureContext)]),
     );
 
+    const featureProvenanceByTicker = Object.fromEntries(
+      Object.entries(featuresByTicker).map(([ticker, vector]) => [
+        ticker,
+        buildFeatureProvenance(vector, featureContext, this.provider.metadata),
+      ]),
+    );
+
+    if (this.provider.metadata.mode !== 'MOCK') {
+      const unsafeTickers = Object.values(featureProvenanceByTicker)
+        .filter(snapshot => !snapshot.productionSafe)
+        .map(snapshot => snapshot.ticker);
+
+      if (unsafeTickers.length > 0) {
+        throw new Error(
+          `Feature provenance validation failed for provider ${this.provider.metadata.name}: ` +
+          `${unsafeTickers.length} ticker(s) contain simulated or unclassified feature lineage. ` +
+          'Research snapshot rejected before strategy/backtest execution.',
+        );
+      }
+    }
+
     return {
       universe,
       featuresByTicker,
+      featureProvenanceByTicker,
       featureContext,
       provider: this.provider.metadata,
       providerHealth,
