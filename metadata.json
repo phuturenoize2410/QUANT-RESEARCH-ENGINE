@@ -1,0 +1,6 @@
+{
+  "name": "OVERNIGHT EDGE - IDX Buy-Close / Sell-Open Screener",
+  "description": "Multi-Strategy Quant Research Engine & Machine Learning Adaptive Operating System for Indonesian Stocks (IDX), combining Quantitative, Statistical, and Probabilistic ML Evidence with Data Leakage Protection, Walk-Forward Validation, Model Drift Monitoring, and Tail Risk Minimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

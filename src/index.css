@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #07101F;
+    --bg-workspace: #0B1424;
+    --bg-panel-primary: #101B2D;
+    --bg-panel-secondary: #0D1727;
+    --border-color: #22304A;
+    --border-subtle: #17243A;
+    --text-primary: #F1F5F9;
+    --text-secondary: #A7B2C5;
+    --text-muted: #6F7C91;
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #07101F;
+    color: #F1F5F9;
+    font-family: "Inter", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Universal tabular numerals for quantitative and financial consistency */
+  table, .tabular-nums, [data-tabular] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Sleek Institutional Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #07101F;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #22304A;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #384A6E;
+  }
+}
+
+/* Institutional Design Helpers */
+.panel-primary {
+  background-color: #101B2D;
+  border: 1px solid #22304A;
+}
+
+.panel-secondary {
+  background-color: #0D1727;
+  border: 1px solid #1A263C;
+}
+
+.panel-micro {
+  background-color: #0A1322;
+  border: 1px solid #1E2D45;
+}
