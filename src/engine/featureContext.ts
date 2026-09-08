@@ -1,5 +1,5 @@
 import { StockData } from '../types';
-import { ProviderDataMode } from './dataProviders';
+import { ProviderMode } from './dataProviders';
 
 export type FeatureContextSource =
   | 'SIMULATED'
@@ -27,7 +27,7 @@ export interface FundamentalFeatureSnapshot {
 
 export interface FeatureContext {
   asOfTimestamp: string;
-  mode: ProviderDataMode;
+  mode: ProviderMode;
   isSimulated: boolean;
   market: MarketFeatureContext;
   fundamentalsByTicker: Record<string, FundamentalFeatureSnapshot>;
