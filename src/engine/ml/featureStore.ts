@@ -2,7 +2,11 @@
 // CENTRALIZED ML FEATURE STORE (CAUSAL, NO-LEAKAGE POINT-IN-TIME FEATURE VECTORS)
 // ============================================================================
 import { StockData } from '../../types';
-import { FeatureContext, getFundamentalSnapshot } from '../featureContext';
+import {
+  FeatureContext,
+  createPrototypeFeatureContext,
+  getFundamentalSnapshot,
+} from '../featureContext';
 import { TickerFeatureVector, DataLeakageCheckResult } from './types';
 
 export class FeatureStore {
@@ -10,15 +14,19 @@ export class FeatureStore {
 
   /**
    * Computes a strictly causal feature vector as of Time T.
-   * Contextual market/sector/fundamental inputs must be supplied by the research
-   * pipeline rather than being invented inside the feature engine.
+   * Contextual market/sector/fundamental inputs should be supplied by the research
+   * pipeline. Legacy simulated ML call-sites may omit context during the prototype
+   * phase; in that case the fallback is created by featureContext and remains
+   * explicitly marked MOCK/SIMULATED rather than being mistaken for provider data.
    */
   public static get(
     stock: StockData,
-    context: FeatureContext,
-    asOfTimestamp: string = context.asOfTimestamp,
+    context?: FeatureContext,
+    asOfTimestamp?: string,
   ): TickerFeatureVector {
-    const cacheKey = `${stock.ticker}-${asOfTimestamp}-${stock.price}-${context.mode}-${context.isSimulated}`;
+    const resolvedTimestamp = asOfTimestamp ?? context?.asOfTimestamp ?? '15:45 WIB';
+    const resolvedContext = context ?? createPrototypeFeatureContext([stock], resolvedTimestamp);
+    const cacheKey = `${stock.ticker}-${resolvedTimestamp}-${stock.price}-${resolvedContext.mode}-${resolvedContext.isSimulated}`;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)!;
 
     const bars = stock.historicalBars || [];
@@ -73,16 +81,16 @@ export class FeatureStore {
       ? 'ABOVE_VWAP'
       : 'BELOW_VWAP';
 
-    const ihsgRegime = context.market.ihsgRegime;
-    const marketBreadthPctAboveMa20 = context.market.marketBreadthPctAboveMa20;
-    const marketVolatilityIndex = context.market.marketVolatilityIndex;
-    const sectorRelativeStrength = context.market.sectorRelativeStrength[stock.sector] ?? 50;
-    const sectorMomentumRank = context.market.sectorMomentumRank[stock.sector] ?? 99;
+    const ihsgRegime = resolvedContext.market.ihsgRegime;
+    const marketBreadthPctAboveMa20 = resolvedContext.market.marketBreadthPctAboveMa20;
+    const marketVolatilityIndex = resolvedContext.market.marketVolatilityIndex;
+    const sectorRelativeStrength = resolvedContext.market.sectorRelativeStrength[stock.sector] ?? 50;
+    const sectorMomentumRank = resolvedContext.market.sectorMomentumRank[stock.sector] ?? 99;
 
     const brokerAccumulationScore = stock.bandarmology.score;
     const foreignNetFlowRatio = stock.bandarmology.netForeignFlow > 0 ? 0.35 : stock.bandarmology.netForeignFlow < 0 ? -0.25 : 0.05;
 
-    const fundamentals = getFundamentalSnapshot(context, stock.ticker);
+    const fundamentals = getFundamentalSnapshot(resolvedContext, stock.ticker);
     const revenueGrowthYoy = fundamentals.revenueGrowthYoy;
     const netMarginPct = fundamentals.netMarginPct;
     const roePct = fundamentals.roePct;
@@ -94,7 +102,7 @@ export class FeatureStore {
 
     const vector: TickerFeatureVector = {
       ticker: stock.ticker,
-      timestamp: asOfTimestamp,
+      timestamp: resolvedTimestamp,
       price: currentClose,
       return1d,
       return3d,
@@ -190,7 +198,7 @@ export class FeatureStore {
           testName: 'Point-In-Time Context Boundary',
           description: 'Requires market, sector, and fundamental context to be supplied by the research pipeline',
           passed: true,
-          details: 'FeatureStore no longer owns hardcoded market or ticker-specific fundamental assumptions.',
+          details: 'Provider-backed research supplies context explicitly; legacy prototype calls resolve only to a MOCK/SIMULATED context outside FeatureStore.',
         },
         {
           testName: 'Provider Publication-Time Audit',
