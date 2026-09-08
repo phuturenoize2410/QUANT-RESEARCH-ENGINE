@@ -1,5 +1,9 @@
 import { buildUniverse } from '../data/mockStocks';
 import { StrategySettings, StockData } from '../types';
+import {
+  createPrototypeFeatureContext,
+  FeatureContext,
+} from './featureContext';
 import { FeatureStore } from './ml/featureStore';
 import { TickerFeatureVector } from './ml/types';
 import {
@@ -14,14 +18,10 @@ import {
   ResearchUseCase,
 } from './providerPolicy';
 
-/**
- * Snapshot delivered to application/UI consumers.
- * UI code should consume this normalized snapshot rather than constructing
- * market universes or features directly from mock/provider-specific sources.
- */
 export interface ResearchPipelineSnapshot {
   universe: StockData[];
   featuresByTicker: Record<string, TickerFeatureVector>;
+  featureContext: FeatureContext;
   provider: ProviderMetadata;
   providerHealth: ProviderHealth;
   providerReadiness: Record<ResearchUseCase, ProviderReadiness>;
@@ -33,18 +33,24 @@ export interface ResearchPipeline {
   getProvider(): MarketDataProvider;
 }
 
+export type FeatureContextFactory = (
+  universe: StockData[],
+  provider: MarketDataProvider,
+) => Promise<FeatureContext> | FeatureContext;
+
 /**
  * Provider-driven orchestration boundary:
- * DataProvider -> Feature Engine -> downstream Strategy/Risk/Execution -> UI.
+ * DataProvider -> Feature Context -> Feature Engine -> Strategy/Risk/Execution -> UI.
  *
- * During the prototype phase buildUniverse remains the synthetic data factory,
- * but it is contained behind this boundary. A Google Finance/free API adapter
- * can later replace MockMarketDataProvider without changing App.tsx consumers.
+ * The feature-context factory is deliberately injectable. A future Google Finance,
+ * free API, broker or fundamental adapter can populate point-in-time contextual
+ * inputs without changing FeatureStore or any UI consumer.
  */
 export class DefaultResearchPipeline implements ResearchPipeline {
   constructor(
     private readonly provider: MarketDataProvider,
     private readonly seedUniverse?: (settings: StrategySettings) => StockData[],
+    private readonly featureContextFactory?: FeatureContextFactory,
   ) {}
 
   getProvider(): MarketDataProvider {
@@ -52,7 +58,6 @@ export class DefaultResearchPipeline implements ResearchPipeline {
   }
 
   async refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
-    // Only prototype/mock pipelines are allowed to seed synthetic data.
     if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
       const seeded = this.seedUniverse(settings);
       if (this.provider instanceof MockMarketDataProvider) {
@@ -66,13 +71,19 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       getProviderReadinessMatrix(this.provider),
     ]);
 
+    const featureContext = this.featureContextFactory
+      ? await this.featureContextFactory(universe, this.provider)
+      : createPrototypeFeatureContext(universe);
+
+    FeatureStore.clearCache();
     const featuresByTicker = Object.fromEntries(
-      universe.map(stock => [stock.ticker, FeatureStore.get(stock, '15:45 WIB')]),
+      universe.map(stock => [stock.ticker, FeatureStore.get(stock, featureContext)]),
     );
 
     return {
       universe,
       featuresByTicker,
+      featureContext,
       provider: this.provider.metadata,
       providerHealth,
       providerReadiness,
@@ -82,5 +93,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
 }
 
 export function createPrototypeResearchPipeline(): ResearchPipeline {
-  return new DefaultResearchPipeline(new MockMarketDataProvider(), buildUniverse);
+  return new DefaultResearchPipeline(
+    new MockMarketDataProvider(),
+    buildUniverse,
+    universe => createPrototypeFeatureContext(universe),
+  );
 }
