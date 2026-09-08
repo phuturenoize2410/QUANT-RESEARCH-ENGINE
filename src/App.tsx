@@ -16,105 +16,20 @@ import { QuantLabView } from './components/QuantLabView';
 import { MLLabView } from './components/MLLabView';
 import { buildUniverse } from './data/mockStocks';
 import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
+import { buildMorningPositionFromStock } from './engine/execution';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
-// Seed initial positions purchased yesterday for the Morning Exit Desk
 const INITIAL_MORNING_POSITIONS: MorningPosition[] = [
-  {
-    id: 'pos-1',
-    ticker: 'BBCA',
-    name: 'Bank Central Asia Tbk',
-    purchaseDate: 'Yesterday 15:42 WIB',
-    entryPrice: 10300,
-    lots: 150,
-    totalCostIDR: 154500000,
-    currentOpenPrice: 10450,
-    openGapPct: 1.46,
-    grossProfitIDR: 2250000,
-    netProfitIDR: 1632000,
-    netProfitPct: 1.06,
-    cutLossLevel: 10150,
-    takeProfitLevel: 10450,
-    exitStatus: 'TAKE PROFIT',
-    notes: 'Green open gap confirmed. Selling into opening liquidity at 09:02 WIB.',
-  },
-  {
-    id: 'pos-2',
-    ticker: 'BRIS',
-    name: 'Bank Syariah Indonesia Tbk',
-    purchaseDate: 'Yesterday 15:44 WIB',
-    entryPrice: 3050,
-    lots: 300,
-    totalCostIDR: 91500000,
-    currentOpenPrice: 3120,
-    openGapPct: 2.30,
-    grossProfitIDR: 2100000,
-    netProfitIDR: 1734000,
-    netProfitPct: 1.90,
-    cutLossLevel: 3000,
-    takeProfitLevel: 3120,
-    exitStatus: 'TAKE PROFIT',
-    notes: 'Strong opening gap-up. Pre-close broker accumulation followed through.',
-  },
-  {
-    id: 'pos-3',
-    ticker: 'ASII',
-    name: 'Astra International Tbk',
-    purchaseDate: 'Yesterday 15:38 WIB',
-    entryPrice: 5125,
-    lots: 200,
-    totalCostIDR: 102500000,
-    currentOpenPrice: 5175,
-    openGapPct: 0.98,
-    grossProfitIDR: 1000000,
-    netProfitIDR: 588000,
-    netProfitPct: 0.57,
-    cutLossLevel: 5050,
-    takeProfitLevel: 5200,
-    exitStatus: 'FLAT / EXIT',
-    notes: 'Small positive gap. Executed early exit as planned.',
-  },
-  {
-    id: 'pos-4',
-    ticker: 'MBMA',
-    name: 'Merdeka Battery Materials Tbk',
-    purchaseDate: 'Yesterday 15:43 WIB',
-    entryPrice: 575,
-    lots: 1000,
-    totalCostIDR: 57500000,
-    currentOpenPrice: 565,
-    openGapPct: -1.74,
-    grossProfitIDR: -1000000,
-    netProfitIDR: -1229000,
-    netProfitPct: -2.14,
-    cutLossLevel: 568,
-    takeProfitLevel: 590,
-    exitStatus: 'CUT LOSS',
-    notes: 'NEGATIVE OPEN TRIGGERED: Exited immediately at 09:00:30 WIB per stop rule.',
-  },
-  {
-    id: 'pos-5',
-    ticker: 'ADRO',
-    name: 'Adaro Energy Indonesia Tbk',
-    purchaseDate: 'Yesterday 15:45 WIB',
-    entryPrice: 3740,
-    lots: 250,
-    totalCostIDR: 93500000,
-    currentOpenPrice: 3820,
-    openGapPct: 2.14,
-    grossProfitIDR: 2000000,
-    netProfitIDR: 1622000,
-    netProfitPct: 1.73,
-    cutLossLevel: 3690,
-    takeProfitLevel: 3820,
-    exitStatus: 'TAKE PROFIT',
-    notes: 'Energy sector gap-up. Target met at open.',
-  },
+  { id:'pos-1', ticker:'BBCA', name:'Bank Central Asia Tbk', purchaseDate:'Yesterday 15:42 WIB', entryPrice:10300, lots:150, totalCostIDR:154500000, currentOpenPrice:10450, openGapPct:1.46, grossProfitIDR:2250000, netProfitIDR:1632000, netProfitPct:1.06, cutLossLevel:10150, takeProfitLevel:10450, exitStatus:'TAKE PROFIT', notes:'Green open gap confirmed. Selling into opening liquidity at 09:02 WIB.' },
+  { id:'pos-2', ticker:'BRIS', name:'Bank Syariah Indonesia Tbk', purchaseDate:'Yesterday 15:44 WIB', entryPrice:3050, lots:300, totalCostIDR:91500000, currentOpenPrice:3120, openGapPct:2.30, grossProfitIDR:2100000, netProfitIDR:1734000, netProfitPct:1.90, cutLossLevel:3000, takeProfitLevel:3120, exitStatus:'TAKE PROFIT', notes:'Strong opening gap-up. Pre-close broker accumulation followed through.' },
+  { id:'pos-3', ticker:'ASII', name:'Astra International Tbk', purchaseDate:'Yesterday 15:38 WIB', entryPrice:5125, lots:200, totalCostIDR:102500000, currentOpenPrice:5175, openGapPct:0.98, grossProfitIDR:1000000, netProfitIDR:588000, netProfitPct:0.57, cutLossLevel:5050, takeProfitLevel:5200, exitStatus:'FLAT / EXIT', notes:'Small positive gap. Executed early exit as planned.' },
+  { id:'pos-4', ticker:'MBMA', name:'Merdeka Battery Materials Tbk', purchaseDate:'Yesterday 15:43 WIB', entryPrice:575, lots:1000, totalCostIDR:57500000, currentOpenPrice:565, openGapPct:-1.74, grossProfitIDR:-1000000, netProfitIDR:-1229000, netProfitPct:-2.14, cutLossLevel:568, takeProfitLevel:590, exitStatus:'CUT LOSS', notes:'NEGATIVE OPEN TRIGGERED: Exited immediately at 09:00:30 WIB per stop rule.' },
+  { id:'pos-5', ticker:'ADRO', name:'Adaro Energy Indonesia Tbk', purchaseDate:'Yesterday 15:45 WIB', entryPrice:3740, lots:250, totalCostIDR:93500000, currentOpenPrice:3820, openGapPct:2.14, grossProfitIDR:2000000, netProfitIDR:1622000, netProfitPct:1.73, cutLossLevel:3690, takeProfitLevel:3820, exitStatus:'TAKE PROFIT', notes:'Energy sector gap-up. Target met at open.' },
 ];
 
 export default function App() {
   const [strategySettings, setStrategySettings] = useState<StrategySettings>(DEFAULT_STRATEGY_SETTINGS);
-  const [activeTab, setActiveTab] = useState<string>('shortlist'); // 15:45 FINAL SHORTLIST as default primary landing screen
+  const [activeTab, setActiveTab] = useState<string>('shortlist');
   const [selectedTicker, setSelectedTicker] = useState<string>('BBCA');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -122,238 +37,49 @@ export default function App() {
   const [positions, setPositions] = useState<MorningPosition[]>(INITIAL_MORNING_POSITIONS);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Generate Universe with current strategy settings
-  const universe = useMemo(() => {
-    return buildUniverse(strategySettings);
-  }, [strategySettings, refreshTrigger]);
+  const universe = useMemo(() => buildUniverse(strategySettings), [strategySettings, refreshTrigger]);
+  const selectedStock = useMemo(() => universe.find(s => s.ticker === selectedTicker) || universe[0], [universe, selectedTicker]);
 
-  const selectedStock = useMemo(() => {
-    return universe.find(s => s.ticker === selectedTicker) || universe[0];
-  }, [universe, selectedTicker]);
+  const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
+  const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
+  const handleRefreshData = useCallback(() => { setRefreshTrigger(prev => prev + 1); showNotification('Recalculated 54 IDX tickers with latest simulated pre-closing auction data.'); }, []);
 
-  const handleSelectStock = useCallback((ticker: string) => {
-    setSelectedTicker(ticker);
-    setActiveTab('analysis');
-  }, []);
-
-  const handleRefreshData = useCallback(() => {
-    setRefreshTrigger(prev => prev + 1);
-    showNotification('Recalculated 54 IDX tickers with latest pre-closing auction data.');
-  }, []);
-
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => {
-      setNotification(null);
-    }, 4000);
-  };
-
+  // UI delegates transaction assumptions, fees and simulated execution to the execution engine.
   const handleAddToJournal = useCallback((stock: StockData) => {
-    const price = stock.price;
-    const defaultLots = 100;
-    const totalCost = price * defaultLots * 100;
-    // Estimate morning open price based on historical average gap
-    const openPrice = Math.round(price * (1 + (stock.historicalStats.avgOvernightGap / 100)));
-    const gapPct = Math.round(((openPrice / price) - 1) * 1000) / 10;
-    const sellValue = openPrice * defaultLots * 100;
-    const grossPL = sellValue - totalCost;
-    const netPL = grossPL - (totalCost * 0.0015 + sellValue * 0.0025);
+    const position = buildMorningPositionFromStock(stock, strategySettings, 100);
+    setPositions(prev => [position, ...prev]);
+    showNotification(`Logged ${stock.ticker} (${position.lots} lots) into Morning Exit Journal using centralized execution costs.`);
+  }, [strategySettings]);
 
-    const newPos: MorningPosition = {
-      id: `pos-${Date.now()}`,
-      ticker: stock.ticker,
-      name: stock.name,
-      purchaseDate: 'Today 15:45 WIB',
-      entryPrice: price,
-      lots: defaultLots,
-      totalCostIDR: totalCost,
-      currentOpenPrice: openPrice,
-      openGapPct: gapPct,
-      grossProfitIDR: grossPL,
-      netProfitIDR: netPL,
-      netProfitPct: Math.round((netPL / totalCost) * 1000) / 10,
-      cutLossLevel: Math.round(price * 0.985),
-      takeProfitLevel: Math.round(price * 1.015),
-      exitStatus: gapPct >= 0.8 ? 'TAKE PROFIT' : gapPct <= -0.8 ? 'CUT LOSS' : 'FLAT / EXIT',
-      notes: `Bought from 15:45 Shortlist (Edge Score: ${stock.overnightEdgeScore})`,
-    };
+  const handleUpdatePosition = useCallback((id: string, updates: Partial<MorningPosition>) => setPositions(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p)), []);
+  const handleRemovePosition = useCallback((id: string) => setPositions(prev => prev.filter(p => p.id !== id)), []);
+  const handleAddManualPosition = useCallback((pos: Omit<MorningPosition, 'id'>) => { setPositions(prev => [{ ...pos, id: `pos-${Date.now()}` }, ...prev]); showNotification(`Logged ${pos.ticker} position successfully.`); }, []);
 
-    setPositions(prev => [newPos, ...prev]);
-    showNotification(`Logged ${stock.ticker} (100 lots) into Morning Exit Journal.`);
-  }, []);
-
-  const handleUpdatePosition = useCallback((id: string, updates: Partial<MorningPosition>) => {
-    setPositions(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  }, []);
-
-  const handleRemovePosition = useCallback((id: string) => {
-    setPositions(prev => prev.filter(p => p.id !== id));
-  }, []);
-
-  const handleAddManualPosition = useCallback((pos: Omit<MorningPosition, 'id'>) => {
-    setPositions(prev => [{ ...pos, id: `pos-${Date.now()}` }, ...prev]);
-    showNotification(`Logged ${pos.ticker} position successfully.`);
-  }, []);
-
-  const shortlistCandidatesCount = useMemo(() => {
-    return universe.filter(s => s.prefilterPassed && s.overnightEdgeScore >= 50).length;
-  }, [universe]);
-
-  const prefilterPassedCount = useMemo(() => {
-    return universe.filter(s => s.prefilterPassed).length;
-  }, [universe]);
+  const shortlistCandidatesCount = useMemo(() => universe.filter(s => s.prefilterPassed && s.overnightEdgeScore >= 50).length, [universe]);
+  const prefilterPassedCount = useMemo(() => universe.filter(s => s.prefilterPassed).length, [universe]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-[#07101F] text-slate-100 font-sans selection:bg-emerald-500 selection:text-slate-950">
-      
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-4 right-4 z-50 bg-[#101B2D] border border-emerald-500/80 text-emerald-300 px-4 py-2.5 rounded shadow-2xl text-xs flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-medium">{notification}</span>
-        </div>
-      )}
-
-      {/* Left Institutional Sidebar Navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
-        shortlistCount={shortlistCandidatesCount}
-        prefilterCount={prefilterPassedCount}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
-
-      {/* Main Terminal Column */}
+      {notification && <div className="fixed bottom-4 right-4 z-50 bg-[#101B2D] border border-emerald-500/80 text-emerald-300 px-4 py-2.5 rounded shadow-2xl text-xs flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span className="font-medium">{notification}</span></div>}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isCollapsed={isSidebarCollapsed} onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)} shortlistCount={shortlistCandidatesCount} prefilterCount={prefilterPassedCount} onOpenSettings={() => setIsSettingsOpen(true)} />
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        
-        {/* Compact Persistent Top Market Bar */}
-        <TopMarketBar
-          universe={universe}
-          selectedTicker={selectedTicker}
-          onSelectStock={handleSelectStock}
-          onRefreshData={handleRefreshData}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-        />
-
-        {/* Dynamic Main Workspace: 100% width, fluid scrolling, no max-w-7xl letterboxing */}
+        <TopMarketBar universe={universe} selectedTicker={selectedTicker} onSelectStock={handleSelectStock} onRefreshData={handleRefreshData} onOpenSettings={() => setIsSettingsOpen(true)} onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)} activeTab={activeTab} setActiveTab={setActiveTab} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#0B1424] p-3 md:p-5">
-          {activeTab === 'shortlist' && (
-            <FinalShortlistView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onAddToJournal={handleAddToJournal}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-            />
-          )}
-
-          {activeTab === 'ml_lab' && (
-            <MLLabView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onAddToJournal={handleAddToJournal}
-            />
-          )}
-
-          {activeTab === 'opportunity_map' && (
-            <OpportunityMapView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onAddToJournal={handleAddToJournal}
-            />
-          )}
-
-          {activeTab === 'leaderboard' && (
-            <StrategyLeaderboardView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onAddToJournal={handleAddToJournal}
-            />
-          )}
-
-          {activeTab === 'quantlab' && (
-            <QuantLabView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onAddToJournal={handleAddToJournal}
-            />
-          )}
-
-          {activeTab === 'screener' && (
-            <TodaysScreenerView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-              onNavigateToShortlist={() => setActiveTab('shortlist')}
-            />
-          )}
-
-          {activeTab === 'analysis' && selectedStock && (
-            <StockAnalysisView
-              selectedStock={selectedStock}
-              universe={universe}
-              onSelectStock={setSelectedTicker}
-              onAddToJournal={handleAddToJournal}
-            />
-          )}
-
-          {activeTab === 'gapdown' && (
-            <GapDownLabView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-            />
-          )}
-
-          {activeTab === 'backtest' && (
-            <OvernightBacktestView
-              universe={universe}
-              settings={strategySettings}
-              onUpdateSettings={setStrategySettings}
-              onSelectStock={handleSelectStock}
-            />
-          )}
-
-          {activeTab === 'strategylab' && (
-            <StrategyLabView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-            />
-          )}
-
-          {activeTab === 'bandarmology' && (
-            <BandarmologyView
-              universe={universe}
-              onSelectStock={handleSelectStock}
-            />
-          )}
-
-          {activeTab === 'morning_exit' && (
-            <MorningExitDashboardView
-              positions={positions}
-              onUpdatePosition={handleUpdatePosition}
-              onRemovePosition={handleRemovePosition}
-              onAddManualPosition={handleAddManualPosition}
-              universe={universe}
-              onSelectStock={handleSelectStock}
-            />
-          )}
+          {activeTab === 'shortlist' && <FinalShortlistView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} onOpenSettings={() => setIsSettingsOpen(true)} />}
+          {activeTab === 'ml_lab' && <MLLabView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'opportunity_map' && <OpportunityMapView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'leaderboard' && <StrategyLeaderboardView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'quantlab' && <QuantLabView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'screener' && <TodaysScreenerView universe={universe} onSelectStock={handleSelectStock} onNavigateToShortlist={() => setActiveTab('shortlist')} />}
+          {activeTab === 'analysis' && selectedStock && <StockAnalysisView selectedStock={selectedStock} universe={universe} onSelectStock={setSelectedTicker} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'gapdown' && <GapDownLabView universe={universe} onSelectStock={handleSelectStock} />}
+          {activeTab === 'backtest' && <OvernightBacktestView universe={universe} settings={strategySettings} onUpdateSettings={setStrategySettings} onSelectStock={handleSelectStock} />}
+          {activeTab === 'strategylab' && <StrategyLabView universe={universe} onSelectStock={handleSelectStock} />}
+          {activeTab === 'bandarmology' && <BandarmologyView universe={universe} onSelectStock={handleSelectStock} />}
+          {activeTab === 'morning_exit' && <MorningExitDashboardView positions={positions} onUpdatePosition={handleUpdatePosition} onRemovePosition={handleRemovePosition} onAddManualPosition={handleAddManualPosition} universe={universe} onSelectStock={handleSelectStock} />}
         </main>
       </div>
-
-      {/* Strategy Scoring Weights Settings Modal */}
-      <StrategySettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={strategySettings}
-        onSave={(newSettings) => {
-          setStrategySettings(newSettings);
-          showNotification('Updated Strategy Scoring Weights and Execution Costs.');
-        }}
-      />
-
+      <StrategySettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={strategySettings} onSave={(newSettings) => { setStrategySettings(newSettings); showNotification('Updated Strategy Scoring Weights and Execution Costs.'); }} />
     </div>
   );
 }
