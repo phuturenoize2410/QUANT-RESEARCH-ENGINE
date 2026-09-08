@@ -2,6 +2,7 @@
 // QUANT + ML ENSEMBLE ENGINE & ADAPTIVE META STRATEGY ROUTER
 // ============================================================================
 import { StockData } from '../../types';
+import { FeatureContext, createPrototypeFeatureContext } from '../featureContext';
 import { FeatureStore } from './featureStore';
 import { OvernightMLModel, GapRiskMLModel, NoTradeModel } from './models';
 import { 
@@ -13,113 +14,132 @@ import {
   ConfidenceLevel 
 } from './types';
 
+function resolveRouterContext(sampleStock?: StockData, context?: FeatureContext): FeatureContext {
+  if (context) return context;
+  return createPrototypeFeatureContext(sampleStock ? [sampleStock] : []);
+}
+
 export class MLMetaStrategyRouter {
   /**
    * ML-assisted strategy selection layer ranking strategy suitability probabilities
-   * based on current market regime, breadth, volatility, and sector dispersion
+   * from the same point-in-time FeatureContext used by the research pipeline.
+   * Legacy callers without a context remain supported only through an explicitly
+   * MOCK/SIMULATED prototype context.
    */
-  public static evaluate(sampleStock?: StockData): MLStrategyRouterOutput {
-    const isBull = true;
-    const breadth = 68;
+  public static evaluate(sampleStock?: StockData, context?: FeatureContext): MLStrategyRouterOutput {
+    const resolvedContext = resolveRouterContext(sampleStock, context);
+    const market = resolvedContext.market;
+    const isBull = market.ihsgRegime.includes('BULL');
+    const isBear = market.ihsgRegime.includes('BEAR');
+    const breadth = market.marketBreadthPctAboveMa20;
+    const volatility = market.marketVolatilityIndex;
+
+    const trendSuitability = isBull && breadth > 60 ? 86 : isBear ? 42 : 58;
+    const overnightSuitability = isBear ? 52 : breadth >= 55 ? 78 : 64;
+    const breakoutSuitability = volatility > 24 ? 58 : isBull ? 74 : 64;
 
     // Strategy suitabilities
     const strategies: StrategySuitability[] = [
       {
         strategyId: 'trend',
         strategyName: 'Multi-MA Trend Stacking',
-        suitabilityProb: isBull && breadth > 60 ? 86 : 58,
-        regimeFitScore: isBull ? 92 : 45,
+        suitabilityProb: trendSuitability,
+        regimeFitScore: isBull ? 92 : isBear ? 38 : 64,
         recentRollingSharpe: 1.84,
         recentDrawdownPct: -4.2,
-        status: isBull && breadth > 60 ? 'PRIMARY' : 'NEUTRAL',
-        rationale: 'Strong breadth (>60%) with clean MA stacking favors multi-day trend riders.'
+        status: isBull && breadth > 60 ? 'PRIMARY' : isBear ? 'AVOID' : 'NEUTRAL',
+        rationale: `Trend fit is derived from ${market.ihsgRegime} with ${breadth}% breadth above MA20.`
       },
       {
         strategyId: 'overnight',
         strategyName: 'Overnight Edge (BSJP)',
-        suitabilityProb: 78,
-        regimeFitScore: 88,
+        suitabilityProb: overnightSuitability,
+        regimeFitScore: isBear ? 54 : 88,
         recentRollingSharpe: 2.15,
         recentDrawdownPct: -2.8,
-        status: 'PRIMARY',
-        rationale: 'Pre-close auction accumulation remains robust with favorable morning liquidity.'
+        status: !isBear && breadth >= 55 ? 'PRIMARY' : 'NEUTRAL',
+        rationale: `Overnight suitability reflects current market regime and breadth; execution still requires ticker-level cost and tail-risk checks.`
       },
       {
         strategyId: 'breakout',
         strategyName: '50-Day High Volatility Breakout',
-        suitabilityProb: 74,
-        regimeFitScore: 82,
+        suitabilityProb: breakoutSuitability,
+        regimeFitScore: isBull ? 82 : isBear ? 46 : 66,
         recentRollingSharpe: 1.62,
         recentDrawdownPct: -5.4,
-        status: 'SECONDARY',
-        rationale: 'Breakout continuation active across commodities and Tier-1 financials.'
+        status: isBull && volatility <= 24 ? 'SECONDARY' : 'NEUTRAL',
+        rationale: `Breakout fit uses regime plus market volatility index ${volatility.toFixed(1)}.`
       },
       {
         strategyId: 'ichimoku',
         strategyName: 'Ichimoku Cloud Trend Rider',
-        suitabilityProb: 71,
-        regimeFitScore: 78,
+        suitabilityProb: isBull ? 71 : 55,
+        regimeFitScore: isBull ? 78 : 58,
         recentRollingSharpe: 1.55,
         recentDrawdownPct: -3.9,
-        status: 'SECONDARY',
-        rationale: 'Kumo cloud support holding firm across LQ45 core constituents.'
+        status: isBull ? 'SECONDARY' : 'NEUTRAL',
+        rationale: 'Trend-rider suitability is conditioned on the current market context rather than a fixed bullish assumption.'
       },
       {
         strategyId: 'morning_momentum',
         strategyName: 'BPJS Morning Intraday Scalper',
-        suitabilityProb: 65,
-        regimeFitScore: 70,
+        suitabilityProb: volatility >= 12 && volatility <= 28 ? 65 : 52,
+        regimeFitScore: volatility <= 28 ? 70 : 48,
         recentRollingSharpe: 1.48,
         recentDrawdownPct: -4.8,
         status: 'NEUTRAL',
-        rationale: 'Morning session 1 volatility sufficient for 15-minute quick profit captures.'
+        rationale: `Morning-momentum suitability is gated by the current volatility regime (${volatility.toFixed(1)}).`
       },
       {
         strategyId: 'pullback',
         strategyName: 'MA20 Institutional Pullback',
-        suitabilityProb: 62,
-        regimeFitScore: 68,
+        suitabilityProb: isBull ? 62 : 50,
+        regimeFitScore: isBull ? 68 : 52,
         recentRollingSharpe: 1.39,
         recentDrawdownPct: -3.5,
         status: 'NEUTRAL',
-        rationale: 'Selective pullbacks to 20 EMA in energy and materials displaying absorption.'
+        rationale: 'Pullback setups remain secondary until ticker-level absorption and liquidity features confirm the entry.'
       },
       {
         strategyId: 'macd_cross',
         strategyName: 'MACD Momentum Cross',
-        suitabilityProb: 59,
-        regimeFitScore: 65,
+        suitabilityProb: isBull ? 59 : 48,
+        regimeFitScore: isBull ? 65 : 50,
         recentRollingSharpe: 1.25,
         recentDrawdownPct: -6.1,
         status: 'AVOID',
-        rationale: 'Momentum oscillators showing selective divergence; prefer price action.'
+        rationale: 'Momentum oscillators remain lower priority than price, liquidity, and point-in-time context.'
       },
       {
         strategyId: 'hidden_gems',
         strategyName: 'Emerging Leader Discovery',
         suitabilityProb: 54,
-        regimeFitScore: 60,
+        regimeFitScore: isBear ? 48 : 60,
         recentRollingSharpe: 1.10,
         recentDrawdownPct: -7.5,
         status: 'AVOID',
-        rationale: 'Small cap liquidity remains concentrated; higher friction on non-LQ45.'
+        rationale: 'Small-cap discovery remains experimental until provider-backed liquidity and fundamental inputs are available.'
       }
     ];
 
-    const primaryStrategy = strategies[0];
-    const secondaryStrategy = strategies[1];
+    const ranked = [...strategies].sort((a, b) => b.suitabilityProb - a.suitabilityProb);
+    const primaryStrategy = ranked.find(strategy => strategy.status === 'PRIMARY') ?? ranked[0];
+    const secondaryStrategy = ranked.find(strategy => strategy !== primaryStrategy && strategy.status === 'SECONDARY') ?? ranked[1];
     const avoidStrategies = strategies.filter(s => s.status === 'AVOID');
+    const volatilityRegime = volatility >= 30 ? 'HIGH' : volatility >= 20 ? 'ELEVATED' : volatility < 10 ? 'COMPRESSED' : 'NORMAL';
 
     return {
-      marketRegime: 'BULLISH TREND ACCUMULATION (Macro Support, Breadth: 68%)',
-      volatilityRegime: 'NORMAL',
-      liquidityState: 'ABUNDANT',
+      marketRegime: `${market.ihsgRegime} (Breadth: ${breadth}%)${resolvedContext.isSimulated ? ' — SIMULATED' : ''}`,
+      volatilityRegime,
+      liquidityState: sampleStock && sampleStock.volumeRatio < 0.8 ? 'THIN' : 'NORMAL',
       primaryStrategy,
       secondaryStrategy,
       avoidStrategies,
-      allRanked: strategies,
+      allRanked: ranked,
       quantVsMlAgreement: 'STRONG_AGREEMENT',
-      disagreementNotes: 'Both rule-based and predictive classifiers agree on Trend & Overnight edge dominance.'
+      disagreementNotes: resolvedContext.isSimulated
+        ? 'Strategy routing uses MOCK/SIMULATED market context; do not treat suitability scores as validated production evidence.'
+        : `Strategy routing is based on provider-backed point-in-time context as of ${resolvedContext.asOfTimestamp}.`
     };
   }
 }
