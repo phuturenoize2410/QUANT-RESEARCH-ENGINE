@@ -71,9 +71,23 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       getProviderReadinessMatrix(this.provider),
     ]);
 
+    if (this.provider.metadata.mode !== 'MOCK' && !this.featureContextFactory) {
+      throw new Error(
+        `Provider ${this.provider.metadata.name} requires a point-in-time FeatureContextFactory. ` +
+        'Refusing to combine real market data with simulated contextual features.',
+      );
+    }
+
     const featureContext = this.featureContextFactory
       ? await this.featureContextFactory(universe, this.provider)
       : createPrototypeFeatureContext(universe);
+
+    if (this.provider.metadata.mode !== 'MOCK' && featureContext.isSimulated) {
+      throw new Error(
+        `Provider ${this.provider.metadata.name} returned a simulated feature context. ` +
+        'Research snapshot rejected to prevent synthetic assumptions contaminating real-data backtests.',
+      );
+    }
 
     FeatureStore.clearCache();
     const featuresByTicker = Object.fromEntries(
