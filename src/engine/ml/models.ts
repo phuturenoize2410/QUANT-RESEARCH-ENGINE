@@ -2,6 +2,7 @@
 // SPECIALIZED MACHINE LEARNING MODELS (SIMULATED PROBABILISTIC INFERENCE)
 // ============================================================================
 import { StockData } from '../../types';
+import { DEFAULT_TOTAL_FRICTION_PCT } from '../executionPolicy';
 import { FeatureContext } from '../featureContext';
 import { FeatureStore } from './featureStore';
 import {
@@ -23,12 +24,12 @@ export class OvernightMLModel {
   public static readonly modelType = 'XGBoost';
 
   /**
-   * Evaluates P(Next Open > Entry + Costs + Slippage) and tail probabilities
-   * Default IDX round-trip cost + slippage = 0.40%
+   * Evaluates P(Next Open > Entry + Costs + Slippage) and tail probabilities.
+   * Transaction friction is sourced from the canonical execution policy.
    */
   public static predict(stock: StockData, context?: FeatureContext): OvernightMLPrediction {
     const feat = FeatureStore.get(stock, context);
-    const roundTripCostPct = 0.40;
+    const roundTripCostPct = DEFAULT_TOTAL_FRICTION_PCT;
 
     let logit = 0.15;
     const shapPositive: SHAPContribution[] = [];
@@ -162,7 +163,7 @@ export class IntradayMLModel {
     else if (feat.isMaAligned && feat.rsi14 >= 55 && feat.rsi14 <= 68) { prob = 65; classification = 'TREND CONTINUATION'; recommendedSetup = 'Pullback towards VWAP / MA5 support bounce in session 1'; }
     else if (stock.changePct < -2.0 && stock.bandarmology.netForeignFlow > 0) { prob = 58; classification = 'MORNING RECOVERY'; recommendedSetup = 'Mean reversion scalp from session low with tight 1.2% stop'; }
     else { prob = 44; classification = 'NO QUALIFIED SETUP'; recommendedSetup = 'No clear intraday edge; skip day-trade session'; }
-    const expectedIntradayReturn = Math.round(((prob / 100) * 2.8 - ((100 - prob) / 100) * 1.5 - 0.40) * 100) / 100;
+    const expectedIntradayReturn = Math.round(((prob / 100) * 2.8 - ((100 - prob) / 100) * 1.5 - DEFAULT_TOTAL_FRICTION_PCT) * 100) / 100;
     const downsideProbability = 100 - prob;
     const explanation: MLPredictionExplanation = {
       baseProbability: 50.0, finalProbability: prob,
@@ -170,7 +171,7 @@ export class IntradayMLModel {
         { featureName: 'Volume Velocity at Open', featureCategory: 'VOLUME', value: `${feat.relativeVolume.toFixed(2)}x`, contributionPct: 11.2, description: 'High opening participation provides exit liquidity' },
         { featureName: 'VWAP Posture', featureCategory: 'INTRADAY', value: feat.vwapRelation, contributionPct: 7.5, description: 'Trading above VWAP confirms institutional buyer control' }
       ],
-      topNegativeFeatures: [{ featureName: 'Round-Trip Day Trading Friction', featureCategory: 'LIQUIDITY', value: '0.40% fee + slippage', contributionPct: -4.0, description: 'Tight friction hurdle requires strong intraday expansion' }],
+      topNegativeFeatures: [{ featureName: 'Round-Trip Day Trading Friction', featureCategory: 'LIQUIDITY', value: `${DEFAULT_TOTAL_FRICTION_PCT.toFixed(2)}% fee + slippage`, contributionPct: -4.0, description: 'Tight friction hurdle requires strong intraday expansion' }],
       allFeatures: [], modelType: 'Random Forest', modelVersion: this.modelVersion, isSimulated: true
     };
     return { ticker: stock.ticker, probPositiveIntraday: prob, expectedIntradayReturn, downsideProbability, classification: classification as any, recommendedSetup, confidence: prob >= 65 ? 'HIGH' : 'MODERATE', explanation };
