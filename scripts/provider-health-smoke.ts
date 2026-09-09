@@ -1,9 +1,14 @@
 import {
   evaluateProviderReadiness,
+  getProviderStatusSnapshot,
   normalizeProviderHealth,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
-import type { ProviderHealth, ProviderMetadata } from '../src/engine/dataProviders';
+import {
+  MockMarketDataProvider,
+  type ProviderHealth,
+  type ProviderMetadata,
+} from '../src/engine/dataProviders';
 
 const nowMs = Date.parse('2026-09-09T06:30:00.000Z');
 
@@ -130,4 +135,28 @@ if (!validateProviderMetadata(realtimeModeWithoutRealtimeSupport)
   throw new Error('provider metadata validation must reject REALTIME mode without realtime capability.');
 }
 
-console.log('Provider-health smoke passed: health payloads and provider capability contracts are validated before readiness decisions.');
+const mockProvider = new MockMarketDataProvider();
+const mockHealth: ProviderHealth = {
+  status: 'HEALTHY',
+  checkedAt: '2026-09-09T06:30:00.000Z',
+  lastSuccessfulSyncAt: '2026-09-09T06:29:30.000Z',
+};
+const statusSnapshot = await getProviderStatusSnapshot(mockProvider, mockHealth, nowMs);
+
+if (statusSnapshot.capturedAt !== '2026-09-09T06:30:00.000Z') {
+  throw new Error('provider status snapshot must expose the canonical capture instant.');
+}
+
+if (statusSnapshot.health.status !== 'HEALTHY') {
+  throw new Error('provider status snapshot must preserve normalized health.');
+}
+
+if (statusSnapshot.readiness.HISTORICAL_BACKTEST.allowed) {
+  throw new Error('mock provider status snapshot must reject synthetic history as production backtest evidence.');
+}
+
+if (!statusSnapshot.readiness.EOD_RESEARCH.warnings.some(warning => warning.includes('simulated'))) {
+  throw new Error('provider status snapshot must keep mock-data warnings visible to downstream consumers.');
+}
+
+console.log('Provider-health smoke passed: canonical status snapshots keep metadata, normalized health and readiness decisions synchronized.');

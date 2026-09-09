@@ -21,8 +21,7 @@ import {
   ProviderCacheSnapshot,
 } from './providerCache';
 import {
-  getProviderReadinessMatrix,
-  normalizeProviderHealth,
+  getProviderStatusSnapshot,
   ProviderReadiness,
   ResearchUseCase,
 } from './providerPolicy';
@@ -83,14 +82,12 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    // Capture health exactly once per refresh so snapshot health and readiness
-    // decisions can never disagree because the adapter changed between calls.
-    const [universe, rawProviderHealth] = await Promise.all([
+    // Provider status is captured through one policy boundary. The pipeline no
+    // longer owns freshness normalization or readiness interpretation.
+    const [universe, providerStatus] = await Promise.all([
       this.provider.getUniverse(),
-      this.provider.getHealth(),
+      getProviderStatusSnapshot(this.provider),
     ]);
-    const providerHealth = normalizeProviderHealth(rawProviderHealth);
-    const providerReadiness = await getProviderReadinessMatrix(this.provider, providerHealth);
 
     if (this.provider.metadata.mode !== 'MOCK' && !this.featureContextFactory) {
       throw new Error(
@@ -144,13 +141,13 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       featuresByTicker,
       featureProvenanceByTicker,
       featureContext,
-      provider: this.provider.metadata,
-      providerHealth,
-      providerReadiness,
+      provider: providerStatus.metadata,
+      providerHealth: providerStatus.health,
+      providerReadiness: providerStatus.readiness,
       providerCache: isCacheAwareProvider(this.provider)
         ? this.provider.getCacheSnapshot()
         : undefined,
-      generatedAt: new Date().toISOString(),
+      generatedAt: providerStatus.capturedAt,
     };
   }
 }

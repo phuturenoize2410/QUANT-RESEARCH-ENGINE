@@ -18,6 +18,13 @@ export interface ProviderReadiness {
   warnings: string[];
 }
 
+export interface ProviderStatusSnapshot {
+  metadata: ProviderMetadata;
+  health: ProviderHealth;
+  readiness: Record<ResearchUseCase, ProviderReadiness>;
+  capturedAt: string;
+}
+
 const MODE_RANK: Record<ProviderMode, number> = {
   MOCK: 0,
   EOD: 1,
@@ -202,6 +209,25 @@ function evaluateNormalizedProviderReadiness(
   };
 }
 
+function buildReadinessMatrix(
+  metadata: ProviderMetadata,
+  normalizedHealth: ProviderHealth,
+): Record<ResearchUseCase, ProviderReadiness> {
+  const useCases: ResearchUseCase[] = [
+    'HISTORICAL_BACKTEST',
+    'EOD_RESEARCH',
+    'PRECLOSE_SCREENING',
+    'LIVE_EXECUTION',
+  ];
+
+  return Object.fromEntries(
+    useCases.map(useCase => [
+      useCase,
+      evaluateNormalizedProviderReadiness(metadata, normalizedHealth, useCase),
+    ]),
+  ) as Record<ResearchUseCase, ProviderReadiness>;
+}
+
 /**
  * Central policy gate for deciding whether a provider is suitable for a research
  * or execution use case. Strategy/UI code must not infer suitability from a
@@ -223,23 +249,30 @@ export function evaluateProviderReadiness(
 export async function getProviderReadinessMatrix(
   provider: MarketDataProvider,
   healthSnapshot?: ProviderHealth,
+  nowMs: number = Date.now(),
 ): Promise<Record<ResearchUseCase, ProviderReadiness>> {
-  // Normalize exactly once so every use-case decision in this matrix is derived
-  // from the same canonical health/freshness snapshot. This avoids a provider
-  // crossing its stale threshold between sequential policy evaluations and
-  // producing internally inconsistent readiness states within one refresh.
-  const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth());
-  const useCases: ResearchUseCase[] = [
-    'HISTORICAL_BACKTEST',
-    'EOD_RESEARCH',
-    'PRECLOSE_SCREENING',
-    'LIVE_EXECUTION',
-  ];
+  const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
+  return buildReadinessMatrix(provider.metadata, health);
+}
 
-  return Object.fromEntries(
-    useCases.map(useCase => [
-      useCase,
-      evaluateNormalizedProviderReadiness(provider.metadata, health, useCase),
-    ]),
-  ) as Record<ResearchUseCase, ProviderReadiness>;
+/**
+ * Canonical provider-status boundary. Consumers receive metadata, normalized
+ * health and all readiness decisions from the same capture instant instead of
+ * independently interpreting adapter state. This keeps future free/paid IDX
+ * providers interchangeable and prevents UI or orchestration code from owning
+ * freshness/business rules.
+ */
+export async function getProviderStatusSnapshot(
+  provider: MarketDataProvider,
+  healthSnapshot?: ProviderHealth,
+  nowMs: number = Date.now(),
+): Promise<ProviderStatusSnapshot> {
+  const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
+
+  return {
+    metadata: provider.metadata,
+    health,
+    readiness: buildReadinessMatrix(provider.metadata, health),
+    capturedAt: new Date(nowMs).toISOString(),
+  };
 }
