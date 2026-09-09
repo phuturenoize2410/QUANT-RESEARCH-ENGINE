@@ -110,11 +110,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       );
     }
 
-    // Bind only after provider/context validation succeeds. Existing consumers that
-    // omit the optional context parameter will now inherit this exact validated
-    // point-in-time context instead of silently rebuilding prototype assumptions.
+    // Binding is the feature-store safety boundary: it validates lineage and
+    // invalidates any vectors cached under the previous point-in-time snapshot.
     FeatureStore.bindPipelineContext(featureContext);
-    FeatureStore.clearCache();
 
     const featuresByTicker = Object.fromEntries(
       universe.map(stock => [stock.ticker, FeatureStore.get(stock, featureContext)]),
