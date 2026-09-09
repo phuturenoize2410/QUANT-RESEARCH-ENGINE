@@ -7,6 +7,10 @@ import {
   createPrototypeFeatureContext,
   getFundamentalSnapshot,
 } from '../featureContext';
+import {
+  clampRoundedScore,
+  clampUnitInterval,
+} from '../scorePolicy';
 import { TickerFeatureVector, DataLeakageCheckResult } from './types';
 
 export class FeatureStore {
@@ -52,7 +56,7 @@ export class FeatureStore {
     const isMaAligned = stock.technical.maStackingBullish ?? (currentClose > ma5 && ma5 > ma10 && ma10 > ma20 && ma20 > ma50);
 
     const range = Math.max(1, lastBar.high - lastBar.low);
-    const closePositionWithinRange = Math.min(1, Math.max(0, (currentClose - lastBar.low) / range));
+    const closePositionWithinRange = clampUnitInterval((currentClose - lastBar.low) / range);
     const distanceFrom52wHighPct = stock.high52w > 0 ? ((stock.high52w - currentClose) / stock.high52w) * 100 : 0;
 
     const atr14 = stock.technical.atr14 || Math.round(currentClose * 0.025);
@@ -66,7 +70,7 @@ export class FeatureStore {
     const relativeVolume = stock.relativeVolume;
     const volumeAcceleration = relativeVolume > 1.5 ? 1.8 : relativeVolume > 1.0 ? 1.2 : 0.8;
     const spreadProxyPct = stock.price > 5000 ? 0.15 : stock.price > 1000 ? 0.25 : 0.45;
-    const liquidityScore = Math.min(100, Math.round((stock.turnover / 50_000_000_000) * 50 + 50));
+    const liquidityScore = clampRoundedScore((stock.turnover / 50_000_000_000) * 50 + 50);
 
     const overnightPersistenceScore = stock.historicalStats.greenOpenRate;
     const historicalGreenOpenRate = stock.historicalStats.greenOpenRate;
@@ -96,9 +100,9 @@ export class FeatureStore {
     const roePct = fundamentals.roePct;
     const pbvRatio = fundamentals.pbvRatio;
     const peRatio = fundamentals.peRatio;
-    const fundamentalInflectionScore = Math.min(100, Math.max(0,
-      Math.round(revenueGrowthYoy * 1.5 + roePct * 1.8 + netMarginPct * 0.8),
-    ));
+    const fundamentalInflectionScore = clampRoundedScore(
+      revenueGrowthYoy * 1.5 + roePct * 1.8 + netMarginPct * 0.8,
+    );
 
     const vector: TickerFeatureVector = {
       ticker: stock.ticker,
