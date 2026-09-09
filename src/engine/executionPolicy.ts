@@ -20,6 +20,16 @@ export const DEFAULT_EXECUTION_COSTS: Readonly<ExecutionCosts> = Object.freeze({
   slippagePct: 0.10,
 });
 
+/**
+ * Canonical default round-trip friction used by research consumers that only
+ * need the aggregate hurdle. Exporting the aggregate prevents downstream ML,
+ * strategy and UI layers from re-encoding a stale magic number.
+ */
+export const DEFAULT_TOTAL_FRICTION_PCT =
+  DEFAULT_EXECUTION_COSTS.buyFeePct +
+  DEFAULT_EXECUTION_COSTS.sellFeePct +
+  DEFAULT_EXECUTION_COSTS.slippagePct;
+
 function finiteNonNegative(value: number, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
