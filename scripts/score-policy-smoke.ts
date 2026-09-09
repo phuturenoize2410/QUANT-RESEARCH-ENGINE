@@ -3,11 +3,13 @@ import {
   ESTABLISHED_SCORE_BOUNDS,
   NORMALIZED_SCORE_BOUNDS,
   OVERNIGHT_EDGE_SCORE_BOUNDS,
+  RESEARCH_ROBUSTNESS_SCORE_BOUNDS,
   clampNormalizedScore,
   clampScore,
   roundEstablishedScore,
   roundNormalizedScore,
   roundOvernightEdgeScore,
+  roundResearchRobustnessScore,
   roundScore,
 } from '../src/engine/scorePolicy';
 
@@ -20,9 +22,12 @@ assert.equal(roundScore(-20, OVERNIGHT_EDGE_SCORE_BOUNDS), 1);
 assert.equal(roundScore(150, OVERNIGHT_EDGE_SCORE_BOUNDS), 99);
 assert.equal(roundScore(-1, ESTABLISHED_SCORE_BOUNDS), 5);
 assert.equal(roundScore(101, ESTABLISHED_SCORE_BOUNDS), 100);
+assert.equal(roundScore(-1, RESEARCH_ROBUSTNESS_SCORE_BOUNDS), 10);
+assert.equal(roundScore(101, RESEARCH_ROBUSTNESS_SCORE_BOUNDS), 100);
 
 assert.equal(clampScore(Number.NaN, OVERNIGHT_EDGE_SCORE_BOUNDS), 1);
 assert.equal(clampScore(Number.POSITIVE_INFINITY, ESTABLISHED_SCORE_BOUNDS), 5);
+assert.equal(clampScore(Number.NaN, RESEARCH_ROBUSTNESS_SCORE_BOUNDS), 10);
 
 assert.equal(clampNormalizedScore(-5), 0);
 assert.equal(clampNormalizedScore(101), 100);
@@ -31,5 +36,8 @@ assert.equal(roundOvernightEdgeScore(0), 1);
 assert.equal(roundOvernightEdgeScore(100), 99);
 assert.equal(roundEstablishedScore(0), 5);
 assert.equal(roundEstablishedScore(100.4), 100);
+assert.equal(roundResearchRobustnessScore(9.4), 10);
+assert.equal(roundResearchRobustnessScore(72.6), 73);
+assert.equal(roundResearchRobustnessScore(120), 100);
 
 console.log('score policy smoke passed');
