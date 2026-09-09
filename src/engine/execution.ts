@@ -1,10 +1,21 @@
 import { MorningPosition, StockData, StrategySettings } from '../types';
+import {
+  DEFAULT_EXECUTION_COSTS,
+  ExecutionCosts,
+  executionCostsFromSettings,
+  normalizeExecutionCosts,
+  totalFrictionPct,
+  netReturnAfterCosts,
+} from './executionPolicy';
 
-export interface ExecutionCosts {
-  buyFeePct: number;
-  sellFeePct: number;
-  slippagePct: number;
-}
+export type { ExecutionCosts } from './executionPolicy';
+export {
+  DEFAULT_EXECUTION_COSTS,
+  executionCostsFromSettings,
+  normalizeExecutionCosts,
+  totalFrictionPct,
+  netReturnAfterCosts,
+} from './executionPolicy';
 
 export interface OvernightExecutionEstimate {
   entryPrice: number;
@@ -18,53 +29,33 @@ export interface OvernightExecutionEstimate {
   totalFrictionPct: number;
 }
 
-export const DEFAULT_EXECUTION_COSTS: ExecutionCosts = {
-  buyFeePct: 0.15,
-  sellFeePct: 0.25,
-  slippagePct: 0.10,
-};
-
-export function executionCostsFromSettings(settings: StrategySettings): ExecutionCosts {
-  return {
-    buyFeePct: settings.buyFeePct,
-    sellFeePct: settings.sellFeePct,
-    slippagePct: settings.slippagePct,
-  };
-}
-
-export function totalFrictionPct(costs: ExecutionCosts = DEFAULT_EXECUTION_COSTS): number {
-  return costs.buyFeePct + costs.sellFeePct + costs.slippagePct;
-}
-
-export function netReturnAfterCosts(
-  grossReturnPct: number,
-  costs: ExecutionCosts = DEFAULT_EXECUTION_COSTS,
-): number {
-  return grossReturnPct - totalFrictionPct(costs);
-}
-
 export function estimateOvernightExecution(
   entryPrice: number,
   lots: number,
   expectedGapPct: number,
   costs: ExecutionCosts = DEFAULT_EXECUTION_COSTS,
 ): OvernightExecutionEstimate {
-  const shares = lots * 100;
-  const estimatedOpenPrice = Math.round(entryPrice * (1 + expectedGapPct / 100));
-  const totalCostIDR = entryPrice * shares;
+  const normalizedCosts = normalizeExecutionCosts(costs);
+  const safeEntryPrice = Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : 0;
+  const safeLots = Number.isFinite(lots) && lots > 0 ? lots : 0;
+  const safeExpectedGapPct = Number.isFinite(expectedGapPct) ? expectedGapPct : 0;
+
+  const shares = safeLots * 100;
+  const estimatedOpenPrice = Math.round(safeEntryPrice * (1 + safeExpectedGapPct / 100));
+  const totalCostIDR = safeEntryPrice * shares;
   const estimatedSellValueIDR = estimatedOpenPrice * shares;
   const grossProfitIDR = estimatedSellValueIDR - totalCostIDR;
 
-  const buyFeeIDR = totalCostIDR * (costs.buyFeePct / 100);
-  const sellFeeIDR = estimatedSellValueIDR * (costs.sellFeePct / 100);
-  const slippageIDR = (totalCostIDR + estimatedSellValueIDR) * (costs.slippagePct / 200);
+  const buyFeeIDR = totalCostIDR * (normalizedCosts.buyFeePct / 100);
+  const sellFeeIDR = estimatedSellValueIDR * (normalizedCosts.sellFeePct / 100);
+  const slippageIDR = (totalCostIDR + estimatedSellValueIDR) * (normalizedCosts.slippagePct / 200);
   const netProfitIDR = grossProfitIDR - buyFeeIDR - sellFeeIDR - slippageIDR;
 
   const grossReturnPct = totalCostIDR > 0 ? (grossProfitIDR / totalCostIDR) * 100 : 0;
   const netReturnPct = totalCostIDR > 0 ? (netProfitIDR / totalCostIDR) * 100 : 0;
 
   return {
-    entryPrice,
+    entryPrice: safeEntryPrice,
     estimatedOpenPrice,
     grossReturnPct,
     netReturnPct,
@@ -72,7 +63,7 @@ export function estimateOvernightExecution(
     estimatedSellValueIDR,
     grossProfitIDR,
     netProfitIDR,
-    totalFrictionPct: totalFrictionPct(costs),
+    totalFrictionPct: totalFrictionPct(normalizedCosts),
   };
 }
 
