@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "validate:data": "tsx scripts/data-quality-smoke.ts",
-    "check": "npm run lint && npm run validate:data && npm run build"
+    "validate:provider": "tsx scripts/provider-health-smoke.ts",
+    "check": "npm run lint && npm run validate:data && npm run validate:provider && npm run build"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
