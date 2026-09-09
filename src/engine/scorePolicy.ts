@@ -25,3 +25,20 @@ export function clampScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE
 export function roundScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE_BOUNDS): number {
   return Math.round(clampScore(value, bounds));
 }
+
+/** Semantic helpers keep domain consumers from re-declaring score contracts locally. */
+export function clampNormalizedScore(value: number): number {
+  return clampScore(value, NORMALIZED_SCORE_BOUNDS);
+}
+
+export function roundNormalizedScore(value: number): number {
+  return roundScore(value, NORMALIZED_SCORE_BOUNDS);
+}
+
+export function roundOvernightEdgeScore(value: number): number {
+  return roundScore(value, OVERNIGHT_EDGE_SCORE_BOUNDS);
+}
+
+export function roundEstablishedScore(value: number): number {
+  return roundScore(value, ESTABLISHED_SCORE_BOUNDS);
+}

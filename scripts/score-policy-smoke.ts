@@ -3,7 +3,11 @@ import {
   ESTABLISHED_SCORE_BOUNDS,
   NORMALIZED_SCORE_BOUNDS,
   OVERNIGHT_EDGE_SCORE_BOUNDS,
+  clampNormalizedScore,
   clampScore,
+  roundEstablishedScore,
+  roundNormalizedScore,
+  roundOvernightEdgeScore,
   roundScore,
 } from '../src/engine/scorePolicy';
 
@@ -19,5 +23,13 @@ assert.equal(roundScore(101, ESTABLISHED_SCORE_BOUNDS), 100);
 
 assert.equal(clampScore(Number.NaN, OVERNIGHT_EDGE_SCORE_BOUNDS), 1);
 assert.equal(clampScore(Number.POSITIVE_INFINITY, ESTABLISHED_SCORE_BOUNDS), 5);
+
+assert.equal(clampNormalizedScore(-5), 0);
+assert.equal(clampNormalizedScore(101), 100);
+assert.equal(roundNormalizedScore(72.6), 73);
+assert.equal(roundOvernightEdgeScore(0), 1);
+assert.equal(roundOvernightEdgeScore(100), 99);
+assert.equal(roundEstablishedScore(0), 5);
+assert.equal(roundEstablishedScore(100.4), 100);
 
 console.log('score policy smoke passed');
