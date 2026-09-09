@@ -25,38 +25,93 @@ const MODE_RANK: Record<ProviderMode, number> = {
   REALTIME: 3,
 };
 
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 function parseTimestamp(value?: string): number | undefined {
   if (!value) return undefined;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function normalizeNonNegativeFinite(value?: number): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return Math.max(0, value);
+}
+
+function appendMessage(base: string | undefined, detail: string): string {
+  return base ? `${base} ${detail}` : detail;
+}
+
+function degradeHealth(
+  health: ProviderHealth,
+  detail: string,
+): ProviderHealth {
+  if (health.status === 'UNAVAILABLE' || health.status === 'STALE') {
+    return {
+      ...health,
+      message: appendMessage(health.message, detail),
+    };
+  }
+
+  return {
+    ...health,
+    status: 'DEGRADED',
+    message: appendMessage(health.message, detail),
+  };
+}
+
 /**
  * Converts provider-reported health into one canonical health snapshot.
  *
  * Providers remain responsible for connectivity/capability checks, while the
- * engine owns freshness semantics. If a provider declares `staleAfterSeconds`
- * and its last successful sync exceeds that threshold, the engine upgrades the
- * status to STALE even when an adapter forgot to do so itself.
+ * engine owns timestamp, numeric and freshness semantics. This prevents future
+ * Google Finance/free API/broker adapters from accidentally reporting HEALTHY
+ * when their health payload is malformed or freshness cannot be established.
  */
 export function normalizeProviderHealth(
   health: ProviderHealth,
   nowMs: number = Date.now(),
 ): ProviderHealth {
-  const normalized: ProviderHealth = {
+  let normalized: ProviderHealth = {
     ...health,
-    latencyMs: health.latencyMs === undefined
-      ? undefined
-      : Math.max(0, health.latencyMs),
-    staleAfterSeconds: health.staleAfterSeconds === undefined
-      ? undefined
-      : Math.max(0, health.staleAfterSeconds),
+    latencyMs: normalizeNonNegativeFinite(health.latencyMs),
+    staleAfterSeconds: normalizeNonNegativeFinite(health.staleAfterSeconds),
   };
+
+  if (health.latencyMs !== undefined && normalized.latencyMs === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
+  }
+
+  if (health.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
+  }
+
+  const checkedAtMs = parseTimestamp(normalized.checkedAt);
+  if (checkedAtMs === undefined) {
+    normalized = degradeHealth(normalized, 'Provider health check timestamp is invalid.');
+  } else if (checkedAtMs > nowMs + MAX_CLOCK_SKEW_MS) {
+    normalized = degradeHealth(normalized, 'Provider health check timestamp is unexpectedly in the future.');
+  }
 
   if (normalized.status === 'UNAVAILABLE') return normalized;
 
   const lastSuccessfulSyncMs = parseTimestamp(normalized.lastSuccessfulSyncAt);
   const staleAfterSeconds = normalized.staleAfterSeconds;
+
+  if (normalized.lastSuccessfulSyncAt && lastSuccessfulSyncMs === undefined) {
+    normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
+  }
+
+  if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > nowMs + MAX_CLOCK_SKEW_MS) {
+    normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
+  }
+
+  if (staleAfterSeconds !== undefined && lastSuccessfulSyncMs === undefined) {
+    normalized = degradeHealth(
+      normalized,
+      'Freshness threshold is declared but last successful sync time is unavailable.',
+    );
+  }
 
   if (
     lastSuccessfulSyncMs !== undefined &&
@@ -66,9 +121,7 @@ export function normalizeProviderHealth(
     return {
       ...normalized,
       status: 'STALE',
-      message: normalized.message
-        ? `${normalized.message} Freshness threshold exceeded.`
-        : 'Freshness threshold exceeded.',
+      message: appendMessage(normalized.message, 'Freshness threshold exceeded.'),
     };
   }
 
