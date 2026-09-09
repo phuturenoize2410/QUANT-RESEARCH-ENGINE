@@ -1,4 +1,8 @@
-import { evaluateProviderReadiness, normalizeProviderHealth } from '../src/engine/providerPolicy';
+import {
+  evaluateProviderReadiness,
+  normalizeProviderHealth,
+  validateProviderMetadata,
+} from '../src/engine/providerPolicy';
 import type { ProviderHealth, ProviderMetadata } from '../src/engine/dataProviders';
 
 const nowMs = Date.parse('2026-09-09T06:30:00.000Z');
@@ -94,4 +98,36 @@ if (!degradedLiveReadiness.reasons.some(reason => reason.includes('Degraded prov
   throw new Error('degraded live readiness must explain the health gate.');
 }
 
-console.log('Provider-health smoke passed: malformed health is degraded and degraded realtime feeds are blocked from live execution.');
+const contradictoryMetadata: ProviderMetadata = {
+  ...realtimeMetadata,
+  id: 'invalid-realtime-contract',
+  supportsIntraday: false,
+};
+
+const metadataIssues = validateProviderMetadata(contradictoryMetadata);
+if (!metadataIssues.some(issue => issue.includes('real-time support requires intraday support'))) {
+  throw new Error('provider metadata validation must reject realtime support without intraday support.');
+}
+
+const contradictoryHistoricalReadiness = evaluateProviderReadiness(contradictoryMetadata, {
+  status: 'HEALTHY',
+  checkedAt: new Date().toISOString(),
+  lastSuccessfulSyncAt: new Date().toISOString(),
+}, 'HISTORICAL_BACKTEST');
+
+if (contradictoryHistoricalReadiness.allowed) {
+  throw new Error('contradictory provider metadata must be rejected before any use-case consumes it.');
+}
+
+const realtimeModeWithoutRealtimeSupport: ProviderMetadata = {
+  ...realtimeMetadata,
+  id: 'invalid-realtime-mode',
+  supportsRealtime: false,
+};
+
+if (!validateProviderMetadata(realtimeModeWithoutRealtimeSupport)
+  .some(issue => issue.includes('REALTIME mode requires real-time support'))) {
+  throw new Error('provider metadata validation must reject REALTIME mode without realtime capability.');
+}
+
+console.log('Provider-health smoke passed: health payloads and provider capability contracts are validated before readiness decisions.');
