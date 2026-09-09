@@ -42,6 +42,10 @@ function appendMessage(base: string | undefined, detail: string): string {
   return base ? `${base} ${detail}` : detail;
 }
 
+function pushUnique(target: string[], message: string): void {
+  if (!target.includes(message)) target.push(message);
+}
+
 function degradeHealth(
   health: ProviderHealth,
   detail: string,
@@ -58,6 +62,26 @@ function degradeHealth(
     status: 'DEGRADED',
     message: appendMessage(health.message, detail),
   };
+}
+
+/**
+ * Validate capability declarations independently from any specific research
+ * use case. Provider adapters are contracts: contradictory metadata should be
+ * rejected at the policy boundary rather than interpreted differently by UI,
+ * strategy, backtest or execution consumers.
+ */
+export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
+  const issues: string[] = [];
+
+  if (metadata.supportsRealtime && !metadata.supportsIntraday) {
+    issues.push('Provider capability contract is invalid: real-time support requires intraday support.');
+  }
+
+  if (metadata.mode === 'REALTIME' && !metadata.supportsRealtime) {
+    issues.push('Provider capability contract is invalid: REALTIME mode requires real-time support.');
+  }
+
+  return issues;
 }
 
 /**
@@ -133,39 +157,39 @@ function evaluateNormalizedProviderReadiness(
   normalizedHealth: ProviderHealth,
   useCase: ResearchUseCase,
 ): ProviderReadiness {
-  const reasons: string[] = [];
+  const reasons: string[] = [...validateProviderMetadata(metadata)];
   const warnings: string[] = [];
 
-  if (normalizedHealth.status === 'UNAVAILABLE') reasons.push('Provider is unavailable.');
-  if (normalizedHealth.status === 'STALE') reasons.push('Provider data is stale.');
+  if (normalizedHealth.status === 'UNAVAILABLE') pushUnique(reasons, 'Provider is unavailable.');
+  if (normalizedHealth.status === 'STALE') pushUnique(reasons, 'Provider data is stale.');
   if (normalizedHealth.status === 'DEGRADED') warnings.push('Provider health is degraded.');
   if (metadata.mode === 'MOCK') warnings.push('Data is simulated and cannot validate a real trading edge.');
 
   switch (useCase) {
     case 'HISTORICAL_BACKTEST':
-      if (!metadata.supportsHistorical) reasons.push('Historical data is not supported.');
-      if (metadata.mode === 'MOCK') reasons.push('Synthetic history is not eligible for production backtest evidence.');
+      if (!metadata.supportsHistorical) pushUnique(reasons, 'Historical data is not supported.');
+      if (metadata.mode === 'MOCK') pushUnique(reasons, 'Synthetic history is not eligible for production backtest evidence.');
       break;
 
     case 'EOD_RESEARCH':
-      if (!metadata.supportsHistorical) reasons.push('Historical/EOD data is not supported.');
+      if (!metadata.supportsHistorical) pushUnique(reasons, 'Historical/EOD data is not supported.');
       break;
 
     case 'PRECLOSE_SCREENING':
-      if (!metadata.supportsIntraday) reasons.push('Intraday data is required for pre-close screening.');
-      if (MODE_RANK[metadata.mode] < MODE_RANK.DELAYED) reasons.push('EOD-only data is too stale for pre-close screening.');
+      if (!metadata.supportsIntraday) pushUnique(reasons, 'Intraday data is required for pre-close screening.');
+      if (MODE_RANK[metadata.mode] < MODE_RANK.DELAYED) pushUnique(reasons, 'EOD-only data is too stale for pre-close screening.');
       if (metadata.mode === 'DELAYED') warnings.push('Delayed data may not represent the executable 15:30–15:45 market state.');
       break;
 
     case 'LIVE_EXECUTION':
       if (normalizedHealth.status === 'DEGRADED') {
-        reasons.push('Degraded provider health is not eligible for live execution decisions.');
+        pushUnique(reasons, 'Degraded provider health is not eligible for live execution decisions.');
       }
       if (!metadata.supportsIntraday) {
-        reasons.push('Intraday market data capability is required for live execution decisions.');
+        pushUnique(reasons, 'Intraday market data capability is required for live execution decisions.');
       }
       if (!metadata.supportsRealtime || metadata.mode !== 'REALTIME') {
-        reasons.push('Real-time market data is required for live execution decisions.');
+        pushUnique(reasons, 'Real-time market data is required for live execution decisions.');
       }
       break;
   }
