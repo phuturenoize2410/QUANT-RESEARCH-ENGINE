@@ -1,5 +1,4 @@
 import { StrategySettings } from '../types';
-import { DEFAULT_STRATEGY_SETTINGS } from './analytics';
 
 export interface ExecutionCosts {
   buyFeePct: number;
@@ -7,12 +6,18 @@ export interface ExecutionCosts {
   slippagePct: number;
 }
 
-// Strategy settings remain the single source of default fee/slippage assumptions.
-// Execution consumers read them only through this policy boundary.
+/**
+ * Canonical default transaction-friction assumptions for the research engine.
+ *
+ * Keep these defaults dependency-free: strategy/backtest/execution layers may
+ * depend on this policy, but this policy must not depend on analytics or UI.
+ * That preserves the intended flow and prevents circular imports when
+ * backtests consume the same cost model as simulated execution.
+ */
 export const DEFAULT_EXECUTION_COSTS: Readonly<ExecutionCosts> = Object.freeze({
-  buyFeePct: DEFAULT_STRATEGY_SETTINGS.buyFeePct,
-  sellFeePct: DEFAULT_STRATEGY_SETTINGS.sellFeePct,
-  slippagePct: DEFAULT_STRATEGY_SETTINGS.slippagePct,
+  buyFeePct: 0.15,
+  sellFeePct: 0.25,
+  slippagePct: 0.10,
 });
 
 function finiteNonNegative(value: number, fallback: number): number {
