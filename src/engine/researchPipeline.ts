@@ -27,16 +27,19 @@ import {
 } from './providerPolicy';
 
 export const DEFAULT_SHORTLIST_EDGE_THRESHOLD = 50;
+export const DEFAULT_SHORTLIST_LIMIT = 10;
 
 export interface ResearchPipelineSummary {
   universeCount: number;
   prefilterPassedCount: number;
   shortlistCandidatesCount: number;
   shortlistEdgeThreshold: number;
+  shortlistLimit: number;
 }
 
 export interface ResearchPipelineSnapshot {
   universe: StockData[];
+  shortlistCandidates: StockData[];
   featuresByTicker: Record<string, TickerFeatureVector>;
   featureProvenanceByTicker: Record<string, FeatureProvenanceSnapshot>;
   featureContext: FeatureContext;
@@ -65,19 +68,36 @@ function isCacheAwareProvider(
   return typeof candidate.getCacheSnapshot === 'function';
 }
 
-export function buildResearchPipelineSummary(
+/**
+ * Canonical strategy-selection boundary for the 15:45 shortlist.
+ * UI consumers must render this result rather than re-implementing eligibility,
+ * ranking or list-size rules locally.
+ */
+export function selectShortlistCandidates(
   universe: StockData[],
   shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
-): ResearchPipelineSummary {
-  const prefilterPassed = universe.filter(stock => stock.prefilterPassed);
+  shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
+): StockData[] {
+  return [...universe]
+    .filter(
+      stock => stock.prefilterPassed && stock.overnightEdgeScore >= shortlistEdgeThreshold,
+    )
+    .sort((a, b) => b.overnightEdgeScore - a.overnightEdgeScore)
+    .slice(0, Math.max(0, shortlistLimit));
+}
 
+export function buildResearchPipelineSummary(
+  universe: StockData[],
+  shortlistCandidates: StockData[] = selectShortlistCandidates(universe),
+  shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+  shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
+): ResearchPipelineSummary {
   return {
     universeCount: universe.length,
-    prefilterPassedCount: prefilterPassed.length,
-    shortlistCandidatesCount: prefilterPassed.filter(
-      stock => stock.overnightEdgeScore >= shortlistEdgeThreshold,
-    ).length,
+    prefilterPassedCount: universe.filter(stock => stock.prefilterPassed).length,
+    shortlistCandidatesCount: shortlistCandidates.length,
     shortlistEdgeThreshold,
+    shortlistLimit,
   };
 }
 
@@ -162,8 +182,11 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
+    const shortlistCandidates = selectShortlistCandidates(universe);
+
     return {
       universe,
+      shortlistCandidates,
       featuresByTicker,
       featureProvenanceByTicker,
       featureContext,
@@ -173,7 +196,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       providerCache: isCacheAwareProvider(this.provider)
         ? this.provider.getCacheSnapshot()
         : undefined,
-      summary: buildResearchPipelineSummary(universe),
+      summary: buildResearchPipelineSummary(universe, shortlistCandidates),
       generatedAt: providerStatus.capturedAt,
     };
   }
