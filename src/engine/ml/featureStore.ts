@@ -15,21 +15,44 @@ import { TickerFeatureVector, DataLeakageCheckResult } from './types';
 
 export class FeatureStore {
   private static cache: Map<string, TickerFeatureVector> = new Map();
+  private static pipelineContext: FeatureContext | null = null;
+
+  /**
+   * Binds the latest validated research-pipeline context for legacy consumers that
+   * still call ML models without an explicit context argument. This prevents those
+   * consumers from silently reconstructing prototype assumptions after a real-data
+   * provider has already supplied a point-in-time context.
+   *
+   * Explicit context arguments always take precedence. The binding is intentionally
+   * owned by the research pipeline rather than by UI components.
+   */
+  public static bindPipelineContext(context: FeatureContext): void {
+    this.pipelineContext = context;
+  }
+
+  public static clearPipelineContext(): void {
+    this.pipelineContext = null;
+  }
+
+  public static getPipelineContext(): FeatureContext | null {
+    return this.pipelineContext;
+  }
 
   /**
    * Computes a strictly causal feature vector as of Time T.
    * Contextual market/sector/fundamental inputs should be supplied by the research
-   * pipeline. Legacy simulated ML call-sites may omit context during the prototype
-   * phase; in that case the fallback is created by featureContext and remains
-   * explicitly marked MOCK/SIMULATED rather than being mistaken for provider data.
+   * pipeline. Explicit context is preferred; pipeline-bound context is the compatibility
+   * bridge for existing consumers. Only an unbound prototype runtime may fall back to
+   * a clearly marked MOCK/SIMULATED context.
    */
   public static get(
     stock: StockData,
     context?: FeatureContext,
     asOfTimestamp?: string,
   ): TickerFeatureVector {
-    const resolvedTimestamp = asOfTimestamp ?? context?.asOfTimestamp ?? '15:45 WIB';
-    const resolvedContext = context ?? createPrototypeFeatureContext([stock], resolvedTimestamp);
+    const boundContext = context ?? this.pipelineContext;
+    const resolvedTimestamp = asOfTimestamp ?? boundContext?.asOfTimestamp ?? '15:45 WIB';
+    const resolvedContext = boundContext ?? createPrototypeFeatureContext([stock], resolvedTimestamp);
     const cacheKey = `${stock.ticker}-${resolvedTimestamp}-${stock.price}-${resolvedContext.mode}-${resolvedContext.isSimulated}`;
     if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)!;
 
@@ -202,7 +225,7 @@ export class FeatureStore {
           testName: 'Point-In-Time Context Boundary',
           description: 'Requires market, sector, and fundamental context to be supplied by the research pipeline',
           passed: true,
-          details: 'Provider-backed research supplies context explicitly; legacy prototype calls resolve only to a MOCK/SIMULATED context outside FeatureStore.',
+          details: 'Explicit context takes precedence and legacy consumers inherit the latest validated pipeline context; only an unbound prototype runtime may resolve to MOCK/SIMULATED assumptions.',
         },
         {
           testName: 'Provider Publication-Time Audit',
