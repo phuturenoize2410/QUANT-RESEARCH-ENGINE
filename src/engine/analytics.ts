@@ -9,6 +9,11 @@ import {
   BacktestSummary,
   BacktestTrade
 } from '../types';
+import {
+  DEFAULT_EXECUTION_COSTS,
+  executionCostsFromSettings,
+  netReturnAfterCosts,
+} from './executionPolicy';
 
 export const DEFAULT_STRATEGY_SETTINGS: StrategySettings = {
   greenOpenProbWeight: 30,
@@ -23,9 +28,9 @@ export const DEFAULT_STRATEGY_SETTINGS: StrategySettings = {
   extremeTailPenaltyWeight: 40,
   overextendedPenaltyWeight: 25,
   
-  buyFeePct: 0.15,
-  sellFeePct: 0.25,
-  slippagePct: 0.10,
+  buyFeePct: DEFAULT_EXECUTION_COSTS.buyFeePct,
+  sellFeePct: DEFAULT_EXECUTION_COSTS.sellFeePct,
+  slippagePct: DEFAULT_EXECUTION_COSTS.slippagePct,
   
   minConfidenceSampleSize: 20,
   minDailyTurnoverIDR: 5000000000, // 5 Milyar IDR
@@ -306,6 +311,7 @@ export function runBacktest(
   const minGreen = filterCriteria?.minGreenRate ?? 55;
   const maxBad = filterCriteria?.maxBadGap ?? 15;
   const allowedDecisions = filterCriteria?.decisionOnly ?? ['STRONG BUY', 'BUY'];
+  const executionCosts = executionCostsFromSettings(settings);
 
   stocks.forEach(stock => {
     // Filter stocks matching candidate criteria
@@ -317,8 +323,7 @@ export function runBacktest(
     // Simulate trades from historical matches
     stock.historicalStats.matchedTrades.forEach(match => {
       const grossPct = match.gapPct;
-      const totalFriction = settings.buyFeePct + settings.sellFeePct + settings.slippagePct;
-      const netPct = grossPct - totalFriction;
+      const netPct = netReturnAfterCosts(grossPct, executionCosts);
 
       allTrades.push({
         ticker: stock.ticker,
