@@ -87,8 +87,8 @@ export default function App() {
   const handleRemovePosition = useCallback((id: string) => setPositions(prev => prev.filter(p => p.id !== id)), []);
   const handleAddManualPosition = useCallback((pos: Omit<MorningPosition, 'id'>) => { setPositions(prev => [{ ...pos, id: `pos-${Date.now()}` }, ...prev]); showNotification(`Logged ${pos.ticker} position successfully.`); }, []);
 
-  const shortlistCandidatesCount = useMemo(() => universe.filter(s => s.prefilterPassed && s.overnightEdgeScore >= 50).length, [universe]);
-  const prefilterPassedCount = useMemo(() => universe.filter(s => s.prefilterPassed).length, [universe]);
+  const shortlistCandidatesCount = researchSnapshot?.summary.shortlistCandidatesCount ?? 0;
+  const prefilterPassedCount = researchSnapshot?.summary.prefilterPassedCount ?? 0;
 
   if (pipelineError) {
     return (
