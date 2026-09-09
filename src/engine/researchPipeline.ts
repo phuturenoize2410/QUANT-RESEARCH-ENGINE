@@ -22,6 +22,7 @@ import {
 } from './providerCache';
 import {
   getProviderReadinessMatrix,
+  normalizeProviderHealth,
   ProviderReadiness,
   ResearchUseCase,
 } from './providerPolicy';
@@ -82,11 +83,14 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    const [universe, providerHealth, providerReadiness] = await Promise.all([
+    // Capture health exactly once per refresh so snapshot health and readiness
+    // decisions can never disagree because the adapter changed between calls.
+    const [universe, rawProviderHealth] = await Promise.all([
       this.provider.getUniverse(),
       this.provider.getHealth(),
-      getProviderReadinessMatrix(this.provider),
     ]);
+    const providerHealth = normalizeProviderHealth(rawProviderHealth);
+    const providerReadiness = await getProviderReadinessMatrix(this.provider, providerHealth);
 
     if (this.provider.metadata.mode !== 'MOCK' && !this.featureContextFactory) {
       throw new Error(
