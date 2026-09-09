@@ -1,5 +1,5 @@
-import { normalizeProviderHealth } from '../src/engine/providerPolicy';
-import type { ProviderHealth } from '../src/engine/dataProviders';
+import { evaluateProviderReadiness, normalizeProviderHealth } from '../src/engine/providerPolicy';
+import type { ProviderHealth, ProviderMetadata } from '../src/engine/dataProviders';
 
 const nowMs = Date.parse('2026-09-09T06:30:00.000Z');
 
@@ -58,4 +58,40 @@ expectStatus('unavailable remains terminal', {
   latencyMs: Number.NaN,
 }, 'UNAVAILABLE', 'health check timestamp is invalid');
 
-console.log('Provider-health smoke passed: malformed freshness metadata is safely degraded or rejected.');
+const realtimeMetadata: ProviderMetadata = {
+  id: 'realtime-smoke',
+  name: 'Realtime Smoke Provider',
+  source: 'IDX_FEED',
+  mode: 'REALTIME',
+  isPaid: false,
+  supportsHistorical: true,
+  supportsIntraday: true,
+  supportsRealtime: true,
+};
+
+const healthyLiveReadiness = evaluateProviderReadiness(realtimeMetadata, {
+  status: 'HEALTHY',
+  checkedAt: new Date().toISOString(),
+  lastSuccessfulSyncAt: new Date().toISOString(),
+}, 'LIVE_EXECUTION');
+
+if (!healthyLiveReadiness.allowed) {
+  throw new Error(`healthy realtime provider should be live-ready: ${healthyLiveReadiness.reasons.join(' ')}`);
+}
+
+const degradedLiveReadiness = evaluateProviderReadiness(realtimeMetadata, {
+  status: 'DEGRADED',
+  checkedAt: new Date().toISOString(),
+  lastSuccessfulSyncAt: new Date().toISOString(),
+  message: 'Upstream quote stream is partially degraded.',
+}, 'LIVE_EXECUTION');
+
+if (degradedLiveReadiness.allowed) {
+  throw new Error('degraded realtime provider must not be eligible for live execution.');
+}
+
+if (!degradedLiveReadiness.reasons.some(reason => reason.includes('Degraded provider health'))) {
+  throw new Error('degraded live readiness must explain the health gate.');
+}
+
+console.log('Provider-health smoke passed: malformed health is degraded and degraded realtime feeds are blocked from live execution.');
