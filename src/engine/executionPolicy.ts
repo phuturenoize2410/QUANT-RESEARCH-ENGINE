@@ -1,4 +1,5 @@
 import { StrategySettings } from '../types';
+import { DEFAULT_STRATEGY_SETTINGS } from './analytics';
 
 export interface ExecutionCosts {
   buyFeePct: number;
@@ -6,10 +7,12 @@ export interface ExecutionCosts {
   slippagePct: number;
 }
 
+// Strategy settings remain the single source of default fee/slippage assumptions.
+// Execution consumers read them only through this policy boundary.
 export const DEFAULT_EXECUTION_COSTS: Readonly<ExecutionCosts> = Object.freeze({
-  buyFeePct: 0.15,
-  sellFeePct: 0.25,
-  slippagePct: 0.10,
+  buyFeePct: DEFAULT_STRATEGY_SETTINGS.buyFeePct,
+  sellFeePct: DEFAULT_STRATEGY_SETTINGS.sellFeePct,
+  slippagePct: DEFAULT_STRATEGY_SETTINGS.slippagePct,
 });
 
 function finiteNonNegative(value: number, fallback: number): number {
