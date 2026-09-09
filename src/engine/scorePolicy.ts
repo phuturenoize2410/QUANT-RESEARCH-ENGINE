@@ -12,6 +12,9 @@ export const OVERNIGHT_EDGE_SCORE_BOUNDS: Readonly<ScoreBounds> = Object.freeze(
 /** Existing safety/confidence scoring uses a non-zero floor once a score is established. */
 export const ESTABLISHED_SCORE_BOUNDS: Readonly<ScoreBounds> = Object.freeze({ min: 5, max: 100 });
 
+/** Walk-forward robustness intentionally keeps a stricter floor for degraded out-of-sample results. */
+export const RESEARCH_ROBUSTNESS_SCORE_BOUNDS: Readonly<ScoreBounds> = Object.freeze({ min: 10, max: 100 });
+
 export function clampScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE_BOUNDS): number {
   if (!Number.isFinite(value)) {
     return bounds.min;
@@ -41,4 +44,8 @@ export function roundOvernightEdgeScore(value: number): number {
 
 export function roundEstablishedScore(value: number): number {
   return roundScore(value, ESTABLISHED_SCORE_BOUNDS);
+}
+
+export function roundResearchRobustnessScore(value: number): number {
+  return roundScore(value, RESEARCH_ROBUSTNESS_SCORE_BOUNDS);
 }
