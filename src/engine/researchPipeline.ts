@@ -26,6 +26,15 @@ import {
   ResearchUseCase,
 } from './providerPolicy';
 
+export const DEFAULT_SHORTLIST_EDGE_THRESHOLD = 50;
+
+export interface ResearchPipelineSummary {
+  universeCount: number;
+  prefilterPassedCount: number;
+  shortlistCandidatesCount: number;
+  shortlistEdgeThreshold: number;
+}
+
 export interface ResearchPipelineSnapshot {
   universe: StockData[];
   featuresByTicker: Record<string, TickerFeatureVector>;
@@ -35,6 +44,7 @@ export interface ResearchPipelineSnapshot {
   providerHealth: ProviderHealth;
   providerReadiness: Record<ResearchUseCase, ProviderReadiness>;
   providerCache?: ProviderCacheSnapshot;
+  summary: ResearchPipelineSummary;
   generatedAt: string;
 }
 
@@ -53,6 +63,22 @@ function isCacheAwareProvider(
 ): provider is CacheAwareMarketDataProvider {
   const candidate = provider as Partial<CacheAwareMarketDataProvider>;
   return typeof candidate.getCacheSnapshot === 'function';
+}
+
+export function buildResearchPipelineSummary(
+  universe: StockData[],
+  shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+): ResearchPipelineSummary {
+  const prefilterPassed = universe.filter(stock => stock.prefilterPassed);
+
+  return {
+    universeCount: universe.length,
+    prefilterPassedCount: prefilterPassed.length,
+    shortlistCandidatesCount: prefilterPassed.filter(
+      stock => stock.overnightEdgeScore >= shortlistEdgeThreshold,
+    ).length,
+    shortlistEdgeThreshold,
+  };
 }
 
 /**
@@ -147,6 +173,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       providerCache: isCacheAwareProvider(this.provider)
         ? this.provider.getCacheSnapshot()
         : undefined,
+      summary: buildResearchPipelineSummary(universe),
       generatedAt: providerStatus.capturedAt,
     };
   }
