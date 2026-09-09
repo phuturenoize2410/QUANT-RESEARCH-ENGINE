@@ -16,6 +16,8 @@ import {
 
 function resolveRouterContext(sampleStock?: StockData, context?: FeatureContext): FeatureContext {
   if (context) return context;
+  const pipelineContext = FeatureStore.getPipelineContext();
+  if (pipelineContext) return pipelineContext;
   return createPrototypeFeatureContext(sampleStock ? [sampleStock] : []);
 }
 
