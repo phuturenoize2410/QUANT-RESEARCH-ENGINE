@@ -5,6 +5,7 @@ import {
   MonteCarloResult, 
   MarketRegime 
 } from '../strategyTypes';
+import { roundResearchRobustnessScore } from '../scorePolicy';
 
 /**
  * Calculates Value at Risk (VaR 95%) and Conditional VaR / Expected Shortfall (CVaR 95%)
@@ -32,7 +33,7 @@ export function calculateVaRAndCVaR(returns: number[], confidenceLevel: number =
 export function calculateSortinoRatio(returns: number[], avgReturn: number): number {
   if (returns.length === 0) return 0;
   const downsideReturns = returns.filter(r => r < 0);
-  if (downsideReturns.length === 0) return 3.5; // High if no losses
+  if (downsideReturns.length === 0) return 3.5;
   const sumDownsideSquares = downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0);
   const downsideDeviation = Math.sqrt(sumDownsideSquares / returns.length);
   return downsideDeviation > 0 ? Math.round(((avgReturn / downsideDeviation) * Math.sqrt(240)) * 100) / 100 : 0;
@@ -59,7 +60,6 @@ export function runWalkForwardAnalysis(trades: StrategyBacktestTrade[]): WalkFor
     };
   }
 
-  // Trades are sorted chronologically
   const sortedTrades = [...trades].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
   const n = sortedTrades.length;
   const trainEnd = Math.floor(n * 0.60);
@@ -84,11 +84,10 @@ export function runWalkForwardAnalysis(trades: StrategyBacktestTrade[]): WalkFor
   const valMetrics = calcSetMetrics(valSet);
   const testMetrics = calcSetMetrics(testSet);
 
-  // Robustness score: out-of-sample degradation penalty
   const trainWR = trainMetrics.winRate || 50;
   const testWR = testMetrics.winRate || 50;
   const ratio = testWR / Math.max(1, trainWR);
-  const robustnessScore = Math.min(100, Math.max(10, Math.round(ratio * 85)));
+  const robustnessScore = roundResearchRobustnessScore(ratio * 85);
   const isOverfitWarning = trainWR > 65 && testWR < 45;
 
   return {
@@ -140,7 +139,6 @@ export function runMonteCarloSimulation(trades: StrategyBacktestTrade[], iterati
     const points: number[] = [100.0];
 
     for (let step = 0; step < simTradeCount; step++) {
-      // Sample with replacement
       const rndIdx = Math.floor(Math.random() * returns.length);
       const ret = returns[rndIdx];
       eq = eq * (1 + ret / 100);
@@ -233,7 +231,6 @@ export function buildBacktestSummary(
   const avgWinPct = wins.length > 0 ? grossWins / wins.length : 0;
   const avgLossPct = losses.length > 0 ? -(grossLosses / losses.length) : 0;
 
-  // Equity Curve & Drawdown
   let equity = 100.0;
   let peak = 100.0;
   let maxDD = 0;
@@ -251,7 +248,6 @@ export function buildBacktestSummary(
     });
   });
 
-  // Risk metrics
   const { var95, cvar95 } = calculateVaRAndCVaR(returns);
   const variance = returns.reduce((acc, val) => acc + Math.pow(val - avgReturn, 2), 0) / returns.length;
   const stdDev = Math.sqrt(variance);
@@ -259,7 +255,6 @@ export function buildBacktestSummary(
   const sortinoRatio = calculateSortinoRatio(returns, avgReturn);
   const calmarRatio = maxDD > 0 ? Math.round(((avgReturn * 240 / maxDD)) * 10) / 10 : 1.5;
 
-  // Regime Breakdown
   const regimes: MarketRegime[] = ['BULLISH_TREND', 'SIDEWAYS_RANGE', 'HIGH_VOLATILITY', 'BEARISH_CORRECTION'];
   const regimeBreakdown = regimes.reduce((acc, reg) => {
     const regTrades = trades.filter(t => t.regime === reg);
@@ -276,7 +271,6 @@ export function buildBacktestSummary(
     return acc;
   }, {} as Record<MarketRegime, { winRate: number; tradeCount: number; avgReturnPct: number }>);
 
-  // Advanced Walk-Forward and Monte Carlo
   const walkForward = runWalkForwardAnalysis(trades);
   const monteCarlo = runMonteCarloSimulation(trades, 800);
 
