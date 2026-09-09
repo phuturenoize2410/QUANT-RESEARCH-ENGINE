@@ -110,7 +110,12 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       );
     }
 
+    // Bind only after provider/context validation succeeds. Existing consumers that
+    // omit the optional context parameter will now inherit this exact validated
+    // point-in-time context instead of silently rebuilding prototype assumptions.
+    FeatureStore.bindPipelineContext(featureContext);
     FeatureStore.clearCache();
+
     const featuresByTicker = Object.fromEntries(
       universe.map(stock => [stock.ticker, FeatureStore.get(stock, featureContext)]),
     );
