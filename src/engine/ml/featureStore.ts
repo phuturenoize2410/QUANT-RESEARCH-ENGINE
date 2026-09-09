@@ -13,6 +13,25 @@ import {
 } from '../scorePolicy';
 import { TickerFeatureVector, DataLeakageCheckResult } from './types';
 
+function assertPipelineContextIsSafe(context: FeatureContext): void {
+  const simulatedSources = Object.entries(context.sources)
+    .filter(([, source]) => source === 'SIMULATED')
+    .map(([key]) => key);
+
+  if (context.mode !== 'MOCK' && context.isSimulated) {
+    throw new Error(
+      `Refusing to bind simulated FeatureContext for ${context.mode} provider mode.`,
+    );
+  }
+
+  if (context.mode !== 'MOCK' && simulatedSources.length > 0) {
+    throw new Error(
+      `Refusing to bind ${context.mode} FeatureContext with simulated source lineage: ` +
+      `${simulatedSources.join(', ')}.`,
+    );
+  }
+}
+
 export class FeatureStore {
   private static cache: Map<string, TickerFeatureVector> = new Map();
   private static pipelineContext: FeatureContext | null = null;
@@ -23,15 +42,22 @@ export class FeatureStore {
    * consumers from silently reconstructing prototype assumptions after a real-data
    * provider has already supplied a point-in-time context.
    *
+   * Binding is a safety boundary, not a passive setter: non-MOCK contexts cannot
+   * contain simulated lineage, and changing context always invalidates cached feature
+   * vectors so consumers cannot reuse values computed under a previous snapshot.
+   *
    * Explicit context arguments always take precedence. The binding is intentionally
    * owned by the research pipeline rather than by UI components.
    */
   public static bindPipelineContext(context: FeatureContext): void {
+    assertPipelineContextIsSafe(context);
     this.pipelineContext = context;
+    this.clearCache();
   }
 
   public static clearPipelineContext(): void {
     this.pipelineContext = null;
+    this.clearCache();
   }
 
   public static getPipelineContext(): FeatureContext | null {
@@ -225,7 +251,7 @@ export class FeatureStore {
           testName: 'Point-In-Time Context Boundary',
           description: 'Requires market, sector, and fundamental context to be supplied by the research pipeline',
           passed: true,
-          details: 'Explicit context takes precedence and legacy consumers inherit the latest validated pipeline context; only an unbound prototype runtime may resolve to MOCK/SIMULATED assumptions.',
+          details: 'Explicit context takes precedence and legacy consumers inherit the latest validated pipeline context; context rebinding invalidates cached features and non-MOCK bindings reject simulated lineage.',
         },
         {
           testName: 'Provider Publication-Time Audit',
