@@ -161,6 +161,9 @@ function evaluateNormalizedProviderReadiness(
       if (normalizedHealth.status === 'DEGRADED') {
         reasons.push('Degraded provider health is not eligible for live execution decisions.');
       }
+      if (!metadata.supportsIntraday) {
+        reasons.push('Intraday market data capability is required for live execution decisions.');
+      }
       if (!metadata.supportsRealtime || metadata.mode !== 'REALTIME') {
         reasons.push('Real-time market data is required for live execution decisions.');
       }
