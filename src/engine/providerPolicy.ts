@@ -128,18 +128,11 @@ export function normalizeProviderHealth(
   return normalized;
 }
 
-/**
- * Central policy gate for deciding whether a provider is suitable for a research
- * or execution use case. Strategy/UI code must not infer suitability from a
- * vendor name (Google Finance, broker API, etc.). It should depend only on
- * declared capabilities, freshness and health.
- */
-export function evaluateProviderReadiness(
+function evaluateNormalizedProviderReadiness(
   metadata: ProviderMetadata,
-  health: ProviderHealth,
+  normalizedHealth: ProviderHealth,
   useCase: ResearchUseCase,
 ): ProviderReadiness {
-  const normalizedHealth = normalizeProviderHealth(health);
   const reasons: string[] = [];
   const warnings: string[] = [];
 
@@ -182,10 +175,32 @@ export function evaluateProviderReadiness(
   };
 }
 
+/**
+ * Central policy gate for deciding whether a provider is suitable for a research
+ * or execution use case. Strategy/UI code must not infer suitability from a
+ * vendor name (Google Finance, broker API, etc.). It should depend only on
+ * declared capabilities, freshness and health.
+ */
+export function evaluateProviderReadiness(
+  metadata: ProviderMetadata,
+  health: ProviderHealth,
+  useCase: ResearchUseCase,
+): ProviderReadiness {
+  return evaluateNormalizedProviderReadiness(
+    metadata,
+    normalizeProviderHealth(health),
+    useCase,
+  );
+}
+
 export async function getProviderReadinessMatrix(
   provider: MarketDataProvider,
   healthSnapshot?: ProviderHealth,
 ): Promise<Record<ResearchUseCase, ProviderReadiness>> {
+  // Normalize exactly once so every use-case decision in this matrix is derived
+  // from the same canonical health/freshness snapshot. This avoids a provider
+  // crossing its stale threshold between sequential policy evaluations and
+  // producing internally inconsistent readiness states within one refresh.
   const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth());
   const useCases: ResearchUseCase[] = [
     'HISTORICAL_BACKTEST',
@@ -197,7 +212,7 @@ export async function getProviderReadinessMatrix(
   return Object.fromEntries(
     useCases.map(useCase => [
       useCase,
-      evaluateProviderReadiness(provider.metadata, health, useCase),
+      evaluateNormalizedProviderReadiness(provider.metadata, health, useCase),
     ]),
   ) as Record<ResearchUseCase, ProviderReadiness>;
 }
