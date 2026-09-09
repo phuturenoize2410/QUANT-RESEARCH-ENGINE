@@ -14,6 +14,11 @@ import {
   executionCostsFromSettings,
   netReturnAfterCosts,
 } from './executionPolicy';
+import {
+  clampNormalizedScore,
+  roundEstablishedScore,
+  roundOvernightEdgeScore,
+} from './scorePolicy';
 
 export const DEFAULT_STRATEGY_SETTINGS: StrategySettings = {
   greenOpenProbWeight: 30,
@@ -62,7 +67,7 @@ export function calculateConfidenceScore(sampleSize: number, winRate: number, mi
   
   // Base confidence reflects sample size reliability
   const rawScore = (winRate * 0.4 + 60 * 0.6) * sizeFactor * samplePenalty;
-  return Math.min(100, Math.max(5, Math.round(rawScore)));
+  return roundEstablishedScore(rawScore);
 }
 
 // Compute Overnight Edge Score with editable settings
@@ -97,11 +102,11 @@ export function computeOvernightEdgeScore(
   
   // 1. Positive components (0 - 100 baseline each)
   // Green Open component: scaled around 50% baseline (40% = 0, 75% = 100)
-  const greenOpenNorm = Math.min(100, Math.max(0, (stats.greenOpenRate - 40) * (100 / 35)));
+  const greenOpenNorm = clampNormalizedScore((stats.greenOpenRate - 40) * (100 / 35));
   const greenOpenComponent = greenOpenNorm * (settings.greenOpenProbWeight / 100);
 
   // Expected Net Return component: scaled (-0.5% = 0, +1.5% = 100)
-  const netReturnNorm = Math.min(100, Math.max(0, (stock.expectedNetGap + 0.3) * (100 / 1.5)));
+  const netReturnNorm = clampNormalizedScore((stock.expectedNetGap + 0.3) * (100 / 1.5));
   const netReturnComponent = netReturnNorm * (settings.expectedNetReturnWeight / 100);
 
   // Historical Consistency: confidence score * (1 - gap volatility penalty)
@@ -112,7 +117,7 @@ export function computeOvernightEdgeScore(
   const technicalComponent = stock.technicalScore * (settings.technicalQualityWeight / 100);
 
   // Liquidity (5 Milyar IDR = 60, 50 Milyar+ = 100)
-  const liquidityNorm = Math.min(100, Math.max(20, Math.log10(Math.max(1, stock.turnover)) * 12 - 30));
+  const liquidityNorm = Math.max(20, clampNormalizedScore(Math.log10(Math.max(1, stock.turnover)) * 12 - 30));
   const liquidityComponent = liquidityNorm * (settings.liquidityWeight / 100);
 
   // Bandarmology
@@ -148,14 +153,14 @@ export function computeOvernightEdgeScore(
     overextendedPenalty += settings.overextendedPenaltyWeight * 0.4;
   }
 
-  // Tail risk safety score (100 = completely safe from bad gaps, 0 = catastrophic tail risk)
+  // Tail risk safety score (100 = completely safe from bad gaps, established score floor = 5)
   const tailRiskDeductions = (stats.badGap1PctProb * 2.5) + (stats.severeGap2PctProb * 5.0) + (worstGapMagnitude * 8);
-  const tailRiskScore = Math.round(Math.min(100, Math.max(5, 100 - tailRiskDeductions)));
+  const tailRiskScore = roundEstablishedScore(100 - tailRiskDeductions);
 
   // Final Edge Score
   const totalPenalties = badGapPenalty + severeGapPenalty + tailPenalty + overextendedPenalty;
   const rawFinal = baseSum - totalPenalties;
-  const finalScore = Math.round(Math.min(99, Math.max(1, rawFinal)));
+  const finalScore = roundOvernightEdgeScore(rawFinal);
 
   return {
     score: finalScore,
