@@ -7,7 +7,7 @@ import {
   totalFrictionPct,
   netReturnAfterCosts,
 } from './executionPolicy';
-import { MarketAdapter } from './market/marketAdapter';
+import { formatMarketTimeLabel, MarketAdapter } from './market/marketAdapter';
 import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 
 export type { ExecutionCosts } from './executionPolicy';
@@ -93,7 +93,7 @@ export function buildMorningPositionFromStock(
     id: `pos-${Date.now()}`,
     ticker: stock.ticker,
     name: stock.name,
-    purchaseDate: 'Today 15:45 WIB',
+    purchaseDate: formatMarketTimeLabel(market, '15:45'),
     entryPrice: stock.price,
     lots,
     totalCostIDR: execution.totalCostIDR,

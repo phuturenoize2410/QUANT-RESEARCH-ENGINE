@@ -9,6 +9,8 @@ export interface MarketIdentity {
   marketId: MarketId;
   currency: CurrencyCode;
   timezone: string;
+  /** Human-readable timezone label for market-local UI text, e.g. WIB or ET. */
+  timezoneLabel: string;
 }
 
 /**
@@ -29,4 +31,20 @@ export interface MarketAdapter {
 export function normalizeSharesPerLot(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 1;
   return Math.max(1, Math.floor(value));
+}
+
+/**
+ * Formats prototype market-local clock labels without embedding exchange-specific
+ * abbreviations in strategy/execution code. Calendar/session semantics can later
+ * replace the simple clock string without changing downstream consumers.
+ */
+export function formatMarketTimeLabel(
+  market: MarketAdapter,
+  localTime: string,
+  dayLabel: string = 'Today',
+): string {
+  const safeTime = localTime.trim();
+  const safeDayLabel = dayLabel.trim();
+  const parts = [safeDayLabel, safeTime, market.identity.timezoneLabel.trim()].filter(Boolean);
+  return parts.join(' ');
 }

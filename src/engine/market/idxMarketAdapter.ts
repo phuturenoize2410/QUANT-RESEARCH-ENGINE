@@ -14,6 +14,7 @@ export const IDX_MARKET_ADAPTER: Readonly<MarketAdapter> = Object.freeze({
     marketId: 'IDX',
     currency: 'IDR',
     timezone: 'Asia/Jakarta',
+    timezoneLabel: 'WIB',
   }),
   microstructure: Object.freeze({
     sharesPerLot: () => normalizeSharesPerLot(IDX_BOARD_LOT_SHARES),
