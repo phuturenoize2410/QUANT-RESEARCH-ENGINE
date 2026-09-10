@@ -1,20 +1,26 @@
 import { MorningPosition, StockData, StrategySettings } from '../types';
 import {
   DEFAULT_EXECUTION_COSTS,
+  DEFAULT_OVERNIGHT_EXIT_POLICY,
   ExecutionCosts,
+  deriveOvernightExitDecision,
   executionCostsFromSettings,
   normalizeExecutionCosts,
+  normalizeOvernightExitPolicy,
   totalFrictionPct,
   netReturnAfterCosts,
 } from './executionPolicy';
 import { CurrencyCode, formatMarketTimeLabel, MarketAdapter } from './market/marketAdapter';
 import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 
-export type { ExecutionCosts } from './executionPolicy';
+export type { ExecutionCosts, OvernightExitPolicy, OvernightExitDecision } from './executionPolicy';
 export {
   DEFAULT_EXECUTION_COSTS,
+  DEFAULT_OVERNIGHT_EXIT_POLICY,
+  deriveOvernightExitDecision,
   executionCostsFromSettings,
   normalizeExecutionCosts,
+  normalizeOvernightExitPolicy,
   totalFrictionPct,
   netReturnAfterCosts,
 } from './executionPolicy';
@@ -105,6 +111,7 @@ export function buildMorningPositionFromStock(
   );
 
   const gapPct = Math.round(execution.grossReturnPct * 10) / 10;
+  const riskDecision = deriveOvernightExitDecision(stock.price, gapPct);
 
   return {
     id: `pos-${Date.now()}`,
@@ -124,9 +131,9 @@ export function buildMorningPositionFromStock(
     grossProfitIDR: execution.grossProfit,
     netProfitIDR: Math.round(execution.netProfit),
     netProfitPct: Math.round(execution.netReturnPct * 100) / 100,
-    cutLossLevel: Math.round(stock.price * 0.985),
-    takeProfitLevel: Math.round(stock.price * 1.015),
-    exitStatus: gapPct >= 0.8 ? 'TAKE PROFIT' : gapPct <= -0.8 ? 'CUT LOSS' : 'FLAT / EXIT',
+    cutLossLevel: riskDecision.cutLossLevel,
+    takeProfitLevel: riskDecision.takeProfitLevel,
+    exitStatus: riskDecision.exitStatus,
     notes: `Bought from 15:45 Shortlist (Edge Score: ${stock.overnightEdgeScore}; simulated friction: ${execution.totalFrictionPct.toFixed(2)}%)`,
   };
 }
