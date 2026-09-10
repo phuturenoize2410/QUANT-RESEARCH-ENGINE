@@ -25,6 +25,7 @@ import {
   ProviderReadiness,
   ResearchUseCase,
 } from './providerPolicy';
+import { assertProviderReady } from './providerGate';
 import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 import { MarketAdapter, MarketId } from './market/marketAdapter';
 import {
@@ -142,20 +143,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       this.market.identity.marketId,
     );
 
-    if (!providerStatus.marketCompatible) {
-      throw new Error(
-        `Provider ${this.provider.metadata.name} does not support target market ` +
-        `${this.market.identity.marketId}. Research pipeline rejected before data ingestion.`,
-      );
-    }
-
-    const eodReadiness = providerStatus.readiness.EOD_RESEARCH;
-    if (!eodReadiness.allowed) {
-      throw new Error(
-        `Provider ${this.provider.metadata.name} is not ready for EOD research. ` +
-        `${eodReadiness.reasons.join(' ')} Research pipeline rejected before data ingestion.`,
-      );
-    }
+    // The provider-policy layer owns all market/capability/health decisions.
+    // Orchestration only enforces the canonical decision before ingestion.
+    assertProviderReady(providerStatus, 'EOD_RESEARCH');
 
     if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
       const seeded = this.seedUniverse(settings);
