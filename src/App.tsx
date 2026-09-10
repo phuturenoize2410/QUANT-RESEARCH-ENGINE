@@ -16,14 +16,10 @@ import { QuantLabView } from './components/QuantLabView';
 import { MLLabView } from './components/MLLabView';
 import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
 import {
-  buildManualMorningPosition,
-  buildMorningPositionFromStock,
+  createPrototypeResearchApplicationService,
   ManualMorningPositionInput,
-} from './engine/execution';
-import {
-  createPrototypeResearchPipeline,
-  ResearchPipelineSnapshot,
-} from './engine/researchPipeline';
+} from './engine/researchApplication';
+import { ResearchPipelineSnapshot } from './engine/researchPipeline';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
 const INITIAL_MORNING_POSITIONS: MorningPosition[] = [
@@ -46,13 +42,13 @@ export default function App() {
   const [researchSnapshot, setResearchSnapshot] = useState<ResearchPipelineSnapshot | null>(null);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
 
-  const researchPipeline = useMemo(() => createPrototypeResearchPipeline(), []);
+  const researchApplication = useMemo(() => createPrototypeResearchApplicationService(), []);
 
   useEffect(() => {
     let cancelled = false;
     setPipelineError(null);
 
-    researchPipeline.refresh(strategySettings)
+    researchApplication.refresh(strategySettings)
       .then(snapshot => {
         if (!cancelled) setResearchSnapshot(snapshot);
       })
@@ -65,7 +61,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [researchPipeline, strategySettings, refreshTrigger]);
+  }, [researchApplication, strategySettings, refreshTrigger]);
 
   const universe = researchSnapshot?.universe ?? [];
   const selectedStock = useMemo(() => universe.find(s => s.ticker === selectedTicker) || universe[0], [universe, selectedTicker]);
@@ -80,21 +76,22 @@ export default function App() {
     showNotification(`Refreshing ${providerLabel}. Prototype market data remains simulated.`);
   }, [researchSnapshot]);
 
-  // UI delegates transaction assumptions, fees and simulated execution to the execution engine.
+  // React delegates execution intent to the application boundary; market-specific
+  // execution assumptions are resolved downstream from the active research pipeline.
   const handleAddToJournal = useCallback((stock: StockData) => {
-    const position = buildMorningPositionFromStock(stock, strategySettings, 100);
+    const position = researchApplication.buildStrategyJournalPosition(stock, strategySettings, 100);
     setPositions(prev => [position, ...prev]);
     showNotification(`Logged ${stock.ticker} (${position.lots} lots) into Morning Exit Journal using centralized execution costs.`);
-  }, [strategySettings]);
+  }, [researchApplication, strategySettings]);
 
   const handleUpdatePosition = useCallback((id: string, updates: Partial<MorningPosition>) => setPositions(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p)), []);
   const handleRemovePosition = useCallback((id: string) => setPositions(prev => prev.filter(p => p.id !== id)), []);
   const handleAddManualPosition = useCallback((input: ManualMorningPositionInput) => {
     const stock = universe.find(candidate => candidate.ticker === input.ticker);
-    const position = buildManualMorningPosition(input, stock, strategySettings);
-    setPositions(prev => [{ ...position, id: `pos-${Date.now()}` }, ...prev]);
+    const position = researchApplication.buildManualJournalPosition(input, stock, strategySettings);
+    setPositions(prev => [position, ...prev]);
     showNotification(`Logged ${input.ticker} using centralized simulated execution and risk policy.`);
-  }, [strategySettings, universe]);
+  }, [researchApplication, strategySettings, universe]);
 
   const shortlistCandidatesCount = researchSnapshot?.summary.shortlistCandidatesCount ?? 0;
   const prefilterPassedCount = researchSnapshot?.summary.prefilterPassedCount ?? 0;
