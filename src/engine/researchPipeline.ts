@@ -25,9 +25,17 @@ import {
   ProviderReadiness,
   ResearchUseCase,
 } from './providerPolicy';
+import {
+  DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+  DEFAULT_SHORTLIST_LIMIT,
+  selectShortlistCandidates,
+} from './strategy/shortlistStrategy';
 
-export const DEFAULT_SHORTLIST_EDGE_THRESHOLD = 50;
-export const DEFAULT_SHORTLIST_LIMIT = 10;
+export {
+  DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+  DEFAULT_SHORTLIST_LIMIT,
+  selectShortlistCandidates,
+} from './strategy/shortlistStrategy';
 
 export interface ResearchPipelineSummary {
   universeCount: number;
@@ -68,24 +76,6 @@ function isCacheAwareProvider(
   return typeof candidate.getCacheSnapshot === 'function';
 }
 
-/**
- * Canonical strategy-selection boundary for the 15:45 shortlist.
- * UI consumers must render this result rather than re-implementing eligibility,
- * ranking or list-size rules locally.
- */
-export function selectShortlistCandidates(
-  universe: StockData[],
-  shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
-  shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
-): StockData[] {
-  return [...universe]
-    .filter(
-      stock => stock.prefilterPassed && stock.overnightEdgeScore >= shortlistEdgeThreshold,
-    )
-    .sort((a, b) => b.overnightEdgeScore - a.overnightEdgeScore)
-    .slice(0, Math.max(0, shortlistLimit));
-}
-
 export function buildResearchPipelineSummary(
   universe: StockData[],
   shortlistCandidates: StockData[] = selectShortlistCandidates(universe),
@@ -104,6 +94,9 @@ export function buildResearchPipelineSummary(
 /**
  * Provider-driven orchestration boundary:
  * DataProvider -> Feature Context -> Feature Engine -> Strategy/Risk/Execution -> UI.
+ *
+ * Strategy selection is delegated to the strategy engine so this orchestrator
+ * coordinates stages without owning eligibility/ranking rules itself.
  *
  * The feature-context factory is deliberately injectable. A future Google Finance,
  * free API, broker or fundamental adapter can populate point-in-time contextual
