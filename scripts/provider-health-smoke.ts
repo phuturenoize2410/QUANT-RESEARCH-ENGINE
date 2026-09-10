@@ -1,4 +1,5 @@
 import {
+  captureProviderHealth,
   evaluateProviderReadiness,
   getProviderStatusSnapshot,
   normalizeProviderHealth,
@@ -205,4 +206,33 @@ if (!statusSnapshot.readiness.EOD_RESEARCH.warnings.some(warning => warning.incl
   throw new Error('provider status snapshot must keep mock-data warnings visible to downstream consumers.');
 }
 
-console.log('Provider-health smoke passed: canonical status snapshots enforce capability, health and target-market compatibility together.');
+class ThrowingHealthProvider extends MockMarketDataProvider {
+  override async getHealth(): Promise<ProviderHealth> {
+    throw new Error('upstream adapter timeout');
+  }
+}
+
+const throwingProvider = new ThrowingHealthProvider();
+const failedHealth = await captureProviderHealth(throwingProvider, nowMs);
+if (failedHealth.status !== 'UNAVAILABLE') {
+  throw new Error('provider health exceptions must become canonical UNAVAILABLE health.');
+}
+if (failedHealth.checkedAt !== '2026-09-09T06:30:00.000Z') {
+  throw new Error('failed provider health capture must use the canonical capture instant.');
+}
+if (!failedHealth.message?.includes('upstream adapter timeout')) {
+  throw new Error('failed provider health capture must preserve useful adapter failure context.');
+}
+
+const failedStatusSnapshot = await getProviderStatusSnapshot(throwingProvider, undefined, nowMs, 'IDX');
+if (failedStatusSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('provider status snapshot must contain health-probe failures instead of throwing generic errors.');
+}
+if (failedStatusSnapshot.readiness.EOD_RESEARCH.allowed) {
+  throw new Error('an unavailable provider must be rejected before EOD data ingestion.');
+}
+if (!failedStatusSnapshot.readiness.EOD_RESEARCH.reasons.includes('Provider is unavailable.')) {
+  throw new Error('health-probe failure must flow through canonical readiness reasons.');
+}
+
+console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures and enforce capability, health and target-market compatibility together.');
