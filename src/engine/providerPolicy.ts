@@ -74,6 +74,36 @@ function degradeHealth(
   };
 }
 
+function providerErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return 'Unknown provider health-check failure.';
+}
+
+/**
+ * Capture provider health behind a failure-safe boundary.
+ *
+ * Concrete adapters are external-system boundaries and are therefore allowed to
+ * fail. The research engine should not leak those adapter exceptions into
+ * feature/strategy/UI layers as generic errors. A failed health probe becomes a
+ * canonical UNAVAILABLE snapshot so the existing readiness policy can reject the
+ * provider before any market data is ingested.
+ */
+export async function captureProviderHealth(
+  provider: MarketDataProvider,
+  nowMs: number = Date.now(),
+): Promise<ProviderHealth> {
+  try {
+    return normalizeProviderHealth(await provider.getHealth(), nowMs);
+  } catch (error) {
+    return {
+      status: 'UNAVAILABLE',
+      checkedAt: new Date(nowMs).toISOString(),
+      message: `Provider health check failed: ${providerErrorMessage(error)}`,
+    };
+  }
+}
+
 export function providerSupportsMarket(
   metadata: ProviderMetadata,
   marketId: MarketId,
@@ -283,7 +313,9 @@ export async function getProviderReadinessMatrix(
   nowMs: number = Date.now(),
   targetMarket?: MarketId,
 ): Promise<Record<ResearchUseCase, ProviderReadiness>> {
-  const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
+  const health = healthSnapshot
+    ? normalizeProviderHealth(healthSnapshot, nowMs)
+    : await captureProviderHealth(provider, nowMs);
   return buildReadinessMatrix(provider.metadata, health, targetMarket);
 }
 
@@ -300,7 +332,9 @@ export async function getProviderStatusSnapshot(
   nowMs: number = Date.now(),
   targetMarket?: MarketId,
 ): Promise<ProviderStatusSnapshot> {
-  const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
+  const health = healthSnapshot
+    ? normalizeProviderHealth(healthSnapshot, nowMs)
+    : await captureProviderHealth(provider, nowMs);
 
   return {
     metadata: provider.metadata,
