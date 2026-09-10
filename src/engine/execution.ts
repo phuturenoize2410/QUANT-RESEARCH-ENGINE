@@ -2,6 +2,7 @@ import { MorningPosition, StockData, StrategySettings } from '../types';
 import {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_OVERNIGHT_EXIT_POLICY,
+  DEFAULT_RESEARCH_POSITION_LOTS,
   ExecutionCosts,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
@@ -17,6 +18,7 @@ export type { ExecutionCosts, OvernightExitPolicy, OvernightExitDecision } from 
 export {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_OVERNIGHT_EXIT_POLICY,
+  DEFAULT_RESEARCH_POSITION_LOTS,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
   normalizeExecutionCosts,
@@ -165,7 +167,7 @@ export function buildManualMorningPosition(
 export function buildMorningPositionFromStock(
   stock: StockData,
   settings: StrategySettings,
-  lots: number = 100,
+  lots: number = DEFAULT_RESEARCH_POSITION_LOTS,
   market: MarketAdapter = IDX_MARKET_ADAPTER,
 ): MorningPosition {
   const execution = estimateOvernightExecution(

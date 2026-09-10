@@ -4,6 +4,7 @@ import {
   buildMorningPositionFromStock,
   ManualMorningPositionInput,
 } from './execution';
+import { DEFAULT_RESEARCH_POSITION_LOTS } from './executionPolicy';
 import {
   createPrototypeResearchPipeline,
   ResearchPipeline,
@@ -33,7 +34,7 @@ export class ResearchApplicationService {
   buildStrategyJournalPosition(
     stock: StockData,
     settings: StrategySettings,
-    lots: number = 100,
+    lots: number = DEFAULT_RESEARCH_POSITION_LOTS,
   ): MorningPosition {
     return buildMorningPositionFromStock(
       stock,

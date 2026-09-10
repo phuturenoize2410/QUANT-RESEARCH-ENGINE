@@ -21,6 +21,13 @@ export const DEFAULT_EXECUTION_COSTS: Readonly<ExecutionCosts> = Object.freeze({
 });
 
 /**
+ * Canonical prototype position size for strategy-generated journal entries.
+ * This is a Risk/Execution policy, not market microstructure: the active market
+ * adapter still owns the conversion from lots to shares/contracts.
+ */
+export const DEFAULT_RESEARCH_POSITION_LOTS = 100;
+
+/**
  * Canonical default round-trip friction used by research consumers that only
  * need the aggregate hurdle. Exporting the aggregate prevents downstream ML,
  * strategy and UI layers from re-encoding a stale magic number.

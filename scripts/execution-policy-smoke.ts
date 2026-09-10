@@ -1,13 +1,16 @@
 import {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_OVERNIGHT_EXIT_POLICY,
+  DEFAULT_RESEARCH_POSITION_LOTS,
   deriveOvernightExitDecision,
   netReturnAfterCosts,
   normalizeExecutionCosts,
   normalizeOvernightExitPolicy,
   totalFrictionPct,
 } from '../src/engine/executionPolicy';
-import { estimateOvernightExecution } from '../src/engine/execution';
+import { buildMorningPositionFromStock, estimateOvernightExecution } from '../src/engine/execution';
+import { buildUniverse } from '../src/data/mockStocks';
+import { DEFAULT_STRATEGY_SETTINGS } from '../src/engine/analytics';
 
 const canonicalFriction = totalFrictionPct(DEFAULT_EXECUTION_COSTS);
 const expectedCanonicalFriction =
@@ -82,6 +85,15 @@ if (
   throw new Error('Malformed overnight risk thresholds must fall back to canonical defaults.');
 }
 
+const stock = buildUniverse()[0];
+if (!stock) {
+  throw new Error('Prototype universe must provide a stock fixture.');
+}
+const defaultSizedPosition = buildMorningPositionFromStock(stock, DEFAULT_STRATEGY_SETTINGS);
+if (defaultSizedPosition.lots !== DEFAULT_RESEARCH_POSITION_LOTS) {
+  throw new Error('Strategy-generated journal positions must use the centralized default position size.');
+}
+
 console.log(
-  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}% and overnight risk/exit thresholds are centralized and normalized.`,
+  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
 );
