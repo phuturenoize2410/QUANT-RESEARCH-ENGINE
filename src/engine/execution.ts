@@ -7,7 +7,7 @@ import {
   totalFrictionPct,
   netReturnAfterCosts,
 } from './executionPolicy';
-import { formatMarketTimeLabel, MarketAdapter } from './market/marketAdapter';
+import { CurrencyCode, formatMarketTimeLabel, MarketAdapter } from './market/marketAdapter';
 import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 
 export type { ExecutionCosts } from './executionPolicy';
@@ -24,6 +24,17 @@ export interface OvernightExecutionEstimate {
   estimatedOpenPrice: number;
   grossReturnPct: number;
   netReturnPct: number;
+  /** Currency carried from the active market adapter. */
+  currency: CurrencyCode;
+  /** Market-neutral monetary fields for new quant/risk/execution consumers. */
+  totalCost: number;
+  estimatedSellValue: number;
+  grossProfit: number;
+  netProfit: number;
+  /**
+   * Legacy IDX aliases retained while UI/types are migrated incrementally.
+   * New core consumers should use the market-neutral fields above.
+   */
   totalCostIDR: number;
   estimatedSellValueIDR: number;
   grossProfitIDR: number;
@@ -48,27 +59,33 @@ export function estimateOvernightExecution(
   // without changing the generic execution calculation below.
   const shares = safeLots * market.microstructure.sharesPerLot();
   const estimatedOpenPrice = Math.round(safeEntryPrice * (1 + safeExpectedGapPct / 100));
-  const totalCostIDR = safeEntryPrice * shares;
-  const estimatedSellValueIDR = estimatedOpenPrice * shares;
-  const grossProfitIDR = estimatedSellValueIDR - totalCostIDR;
+  const totalCost = safeEntryPrice * shares;
+  const estimatedSellValue = estimatedOpenPrice * shares;
+  const grossProfit = estimatedSellValue - totalCost;
 
-  const buyFeeIDR = totalCostIDR * (normalizedCosts.buyFeePct / 100);
-  const sellFeeIDR = estimatedSellValueIDR * (normalizedCosts.sellFeePct / 100);
-  const slippageIDR = (totalCostIDR + estimatedSellValueIDR) * (normalizedCosts.slippagePct / 200);
-  const netProfitIDR = grossProfitIDR - buyFeeIDR - sellFeeIDR - slippageIDR;
+  const buyFee = totalCost * (normalizedCosts.buyFeePct / 100);
+  const sellFee = estimatedSellValue * (normalizedCosts.sellFeePct / 100);
+  const slippage = (totalCost + estimatedSellValue) * (normalizedCosts.slippagePct / 200);
+  const netProfit = grossProfit - buyFee - sellFee - slippage;
 
-  const grossReturnPct = totalCostIDR > 0 ? (grossProfitIDR / totalCostIDR) * 100 : 0;
-  const netReturnPct = totalCostIDR > 0 ? (netProfitIDR / totalCostIDR) * 100 : 0;
+  const grossReturnPct = totalCost > 0 ? (grossProfit / totalCost) * 100 : 0;
+  const netReturnPct = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
 
   return {
     entryPrice: safeEntryPrice,
     estimatedOpenPrice,
     grossReturnPct,
     netReturnPct,
-    totalCostIDR,
-    estimatedSellValueIDR,
-    grossProfitIDR,
-    netProfitIDR,
+    currency: market.identity.currency,
+    totalCost,
+    estimatedSellValue,
+    grossProfit,
+    netProfit,
+    // Compatibility bridge for the existing IDX-oriented UI contract.
+    totalCostIDR: totalCost,
+    estimatedSellValueIDR: estimatedSellValue,
+    grossProfitIDR: grossProfit,
+    netProfitIDR: netProfit,
     totalFrictionPct: totalFrictionPct(normalizedCosts),
   };
 }
@@ -96,11 +113,11 @@ export function buildMorningPositionFromStock(
     purchaseDate: formatMarketTimeLabel(market, '15:45'),
     entryPrice: stock.price,
     lots,
-    totalCostIDR: execution.totalCostIDR,
+    totalCostIDR: execution.totalCost,
     currentOpenPrice: execution.estimatedOpenPrice,
     openGapPct: gapPct,
-    grossProfitIDR: execution.grossProfitIDR,
-    netProfitIDR: Math.round(execution.netProfitIDR),
+    grossProfitIDR: execution.grossProfit,
+    netProfitIDR: Math.round(execution.netProfit),
     netProfitPct: Math.round(execution.netReturnPct * 100) / 100,
     cutLossLevel: Math.round(stock.price * 0.985),
     takeProfitLevel: Math.round(stock.price * 1.015),
