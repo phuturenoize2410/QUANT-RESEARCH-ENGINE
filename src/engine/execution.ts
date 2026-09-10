@@ -113,6 +113,11 @@ export function buildMorningPositionFromStock(
     purchaseDate: formatMarketTimeLabel(market, '15:45'),
     entryPrice: stock.price,
     lots,
+    currency: execution.currency,
+    totalCost: execution.totalCost,
+    grossProfit: execution.grossProfit,
+    netProfit: Math.round(execution.netProfit),
+    // Legacy aliases keep the existing IDX UI stable while downstream consumers migrate.
     totalCostIDR: execution.totalCost,
     currentOpenPrice: execution.estimatedOpenPrice,
     openGapPct: gapPct,
