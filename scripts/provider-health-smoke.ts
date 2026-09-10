@@ -2,6 +2,7 @@ import {
   evaluateProviderReadiness,
   getProviderStatusSnapshot,
   normalizeProviderHealth,
+  providerSupportsMarket,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
 import {
@@ -73,6 +74,7 @@ const realtimeMetadata: ProviderMetadata = {
   source: 'IDX_FEED',
   mode: 'REALTIME',
   isPaid: false,
+  supportedMarkets: ['IDX'],
   supportsHistorical: true,
   supportsIntraday: true,
   supportsRealtime: true,
@@ -82,10 +84,28 @@ const healthyLiveReadiness = evaluateProviderReadiness(realtimeMetadata, {
   status: 'HEALTHY',
   checkedAt: new Date().toISOString(),
   lastSuccessfulSyncAt: new Date().toISOString(),
-}, 'LIVE_EXECUTION');
+}, 'LIVE_EXECUTION', 'IDX');
 
 if (!healthyLiveReadiness.allowed) {
   throw new Error(`healthy realtime provider should be live-ready: ${healthyLiveReadiness.reasons.join(' ')}`);
+}
+
+const wrongMarketReadiness = evaluateProviderReadiness(realtimeMetadata, {
+  status: 'HEALTHY',
+  checkedAt: new Date().toISOString(),
+  lastSuccessfulSyncAt: new Date().toISOString(),
+}, 'EOD_RESEARCH', 'US');
+
+if (wrongMarketReadiness.allowed) {
+  throw new Error('IDX-only provider must not be eligible for a US research pipeline.');
+}
+
+if (!wrongMarketReadiness.reasons.some(reason => reason.includes('target market US'))) {
+  throw new Error('market incompatibility must be explicit in provider readiness reasons.');
+}
+
+if (!providerSupportsMarket(realtimeMetadata, 'IDX') || providerSupportsMarket(realtimeMetadata, 'US')) {
+  throw new Error('provider market capability helper must respect declared supported markets.');
 }
 
 const degradedLiveReadiness = evaluateProviderReadiness(realtimeMetadata, {
@@ -93,7 +113,7 @@ const degradedLiveReadiness = evaluateProviderReadiness(realtimeMetadata, {
   checkedAt: new Date().toISOString(),
   lastSuccessfulSyncAt: new Date().toISOString(),
   message: 'Upstream quote stream is partially degraded.',
-}, 'LIVE_EXECUTION');
+}, 'LIVE_EXECUTION', 'IDX');
 
 if (degradedLiveReadiness.allowed) {
   throw new Error('degraded realtime provider must not be eligible for live execution.');
@@ -118,7 +138,7 @@ const contradictoryHistoricalReadiness = evaluateProviderReadiness(contradictory
   status: 'HEALTHY',
   checkedAt: new Date().toISOString(),
   lastSuccessfulSyncAt: new Date().toISOString(),
-}, 'HISTORICAL_BACKTEST');
+}, 'HISTORICAL_BACKTEST', 'IDX');
 
 if (contradictoryHistoricalReadiness.allowed) {
   throw new Error('contradictory provider metadata must be rejected before any use-case consumes it.');
@@ -135,13 +155,35 @@ if (!validateProviderMetadata(realtimeModeWithoutRealtimeSupport)
   throw new Error('provider metadata validation must reject REALTIME mode without realtime capability.');
 }
 
+const missingMarketMetadata: ProviderMetadata = {
+  ...realtimeMetadata,
+  id: 'missing-market-contract',
+  supportedMarkets: [],
+};
+
+if (!validateProviderMetadata(missingMarketMetadata)
+  .some(issue => issue.includes('at least one supported market'))) {
+  throw new Error('provider metadata validation must require at least one supported market.');
+}
+
+const duplicateMarketMetadata: ProviderMetadata = {
+  ...realtimeMetadata,
+  id: 'duplicate-market-contract',
+  supportedMarkets: ['IDX', 'IDX'],
+};
+
+if (!validateProviderMetadata(duplicateMarketMetadata)
+  .some(issue => issue.includes('must not contain duplicates'))) {
+  throw new Error('provider metadata validation must reject duplicate supported markets.');
+}
+
 const mockProvider = new MockMarketDataProvider();
 const mockHealth: ProviderHealth = {
   status: 'HEALTHY',
   checkedAt: '2026-09-09T06:30:00.000Z',
   lastSuccessfulSyncAt: '2026-09-09T06:29:30.000Z',
 };
-const statusSnapshot = await getProviderStatusSnapshot(mockProvider, mockHealth, nowMs);
+const statusSnapshot = await getProviderStatusSnapshot(mockProvider, mockHealth, nowMs, 'IDX');
 
 if (statusSnapshot.capturedAt !== '2026-09-09T06:30:00.000Z') {
   throw new Error('provider status snapshot must expose the canonical capture instant.');
@@ -149,6 +191,10 @@ if (statusSnapshot.capturedAt !== '2026-09-09T06:30:00.000Z') {
 
 if (statusSnapshot.health.status !== 'HEALTHY') {
   throw new Error('provider status snapshot must preserve normalized health.');
+}
+
+if (!statusSnapshot.marketCompatible || statusSnapshot.targetMarket !== 'IDX') {
+  throw new Error('provider status snapshot must expose target-market compatibility.');
 }
 
 if (statusSnapshot.readiness.HISTORICAL_BACKTEST.allowed) {
@@ -159,4 +205,4 @@ if (!statusSnapshot.readiness.EOD_RESEARCH.warnings.some(warning => warning.incl
   throw new Error('provider status snapshot must keep mock-data warnings visible to downstream consumers.');
 }
 
-console.log('Provider-health smoke passed: canonical status snapshots keep metadata, normalized health and readiness decisions synchronized.');
+console.log('Provider-health smoke passed: canonical status snapshots enforce capability, health and target-market compatibility together.');
