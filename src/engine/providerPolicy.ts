@@ -4,6 +4,7 @@ import {
   ProviderMetadata,
   ProviderMode,
 } from './dataProviders';
+import { MarketId } from './market/marketAdapter';
 
 export type ResearchUseCase =
   | 'HISTORICAL_BACKTEST'
@@ -22,6 +23,8 @@ export interface ProviderStatusSnapshot {
   metadata: ProviderMetadata;
   health: ProviderHealth;
   readiness: Record<ResearchUseCase, ProviderReadiness>;
+  targetMarket?: MarketId;
+  marketCompatible: boolean;
   capturedAt: string;
 }
 
@@ -71,6 +74,13 @@ function degradeHealth(
   };
 }
 
+export function providerSupportsMarket(
+  metadata: ProviderMetadata,
+  marketId: MarketId,
+): boolean {
+  return metadata.supportedMarkets.includes(marketId);
+}
+
 /**
  * Validate capability declarations independently from any specific research
  * use case. Provider adapters are contracts: contradictory metadata should be
@@ -79,6 +89,19 @@ function degradeHealth(
  */
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   const issues: string[] = [];
+
+  if (metadata.supportedMarkets.length === 0) {
+    issues.push('Provider capability contract is invalid: at least one supported market must be declared.');
+  }
+
+  const normalizedMarkets = metadata.supportedMarkets.map(market => market.trim()).filter(Boolean);
+  if (normalizedMarkets.length !== metadata.supportedMarkets.length) {
+    issues.push('Provider capability contract is invalid: supported market identifiers must be non-empty.');
+  }
+
+  if (new Set(normalizedMarkets).size !== normalizedMarkets.length) {
+    issues.push('Provider capability contract is invalid: supported markets must not contain duplicates.');
+  }
 
   if (metadata.supportsRealtime && !metadata.supportsIntraday) {
     issues.push('Provider capability contract is invalid: real-time support requires intraday support.');
@@ -163,9 +186,14 @@ function evaluateNormalizedProviderReadiness(
   metadata: ProviderMetadata,
   normalizedHealth: ProviderHealth,
   useCase: ResearchUseCase,
+  targetMarket?: MarketId,
 ): ProviderReadiness {
   const reasons: string[] = [...validateProviderMetadata(metadata)];
   const warnings: string[] = [];
+
+  if (targetMarket && !providerSupportsMarket(metadata, targetMarket)) {
+    pushUnique(reasons, `Provider does not support target market ${targetMarket}.`);
+  }
 
   if (normalizedHealth.status === 'UNAVAILABLE') pushUnique(reasons, 'Provider is unavailable.');
   if (normalizedHealth.status === 'STALE') pushUnique(reasons, 'Provider data is stale.');
@@ -185,7 +213,7 @@ function evaluateNormalizedProviderReadiness(
     case 'PRECLOSE_SCREENING':
       if (!metadata.supportsIntraday) pushUnique(reasons, 'Intraday data is required for pre-close screening.');
       if (MODE_RANK[metadata.mode] < MODE_RANK.DELAYED) pushUnique(reasons, 'EOD-only data is too stale for pre-close screening.');
-      if (metadata.mode === 'DELAYED') warnings.push('Delayed data may not represent the executable 15:30–15:45 market state.');
+      if (metadata.mode === 'DELAYED') warnings.push('Delayed data may not represent the executable pre-close market state.');
       break;
 
     case 'LIVE_EXECUTION':
@@ -212,6 +240,7 @@ function evaluateNormalizedProviderReadiness(
 function buildReadinessMatrix(
   metadata: ProviderMetadata,
   normalizedHealth: ProviderHealth,
+  targetMarket?: MarketId,
 ): Record<ResearchUseCase, ProviderReadiness> {
   const useCases: ResearchUseCase[] = [
     'HISTORICAL_BACKTEST',
@@ -223,7 +252,7 @@ function buildReadinessMatrix(
   return Object.fromEntries(
     useCases.map(useCase => [
       useCase,
-      evaluateNormalizedProviderReadiness(metadata, normalizedHealth, useCase),
+      evaluateNormalizedProviderReadiness(metadata, normalizedHealth, useCase, targetMarket),
     ]),
   ) as Record<ResearchUseCase, ProviderReadiness>;
 }
@@ -232,17 +261,19 @@ function buildReadinessMatrix(
  * Central policy gate for deciding whether a provider is suitable for a research
  * or execution use case. Strategy/UI code must not infer suitability from a
  * vendor name (Google Finance, broker API, etc.). It should depend only on
- * declared capabilities, freshness and health.
+ * declared capabilities, target-market compatibility, freshness and health.
  */
 export function evaluateProviderReadiness(
   metadata: ProviderMetadata,
   health: ProviderHealth,
   useCase: ResearchUseCase,
+  targetMarket?: MarketId,
 ): ProviderReadiness {
   return evaluateNormalizedProviderReadiness(
     metadata,
     normalizeProviderHealth(health),
     useCase,
+    targetMarket,
   );
 }
 
@@ -250,29 +281,33 @@ export async function getProviderReadinessMatrix(
   provider: MarketDataProvider,
   healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
+  targetMarket?: MarketId,
 ): Promise<Record<ResearchUseCase, ProviderReadiness>> {
   const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
-  return buildReadinessMatrix(provider.metadata, health);
+  return buildReadinessMatrix(provider.metadata, health, targetMarket);
 }
 
 /**
  * Canonical provider-status boundary. Consumers receive metadata, normalized
  * health and all readiness decisions from the same capture instant instead of
- * independently interpreting adapter state. This keeps future free/paid IDX
+ * independently interpreting adapter state. This keeps future free/paid market
  * providers interchangeable and prevents UI or orchestration code from owning
- * freshness/business rules.
+ * freshness, market-compatibility or capability business rules.
  */
 export async function getProviderStatusSnapshot(
   provider: MarketDataProvider,
   healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
+  targetMarket?: MarketId,
 ): Promise<ProviderStatusSnapshot> {
   const health = normalizeProviderHealth(healthSnapshot ?? await provider.getHealth(), nowMs);
 
   return {
     metadata: provider.metadata,
     health,
-    readiness: buildReadinessMatrix(provider.metadata, health),
+    readiness: buildReadinessMatrix(provider.metadata, health, targetMarket),
+    targetMarket,
+    marketCompatible: targetMarket ? providerSupportsMarket(provider.metadata, targetMarket) : true,
     capturedAt: new Date(nowMs).toISOString(),
   };
 }
