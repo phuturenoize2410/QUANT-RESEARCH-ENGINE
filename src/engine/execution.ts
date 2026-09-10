@@ -48,6 +48,12 @@ export interface OvernightExecutionEstimate {
   totalFrictionPct: number;
 }
 
+export interface ManualMorningPositionInput {
+  ticker: string;
+  entryPrice: number;
+  lots: number;
+}
+
 export function estimateOvernightExecution(
   entryPrice: number,
   lots: number,
@@ -93,6 +99,66 @@ export function estimateOvernightExecution(
     grossProfitIDR: grossProfit,
     netProfitIDR: netProfit,
     totalFrictionPct: totalFrictionPct(normalizedCosts),
+  };
+}
+
+/**
+ * Converts raw manual-journal input into the same canonical Risk/Execution
+ * contract used by shortlist-generated positions. The UI must not own lot-size,
+ * fee/slippage, P/L, gap, or exit-threshold calculations.
+ */
+export function buildManualMorningPosition(
+  input: ManualMorningPositionInput,
+  stock: StockData | undefined,
+  settings: StrategySettings,
+  market: MarketAdapter = IDX_MARKET_ADAPTER,
+): Omit<MorningPosition, 'id'> {
+  const safeEntryPrice = Number.isFinite(input.entryPrice) && input.entryPrice > 0
+    ? input.entryPrice
+    : stock?.price ?? 1000;
+  const safeLots = Number.isFinite(input.lots) && input.lots > 0 ? input.lots : 0;
+
+  // Preserve prototype behavior: when a mock-universe stock exists, its mock
+  // close is the base for the simulated next-open estimate. Otherwise use the
+  // existing +0.8% fallback, but keep the result explicitly labelled simulated.
+  const openBasePrice = stock?.price ?? safeEntryPrice;
+  const simulatedGapPct = stock?.historicalStats.avgOvernightGap ?? 0.8;
+  const simulatedOpenPrice = Math.round(openBasePrice * (1 + simulatedGapPct / 100));
+  const expectedGapFromEntryPct = safeEntryPrice > 0
+    ? ((simulatedOpenPrice / safeEntryPrice) - 1) * 100
+    : 0;
+
+  const execution = estimateOvernightExecution(
+    safeEntryPrice,
+    safeLots,
+    expectedGapFromEntryPct,
+    executionCostsFromSettings(settings),
+    market,
+  );
+  const gapPct = Math.round(execution.grossReturnPct * 10) / 10;
+  const riskDecision = deriveOvernightExitDecision(safeEntryPrice, gapPct);
+  const roundedNetProfit = Math.round(execution.netProfit);
+
+  return {
+    ticker: input.ticker,
+    name: stock?.name ?? input.ticker,
+    purchaseDate: formatMarketTimeLabel(market, '15:42', 'Yesterday'),
+    entryPrice: safeEntryPrice,
+    lots: safeLots,
+    currency: execution.currency,
+    totalCost: execution.totalCost,
+    grossProfit: execution.grossProfit,
+    netProfit: roundedNetProfit,
+    totalCostIDR: execution.totalCost,
+    currentOpenPrice: execution.estimatedOpenPrice,
+    openGapPct: gapPct,
+    grossProfitIDR: execution.grossProfit,
+    netProfitIDR: roundedNetProfit,
+    netProfitPct: Math.round(execution.netReturnPct * 10) / 10,
+    cutLossLevel: riskDecision.cutLossLevel,
+    takeProfitLevel: riskDecision.takeProfitLevel,
+    exitStatus: riskDecision.exitStatus,
+    notes: `Manual overnight journal entry; simulated open estimate with centralized friction: ${execution.totalFrictionPct.toFixed(2)}%`,
   };
 }
 

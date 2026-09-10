@@ -15,7 +15,11 @@ import { StrategyLeaderboardView } from './components/StrategyLeaderboardView';
 import { QuantLabView } from './components/QuantLabView';
 import { MLLabView } from './components/MLLabView';
 import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
-import { buildMorningPositionFromStock } from './engine/execution';
+import {
+  buildManualMorningPosition,
+  buildMorningPositionFromStock,
+  ManualMorningPositionInput,
+} from './engine/execution';
 import {
   createPrototypeResearchPipeline,
   ResearchPipelineSnapshot,
@@ -85,7 +89,12 @@ export default function App() {
 
   const handleUpdatePosition = useCallback((id: string, updates: Partial<MorningPosition>) => setPositions(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p)), []);
   const handleRemovePosition = useCallback((id: string) => setPositions(prev => prev.filter(p => p.id !== id)), []);
-  const handleAddManualPosition = useCallback((pos: Omit<MorningPosition, 'id'>) => { setPositions(prev => [{ ...pos, id: `pos-${Date.now()}` }, ...prev]); showNotification(`Logged ${pos.ticker} position successfully.`); }, []);
+  const handleAddManualPosition = useCallback((input: ManualMorningPositionInput) => {
+    const stock = universe.find(candidate => candidate.ticker === input.ticker);
+    const position = buildManualMorningPosition(input, stock, strategySettings);
+    setPositions(prev => [{ ...position, id: `pos-${Date.now()}` }, ...prev]);
+    showNotification(`Logged ${input.ticker} using centralized simulated execution and risk policy.`);
+  }, [strategySettings, universe]);
 
   const shortlistCandidatesCount = researchSnapshot?.summary.shortlistCandidatesCount ?? 0;
   const prefilterPassedCount = researchSnapshot?.summary.prefilterPassedCount ?? 0;

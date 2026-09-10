@@ -13,12 +13,13 @@ import {
   Info
 } from 'lucide-react';
 import { MorningPosition, ExitDecisionStatus, StockData } from '../types';
+import type { ManualMorningPositionInput } from '../engine/execution';
 
 interface MorningExitDashboardViewProps {
   positions: MorningPosition[];
   onUpdatePosition: (id: string, updates: Partial<MorningPosition>) => void;
   onRemovePosition: (id: string) => void;
-  onAddManualPosition: (pos: Omit<MorningPosition, 'id'>) => void;
+  onAddManualPosition: (input: ManualMorningPositionInput) => void;
   universe: StockData[];
   onSelectStock: (ticker: string) => void;
 }
@@ -36,7 +37,7 @@ export const MorningExitDashboardView: React.FC<MorningExitDashboardViewProps> =
   const [newLots, setNewLots] = useState(100);
   const [newEntryPrice, setNewEntryPrice] = useState(10400);
 
-  // Totals
+  // Presentation-only aggregation. Position economics are produced upstream by Risk/Execution.
   const totalCost = positions.reduce((sum, p) => sum + p.totalCostIDR, 0);
   const totalGrossProfit = positions.reduce((sum, p) => sum + p.grossProfitIDR, 0);
   const totalNetProfit = positions.reduce((sum, p) => sum + p.netProfitIDR, 0);
@@ -44,41 +45,11 @@ export const MorningExitDashboardView: React.FC<MorningExitDashboardViewProps> =
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const stock = universe.find(s => s.ticker === newTicker);
-    const price = newEntryPrice || stock?.price || 1000;
-    const currentOpen = stock ? stock.price * (1 + (stock.historicalStats.avgOvernightGap / 100)) : price * 1.008;
-    const openPrice = Math.round(currentOpen);
-    const gapPct = Math.round(((openPrice / price) - 1) * 1000) / 10;
-    const cost = price * newLots * 100;
-    const sellValue = openPrice * newLots * 100;
-    const grossPL = sellValue - cost;
-    const feeBuy = cost * 0.0015;
-    const feeSell = sellValue * 0.0025;
-    const netPL = grossPL - (feeBuy + feeSell);
-
-    let exitStatus: ExitDecisionStatus = 'REVIEW';
-    if (gapPct >= 0.8) exitStatus = 'TAKE PROFIT';
-    else if (gapPct <= -0.8) exitStatus = 'CUT LOSS';
-    else exitStatus = 'FLAT / EXIT';
-
     onAddManualPosition({
       ticker: newTicker,
-      name: stock?.name || newTicker,
-      purchaseDate: 'Yesterday 15:42 WIB',
-      entryPrice: price,
+      entryPrice: newEntryPrice,
       lots: newLots,
-      totalCostIDR: cost,
-      currentOpenPrice: openPrice,
-      openGapPct: gapPct,
-      grossProfitIDR: grossPL,
-      netProfitIDR: netPL,
-      netProfitPct: Math.round((netPL / cost) * 1000) / 10,
-      cutLossLevel: Math.round(price * 0.985),
-      takeProfitLevel: Math.round(price * 1.015),
-      exitStatus,
-      notes: 'Overnight position opened at 15:45 pre-close',
     });
-
     setIsAddOpen(false);
   };
 
