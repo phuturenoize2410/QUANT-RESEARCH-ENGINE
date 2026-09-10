@@ -1,16 +1,23 @@
 import { StockData, DailyBar, BandarmologyData } from '../types';
+import { MarketId } from './market/marketAdapter';
 import { MarketRegime } from './strategyTypes';
 
 export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
 export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
 export type ProviderHealthStatus = 'HEALTHY' | 'DEGRADED' | 'STALE' | 'UNAVAILABLE';
 
+/**
+ * Data capabilities are provider concerns, while market identity is carried
+ * separately. Keeping them orthogonal avoids encoding vendor, delivery mode and
+ * exchange assumptions into one enum as additional markets/providers are added.
+ */
 export interface ProviderMetadata {
   id: string;
   name: string;
   source: MarketDataSource;
   mode: ProviderMode;
   isPaid: boolean;
+  supportedMarkets: readonly MarketId[];
   supportsHistorical: boolean;
   supportsIntraday: boolean;
   supportsRealtime: boolean;
@@ -68,6 +75,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
     source: 'MOCK_ENGINE',
     mode: 'MOCK',
     isPaid: false,
+    supportedMarkets: Object.freeze(['IDX'] as MarketId[]),
     supportsHistorical: true,
     supportsIntraday: true,
     supportsRealtime: false,
@@ -144,6 +152,7 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
     source: 'MOCK_ENGINE',
     mode: 'MOCK',
     isPaid: false,
+    supportedMarkets: Object.freeze(['IDX'] as MarketId[]),
     supportsHistorical: true,
     supportsIntraday: false,
     supportsRealtime: false,
