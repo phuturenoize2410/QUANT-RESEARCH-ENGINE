@@ -28,12 +28,15 @@ import {
 import {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   DEFAULT_SHORTLIST_LIMIT,
+  runShortlistStrategy,
   selectShortlistCandidates,
+  ShortlistStrategyResult,
 } from './strategy/shortlistStrategy';
 
 export {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   DEFAULT_SHORTLIST_LIMIT,
+  runShortlistStrategy,
   selectShortlistCandidates,
 } from './strategy/shortlistStrategy';
 
@@ -41,6 +44,7 @@ export interface ResearchPipelineSummary {
   universeCount: number;
   prefilterPassedCount: number;
   shortlistCandidatesCount: number;
+  shortlistEligibleCountBeforeLimit: number;
   shortlistEdgeThreshold: number;
   shortlistLimit: number;
 }
@@ -48,6 +52,7 @@ export interface ResearchPipelineSummary {
 export interface ResearchPipelineSnapshot {
   universe: StockData[];
   shortlistCandidates: StockData[];
+  shortlistStrategy: ShortlistStrategyResult;
   featuresByTicker: Record<string, TickerFeatureVector>;
   featureProvenanceByTicker: Record<string, FeatureProvenanceSnapshot>;
   featureContext: FeatureContext;
@@ -78,16 +83,15 @@ function isCacheAwareProvider(
 
 export function buildResearchPipelineSummary(
   universe: StockData[],
-  shortlistCandidates: StockData[] = selectShortlistCandidates(universe),
-  shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
-  shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
+  shortlistStrategy: ShortlistStrategyResult = runShortlistStrategy(universe),
 ): ResearchPipelineSummary {
   return {
     universeCount: universe.length,
     prefilterPassedCount: universe.filter(stock => stock.prefilterPassed).length,
-    shortlistCandidatesCount: shortlistCandidates.length,
-    shortlistEdgeThreshold,
-    shortlistLimit,
+    shortlistCandidatesCount: shortlistStrategy.candidates.length,
+    shortlistEligibleCountBeforeLimit: shortlistStrategy.eligibleCountBeforeLimit,
+    shortlistEdgeThreshold: shortlistStrategy.policy.edgeThreshold,
+    shortlistLimit: shortlistStrategy.policy.limit,
   };
 }
 
@@ -96,7 +100,9 @@ export function buildResearchPipelineSummary(
  * DataProvider -> Feature Context -> Feature Engine -> Strategy/Risk/Execution -> UI.
  *
  * Strategy selection is delegated to the strategy engine so this orchestrator
- * coordinates stages without owning eligibility/ranking rules itself.
+ * coordinates stages without owning eligibility/ranking rules itself. Applied
+ * strategy policy travels with the snapshot so downstream consumers do not need
+ * to reconstruct thresholds, limits or ranking assumptions.
  *
  * The feature-context factory is deliberately injectable. A future Google Finance,
  * free API, broker or fundamental adapter can populate point-in-time contextual
@@ -175,11 +181,12 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    const shortlistCandidates = selectShortlistCandidates(universe);
+    const shortlistStrategy = runShortlistStrategy(universe);
 
     return {
       universe,
-      shortlistCandidates,
+      shortlistCandidates: shortlistStrategy.candidates,
+      shortlistStrategy,
       featuresByTicker,
       featureProvenanceByTicker,
       featureContext,
@@ -189,7 +196,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       providerCache: isCacheAwareProvider(this.provider)
         ? this.provider.getCacheSnapshot()
         : undefined,
-      summary: buildResearchPipelineSummary(universe, shortlistCandidates),
+      summary: buildResearchPipelineSummary(universe, shortlistStrategy),
       generatedAt: providerStatus.capturedAt,
     };
   }
