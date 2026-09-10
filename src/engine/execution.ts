@@ -7,6 +7,8 @@ import {
   totalFrictionPct,
   netReturnAfterCosts,
 } from './executionPolicy';
+import { MarketAdapter } from './market/marketAdapter';
+import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 
 export type { ExecutionCosts } from './executionPolicy';
 export {
@@ -34,13 +36,17 @@ export function estimateOvernightExecution(
   lots: number,
   expectedGapPct: number,
   costs: ExecutionCosts = DEFAULT_EXECUTION_COSTS,
+  market: MarketAdapter = IDX_MARKET_ADAPTER,
 ): OvernightExecutionEstimate {
   const normalizedCosts = normalizeExecutionCosts(costs);
   const safeEntryPrice = Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : 0;
   const safeLots = Number.isFinite(lots) && lots > 0 ? lots : 0;
   const safeExpectedGapPct = Number.isFinite(expectedGapPct) ? expectedGapPct : 0;
 
-  const shares = safeLots * 100;
+  // Quantity conversion is a market-microstructure concern. IDX currently uses
+  // 100 shares per board lot; future markets can supply a different adapter
+  // without changing the generic execution calculation below.
+  const shares = safeLots * market.microstructure.sharesPerLot();
   const estimatedOpenPrice = Math.round(safeEntryPrice * (1 + safeExpectedGapPct / 100));
   const totalCostIDR = safeEntryPrice * shares;
   const estimatedSellValueIDR = estimatedOpenPrice * shares;
@@ -71,12 +77,14 @@ export function buildMorningPositionFromStock(
   stock: StockData,
   settings: StrategySettings,
   lots: number = 100,
+  market: MarketAdapter = IDX_MARKET_ADAPTER,
 ): MorningPosition {
   const execution = estimateOvernightExecution(
     stock.price,
     lots,
     stock.historicalStats.avgOvernightGap,
     executionCostsFromSettings(settings),
+    market,
   );
 
   const gapPct = Math.round(execution.grossReturnPct * 10) / 10;
