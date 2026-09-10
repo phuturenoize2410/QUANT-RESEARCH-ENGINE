@@ -6,6 +6,7 @@ import {
   providerSupportsMarket,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
+import { assertProviderReady, ProviderReadinessError } from '../src/engine/providerGate';
 import {
   MockMarketDataProvider,
   type ProviderHealth,
@@ -235,4 +236,27 @@ if (!failedStatusSnapshot.readiness.EOD_RESEARCH.reasons.includes('Provider is u
   throw new Error('health-probe failure must flow through canonical readiness reasons.');
 }
 
-console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures and enforce capability, health and target-market compatibility together.');
+let readinessError: ProviderReadinessError | undefined;
+try {
+  assertProviderReady(failedStatusSnapshot, 'EOD_RESEARCH');
+} catch (error) {
+  if (error instanceof ProviderReadinessError) {
+    readinessError = error;
+  } else {
+    throw error;
+  }
+}
+
+if (!readinessError) {
+  throw new Error('provider readiness gate must throw a typed error for rejected providers.');
+}
+if (readinessError.status !== failedStatusSnapshot) {
+  throw new Error('provider readiness error must preserve the exact canonical status snapshot that caused rejection.');
+}
+if (readinessError.status.health.status !== 'UNAVAILABLE'
+  || readinessError.status.targetMarket !== 'IDX'
+  || readinessError.status.capturedAt !== '2026-09-09T06:30:00.000Z') {
+  throw new Error('provider readiness error must expose health, target market and canonical capture time for downstream status surfaces.');
+}
+
+console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures, survive readiness rejection, and enforce capability, health and target-market compatibility together.');

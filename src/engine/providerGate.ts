@@ -6,6 +6,7 @@ import {
 } from './providerPolicy';
 
 export class ProviderReadinessError extends Error {
+  readonly status: ProviderStatusSnapshot;
   readonly provider: ProviderMetadata;
   readonly useCase: ResearchUseCase;
   readonly readiness: ProviderReadiness;
@@ -25,6 +26,10 @@ export class ProviderReadinessError extends Error {
     );
 
     this.name = 'ProviderReadinessError';
+    // Preserve the canonical policy snapshot that caused the rejection. Future
+    // UI/telemetry consumers can inspect health, capture time, target market,
+    // readiness reasons and warnings without re-running or duplicating policy.
+    this.status = status;
     this.provider = status.metadata;
     this.useCase = useCase;
     this.readiness = readiness;
@@ -37,8 +42,8 @@ export class ProviderReadinessError extends Error {
  * ProviderPolicy owns the suitability decision; orchestration, strategy and UI
  * consumers should enforce that decision through this gate instead of rebuilding
  * market, freshness or capability rules locally. Keeping the thrown error typed
- * also gives future UI/status surfaces a stable way to distinguish provider
- * readiness failures from feature/strategy failures without vendor-specific code.
+ * and carrying the original ProviderStatusSnapshot gives downstream status
+ * surfaces a stable, vendor-neutral failure contract without re-evaluating policy.
  */
 export function assertProviderReady(
   status: ProviderStatusSnapshot,
