@@ -149,6 +149,14 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       );
     }
 
+    const eodReadiness = providerStatus.readiness.EOD_RESEARCH;
+    if (!eodReadiness.allowed) {
+      throw new Error(
+        `Provider ${this.provider.metadata.name} is not ready for EOD research. ` +
+        `${eodReadiness.reasons.join(' ')} Research pipeline rejected before data ingestion.`,
+      );
+    }
+
     if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
       const seeded = this.seedUniverse(settings);
       if (this.provider instanceof MockMarketDataProvider) {
