@@ -1,18 +1,22 @@
 import { DailyBar } from '../types';
 import { normalizeDailyBars } from './providerCache';
+import { buildInstrumentId, normalizeSymbol } from './market/instrumentIdentity';
+import { MarketId } from './market/marketAdapter';
 
 export interface HistoricalSeriesKey {
-  providerId: string;
-  ticker: string;
+  instrumentId: string;
 }
 
 export interface HistoricalStoreWriteMetadata {
   fetchedAt: string;
   sourceMode: 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
   isSimulated: boolean;
+  providerId: string;
 }
 
 export interface HistoricalStoreRecord extends HistoricalSeriesKey {
+  symbol: string;
+  marketId: MarketId;
   bars: DailyBar[];
   metadata: HistoricalStoreWriteMetadata;
 }
@@ -28,9 +32,9 @@ export interface HistoricalStoreSnapshot {
 /**
  * Persistent-storage boundary for canonical historical OHLCV data.
  *
- * The first concrete implementation is in-memory, but adapters for IndexedDB,
- * SQLite/Postgres or object storage can implement this contract without changing
- * feature, strategy, risk/execution or UI code.
+ * Series identity is provider-independent. Provider provenance remains attached
+ * to write metadata so future adapters can replace or reconcile data sources
+ * without forcing feature/strategy/ML consumers to change storage keys.
  */
 export interface HistoricalStore {
   upsert(record: HistoricalStoreRecord): Promise<void>;
@@ -45,19 +49,27 @@ export interface HistoricalStore {
 }
 
 export interface PointInTimeSeries {
-  providerId: string;
-  ticker: string;
+  instrumentId: string;
+  symbol: string;
+  marketId: MarketId;
   asOfDate: string;
   bars: DailyBar[];
   metadata: HistoricalStoreWriteMetadata;
 }
 
-function normalizeTicker(ticker: string): string {
-  return ticker.trim().toUpperCase();
+export function createHistoricalSeriesKey(
+  marketId: MarketId,
+  symbol: string,
+): HistoricalSeriesKey {
+  return { instrumentId: buildInstrumentId(marketId, symbol) };
+}
+
+function normalizeInstrumentId(instrumentId: string): string {
+  return instrumentId.trim().toUpperCase();
 }
 
 function seriesId(key: HistoricalSeriesKey): string {
-  return `${key.providerId.trim()}::${normalizeTicker(key.ticker)}`;
+  return normalizeInstrumentId(key.instrumentId);
 }
 
 /**
@@ -124,10 +136,18 @@ export class InMemoryHistoricalStore implements HistoricalStore {
   private readonly records = new Map<string, HistoricalStoreRecord>();
 
   async upsert(record: HistoricalStoreRecord): Promise<void> {
-    const key: HistoricalSeriesKey = {
-      providerId: record.providerId.trim(),
-      ticker: normalizeTicker(record.ticker),
-    };
+    const symbol = normalizeSymbol(record.symbol);
+    const marketId = String(record.marketId).trim().toUpperCase() as MarketId;
+    const canonicalInstrumentId = buildInstrumentId(marketId, symbol);
+
+    if (normalizeInstrumentId(record.instrumentId) !== canonicalInstrumentId) {
+      throw new Error(
+        `Historical series identity mismatch: ${record.instrumentId} does not match ` +
+        `${marketId}:${symbol}.`,
+      );
+    }
+
+    const key: HistoricalSeriesKey = { instrumentId: canonicalInstrumentId };
     const id = seriesId(key);
     const existing = this.records.get(id);
     const mergedBars = normalizeDailyBars([
@@ -136,9 +156,14 @@ export class InMemoryHistoricalStore implements HistoricalStore {
     ]);
 
     this.records.set(id, {
-      ...key,
+      instrumentId: canonicalInstrumentId,
+      symbol,
+      marketId,
       bars: mergedBars.map(bar => ({ ...bar })),
-      metadata: { ...record.metadata },
+      metadata: {
+        ...record.metadata,
+        providerId: record.metadata.providerId.trim(),
+      },
     });
   }
 
@@ -158,8 +183,9 @@ export class InMemoryHistoricalStore implements HistoricalStore {
     if (!record) return undefined;
 
     return {
-      providerId: record.providerId,
-      ticker: record.ticker,
+      instrumentId: record.instrumentId,
+      symbol: record.symbol,
+      marketId: record.marketId,
       bars: buildPointInTimeBars(record.bars, asOfDate, limit),
       metadata: { ...record.metadata },
     };
@@ -198,8 +224,9 @@ export async function createPointInTimeSeries(
   if (!record) return undefined;
 
   return {
-    providerId: record.providerId,
-    ticker: record.ticker,
+    instrumentId: record.instrumentId,
+    symbol: record.symbol,
+    marketId: record.marketId,
     asOfDate,
     bars: record.bars,
     metadata: record.metadata,
@@ -208,8 +235,9 @@ export async function createPointInTimeSeries(
 
 function cloneRecord(record: HistoricalStoreRecord): HistoricalStoreRecord {
   return {
-    providerId: record.providerId,
-    ticker: record.ticker,
+    instrumentId: record.instrumentId,
+    symbol: record.symbol,
+    marketId: record.marketId,
     bars: record.bars.map(bar => ({ ...bar })),
     metadata: { ...record.metadata },
   };
