@@ -243,6 +243,12 @@ export interface MorningPosition {
   purchaseDate: string;
   entryPrice: number;
   lots: number;
+  /** Market-neutral monetary fields for new execution/risk/UI consumers. */
+  currency?: string;
+  totalCost?: number;
+  grossProfit?: number;
+  netProfit?: number;
+  /** Legacy IDX aliases retained while the prototype UI migrates incrementally. */
   totalCostIDR: number;
   currentOpenPrice: number;
   openGapPct: number;
