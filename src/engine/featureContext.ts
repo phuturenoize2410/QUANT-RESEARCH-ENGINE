@@ -9,7 +9,18 @@ export type FeatureContextSource =
   | 'DERIVED';
 
 export interface MarketFeatureContext {
-  ihsgRegime: string;
+  /**
+   * Canonical market-agnostic regime label consumed by feature/ML layers.
+   * Market adapters/providers may derive it from an IDX, US or future-market
+   * benchmark without coupling Quant Core to a benchmark name.
+   */
+  marketRegime: string;
+  /**
+   * @deprecated IDX compatibility alias. New providers and core consumers should
+   * use marketRegime. Kept temporarily so existing prototype/UI code can migrate
+   * incrementally without a big-bang rewrite.
+   */
+  ihsgRegime?: string;
   marketBreadthPctAboveMa20: number;
   marketVolatilityIndex: number;
   sectorRelativeStrength: Record<string, number>;
@@ -46,6 +57,15 @@ const DEFAULT_FUNDAMENTALS: FundamentalFeatureSnapshot = {
   pbvRatio: 1.2,
   peRatio: 8.5,
 };
+
+/**
+ * Transitional accessor for legacy consumers. Keeping alias resolution at the
+ * feature-context boundary prevents benchmark-specific naming from spreading
+ * further through strategy, ML, risk/execution or UI code.
+ */
+export function getMarketRegime(context: FeatureContext): string {
+  return context.market.marketRegime || context.market.ihsgRegime || 'UNKNOWN';
+}
 
 /**
  * Prototype-only contextual inputs. Keeping these assumptions outside FeatureStore
@@ -89,6 +109,7 @@ export function createPrototypeFeatureContext(
     mode: 'MOCK',
     isSimulated: true,
     market: {
+      marketRegime: 'BULLISH TREND ACCUMULATION',
       ihsgRegime: 'BULLISH TREND ACCUMULATION',
       marketBreadthPctAboveMa20: 68,
       marketVolatilityIndex: 14.8,
