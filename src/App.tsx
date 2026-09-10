@@ -77,9 +77,9 @@ export default function App() {
   }, [researchSnapshot]);
 
   // React delegates execution intent to the application boundary; market-specific
-  // execution assumptions are resolved downstream from the active research pipeline.
+  // execution assumptions and default position sizing are resolved downstream.
   const handleAddToJournal = useCallback((stock: StockData) => {
-    const position = researchApplication.buildStrategyJournalPosition(stock, strategySettings, 100);
+    const position = researchApplication.buildStrategyJournalPosition(stock, strategySettings);
     setPositions(prev => [position, ...prev]);
     showNotification(`Logged ${stock.ticker} (${position.lots} lots) into Morning Exit Journal using centralized execution costs.`);
   }, [researchApplication, strategySettings]);
