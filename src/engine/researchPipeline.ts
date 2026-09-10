@@ -25,6 +25,8 @@ import {
   ProviderReadiness,
   ResearchUseCase,
 } from './providerPolicy';
+import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
+import { MarketAdapter, MarketId } from './market/marketAdapter';
 import {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   DEFAULT_SHORTLIST_LIMIT,
@@ -56,6 +58,7 @@ export interface ResearchPipelineSnapshot {
   featuresByTicker: Record<string, TickerFeatureVector>;
   featureProvenanceByTicker: Record<string, FeatureProvenanceSnapshot>;
   featureContext: FeatureContext;
+  marketId: MarketId;
   provider: ProviderMetadata;
   providerHealth: ProviderHealth;
   providerReadiness: Record<ResearchUseCase, ProviderReadiness>;
@@ -67,11 +70,13 @@ export interface ResearchPipelineSnapshot {
 export interface ResearchPipeline {
   refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot>;
   getProvider(): MarketDataProvider;
+  getMarket(): MarketAdapter;
 }
 
 export type FeatureContextFactory = (
   universe: StockData[],
   provider: MarketDataProvider,
+  market: MarketAdapter,
 ) => Promise<FeatureContext> | FeatureContext;
 
 function isCacheAwareProvider(
@@ -99,6 +104,11 @@ export function buildResearchPipelineSummary(
  * Provider-driven orchestration boundary:
  * DataProvider -> Feature Context -> Feature Engine -> Strategy/Risk/Execution -> UI.
  *
+ * The pipeline is explicitly bound to a market adapter. Provider suitability is
+ * checked against that market before universe data is admitted into the research
+ * flow, so future IDX/US providers cannot silently feed the wrong market into a
+ * shared quant core.
+ *
  * Strategy selection is delegated to the strategy engine so this orchestrator
  * coordinates stages without owning eligibility/ranking rules itself. Applied
  * strategy policy travels with the snapshot so downstream consumers do not need
@@ -113,13 +123,32 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     private readonly provider: MarketDataProvider,
     private readonly seedUniverse?: (settings: StrategySettings) => StockData[],
     private readonly featureContextFactory?: FeatureContextFactory,
+    private readonly market: MarketAdapter = IDX_MARKET_ADAPTER,
   ) {}
 
   getProvider(): MarketDataProvider {
     return this.provider;
   }
 
+  getMarket(): MarketAdapter {
+    return this.market;
+  }
+
   async refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
+    const providerStatus = await getProviderStatusSnapshot(
+      this.provider,
+      undefined,
+      Date.now(),
+      this.market.identity.marketId,
+    );
+
+    if (!providerStatus.marketCompatible) {
+      throw new Error(
+        `Provider ${this.provider.metadata.name} does not support target market ` +
+        `${this.market.identity.marketId}. Research pipeline rejected before data ingestion.`,
+      );
+    }
+
     if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
       const seeded = this.seedUniverse(settings);
       if (this.provider instanceof MockMarketDataProvider) {
@@ -127,12 +156,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    // Provider status is captured through one policy boundary. The pipeline no
-    // longer owns freshness normalization or readiness interpretation.
-    const [universe, providerStatus] = await Promise.all([
-      this.provider.getUniverse(),
-      getProviderStatusSnapshot(this.provider),
-    ]);
+    const universe = await this.provider.getUniverse();
 
     if (this.provider.metadata.mode !== 'MOCK' && !this.featureContextFactory) {
       throw new Error(
@@ -142,7 +166,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     }
 
     const featureContext = this.featureContextFactory
-      ? await this.featureContextFactory(universe, this.provider)
+      ? await this.featureContextFactory(universe, this.provider, this.market)
       : createPrototypeFeatureContext(universe);
 
     if (this.provider.metadata.mode !== 'MOCK' && featureContext.isSimulated) {
@@ -190,6 +214,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       featuresByTicker,
       featureProvenanceByTicker,
       featureContext,
+      marketId: this.market.identity.marketId,
       provider: providerStatus.metadata,
       providerHealth: providerStatus.health,
       providerReadiness: providerStatus.readiness,
@@ -207,5 +232,6 @@ export function createPrototypeResearchPipeline(): ResearchPipeline {
     new MockMarketDataProvider(),
     buildUniverse,
     universe => createPrototypeFeatureContext(universe),
+    IDX_MARKET_ADAPTER,
   );
 }
