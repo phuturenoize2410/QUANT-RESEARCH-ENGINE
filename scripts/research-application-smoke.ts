@@ -33,6 +33,22 @@ const service = new ResearchApplicationService(marketBoundPipeline);
 const stock = buildUniverse()[0];
 assert.ok(stock, 'prototype universe should provide a stock fixture');
 
+const snapshot = await service.refresh(DEFAULT_STRATEGY_SETTINGS);
+const decisionEvaluation = service.evaluateDecisionCandidate(
+  stock,
+  snapshot.featureContext,
+);
+
+assert.equal(decisionEvaluation.ensemble.ticker, stock.ticker);
+assert.equal(decisionEvaluation.overnightML.ticker, stock.ticker);
+assert.equal(decisionEvaluation.gapRisk.ticker, stock.ticker);
+assert.equal(decisionEvaluation.overnightML.explanation.isSimulated, true);
+assert.equal(
+  decisionEvaluation.ensemble.mlProbability,
+  decisionEvaluation.overnightML.probNetPositiveOpen,
+  'ensemble and detail model must share the same point-in-time feature context',
+);
+
 const lots = 2;
 const strategyPosition = service.buildStrategyJournalPosition(
   stock,
