@@ -65,6 +65,14 @@ export default function App() {
 
   const universe = researchSnapshot?.universe ?? [];
   const selectedStock = useMemo(() => universe.find(s => s.ticker === selectedTicker) || universe[0], [universe, selectedTicker]);
+  const topShortlistEnsemble = useMemo(() => {
+    const topCandidate = researchSnapshot?.shortlistCandidates[0];
+    if (!researchSnapshot || !topCandidate) return null;
+    return researchApplication.evaluateShortlistCandidate(
+      topCandidate,
+      researchSnapshot.featureContext,
+    );
+  }, [researchApplication, researchSnapshot]);
 
   const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
@@ -122,7 +130,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <TopMarketBar universe={universe} selectedTicker={selectedTicker} onSelectStock={handleSelectStock} onRefreshData={handleRefreshData} onOpenSettings={() => setIsSettingsOpen(true)} onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)} activeTab={activeTab} setActiveTab={setActiveTab} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#0B1424] p-3 md:p-5">
-          {activeTab === 'shortlist' && <FinalShortlistView universe={researchSnapshot.shortlistCandidates} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} onOpenSettings={() => setIsSettingsOpen(true)} />}
+          {activeTab === 'shortlist' && <FinalShortlistView universe={researchSnapshot.shortlistCandidates} topEnsemble={topShortlistEnsemble} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} onOpenSettings={() => setIsSettingsOpen(true)} />}
           {activeTab === 'ml_lab' && <MLLabView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'opportunity_map' && <OpportunityMapView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'leaderboard' && <StrategyLeaderboardView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
