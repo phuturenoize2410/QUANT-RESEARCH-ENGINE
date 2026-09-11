@@ -6,6 +6,7 @@ import {
   RESEARCH_ROBUSTNESS_SCORE_BOUNDS,
   clampNormalizedScore,
   clampScore,
+  normalizeScoreBounds,
   roundEstablishedScore,
   roundNormalizedScore,
   roundOvernightEdgeScore,
@@ -28,6 +29,13 @@ assert.equal(roundScore(101, RESEARCH_ROBUSTNESS_SCORE_BOUNDS), 100);
 assert.equal(clampScore(Number.NaN, OVERNIGHT_EDGE_SCORE_BOUNDS), 1);
 assert.equal(clampScore(Number.POSITIVE_INFINITY, ESTABLISHED_SCORE_BOUNDS), 5);
 assert.equal(clampScore(Number.NaN, RESEARCH_ROBUSTNESS_SCORE_BOUNDS), 10);
+
+assert.deepEqual(normalizeScoreBounds({ min: 100, max: 0 }), { min: 0, max: 100 });
+assert.deepEqual(normalizeScoreBounds({ min: Number.NaN, max: 80 }), { min: 0, max: 80 });
+assert.deepEqual(normalizeScoreBounds({ min: 20, max: Number.POSITIVE_INFINITY }), { min: 20, max: 100 });
+assert.equal(clampScore(120, { min: Number.NaN, max: 80 }), 80);
+assert.equal(clampScore(Number.NaN, { min: Number.NaN, max: Number.POSITIVE_INFINITY }), 0);
+assert.equal(roundScore(72.6, { min: Number.NaN, max: Number.POSITIVE_INFINITY }), 73);
 
 assert.equal(clampNormalizedScore(-5), 0);
 assert.equal(clampNormalizedScore(101), 100);
