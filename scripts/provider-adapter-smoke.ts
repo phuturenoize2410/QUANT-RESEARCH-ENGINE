@@ -1,5 +1,9 @@
 import type { StockData } from '../src/types';
-import { MockBrokerDataProvider, MockMarketDataProvider } from '../src/engine/dataProviders';
+import {
+  MockBrokerDataProvider,
+  MockMarketDataProvider,
+  ProviderDataError,
+} from '../src/engine/dataProviders';
 
 async function assertEmptyProviderIsDegraded(
   name: string,
@@ -18,12 +22,31 @@ async function assertEmptyProviderIsDegraded(
   }
 }
 
+async function assertMissingDataFailsExplicitly(
+  name: string,
+  action: () => Promise<unknown>,
+  providerId: string,
+  ticker: string,
+) {
+  try {
+    await action();
+    throw new Error(`${name}: missing provider data must not be represented as valid empty/zero data.`);
+  } catch (error) {
+    if (!(error instanceof ProviderDataError)) {
+      throw new Error(`${name}: expected ProviderDataError for missing ticker data.`);
+    }
+    if (error.providerId !== providerId || error.ticker !== ticker) {
+      throw new Error(`${name}: ProviderDataError must preserve provider and ticker identity.`);
+    }
+  }
+}
+
 await assertEmptyProviderIsDegraded('market adapter', new MockMarketDataProvider());
 await assertEmptyProviderIsDegraded('broker adapter', new MockBrokerDataProvider());
 
 // Health only depends on adapter load state here; the sentinel is intentionally
 // not consumed as market data. This keeps the smoke focused on provider status.
-const loadedSentinel = {} as StockData;
+const loadedSentinel = { ticker: 'TEST' } as StockData;
 const initialUniverse = [loadedSentinel];
 const marketProvider = new MockMarketDataProvider(initialUniverse);
 const brokerProvider = new MockBrokerDataProvider(initialUniverse);
@@ -49,6 +72,32 @@ for (const [name, provider] of [
     throw new Error(`${name}: loaded mock provider must report its successful load timestamp.`);
   }
 }
+
+// Missing ticker data must fail explicitly rather than silently becoming [] or 0.
+await assertMissingDataFailsExplicitly(
+  'market quote',
+  () => marketProvider.getQuote('MISSING'),
+  marketProvider.metadata.id,
+  'MISSING',
+);
+await assertMissingDataFailsExplicitly(
+  'daily bars',
+  () => marketProvider.getDailyBars('MISSING'),
+  marketProvider.metadata.id,
+  'MISSING',
+);
+await assertMissingDataFailsExplicitly(
+  'broker summary',
+  () => brokerProvider.getBrokerSummary('MISSING'),
+  brokerProvider.metadata.id,
+  'MISSING',
+);
+await assertMissingDataFailsExplicitly(
+  'foreign flow',
+  () => brokerProvider.getNetForeignFlow('MISSING'),
+  brokerProvider.metadata.id,
+  'MISSING',
+);
 
 // Market consumers receive a snapshot array, not the provider's cache object.
 const marketUniverseSnapshot = await marketProvider.getUniverse();
@@ -77,4 +126,4 @@ brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers own their universe snapshots, report DEGRADED until simulated data is loaded, and clear successful-sync state when emptied.');
+console.log('Provider-adapter smoke passed: mock providers own their universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
