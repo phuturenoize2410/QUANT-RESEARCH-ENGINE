@@ -6,7 +6,11 @@ import {
   providerSupportsMarket,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
-import { assertProviderReady, ProviderReadinessError } from '../src/engine/providerGate';
+import {
+  assertProviderReady,
+  getProviderReadiness,
+  ProviderReadinessError,
+} from '../src/engine/providerGate';
 import {
   MockMarketDataProvider,
   type ProviderHealth,
@@ -207,6 +211,46 @@ if (!statusSnapshot.readiness.EOD_RESEARCH.warnings.some(warning => warning.incl
   throw new Error('provider status snapshot must keep mock-data warnings visible to downstream consumers.');
 }
 
+const malformedStatusSnapshot = {
+  ...statusSnapshot,
+  readiness: {
+    ...statusSnapshot.readiness,
+    EOD_RESEARCH: undefined,
+  },
+} as unknown as typeof statusSnapshot;
+
+const missingEodReadiness = getProviderReadiness(malformedStatusSnapshot, 'EOD_RESEARCH');
+if (missingEodReadiness.allowed) {
+  throw new Error('missing runtime readiness decisions must fail closed.');
+}
+if (missingEodReadiness.useCase !== 'EOD_RESEARCH') {
+  throw new Error('synthetic missing-readiness decisions must preserve the requested use case.');
+}
+if (!missingEodReadiness.reasons.some(reason => reason.includes('missing the EOD_RESEARCH decision'))) {
+  throw new Error('missing runtime readiness decisions must expose an explicit canonical rejection reason.');
+}
+
+let malformedReadinessError: ProviderReadinessError | undefined;
+try {
+  assertProviderReady(malformedStatusSnapshot, 'EOD_RESEARCH');
+} catch (error) {
+  if (error instanceof ProviderReadinessError) {
+    malformedReadinessError = error;
+  } else {
+    throw error;
+  }
+}
+
+if (!malformedReadinessError) {
+  throw new Error('malformed provider snapshots must fail through ProviderReadinessError rather than a generic runtime exception.');
+}
+if (malformedReadinessError.readiness.allowed) {
+  throw new Error('typed readiness errors created from malformed snapshots must carry a rejected decision.');
+}
+if (!malformedReadinessError.readiness.reasons.some(reason => reason.includes('missing the EOD_RESEARCH decision'))) {
+  throw new Error('typed readiness errors must preserve the canonical missing-decision reason.');
+}
+
 class ThrowingHealthProvider extends MockMarketDataProvider {
   override async getHealth(): Promise<ProviderHealth> {
     throw new Error('upstream adapter timeout');
@@ -259,4 +303,4 @@ if (readinessError.status.health.status !== 'UNAVAILABLE'
   throw new Error('provider readiness error must expose health, target market and canonical capture time for downstream status surfaces.');
 }
 
-console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures, survive readiness rejection, and enforce capability, health and target-market compatibility together.');
+console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures, fail closed on missing runtime readiness decisions, survive readiness rejection, and enforce capability, health and target-market compatibility together.');
