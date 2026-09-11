@@ -5,6 +5,12 @@ const repoRoot = resolve(process.cwd());
 const srcRoot = join(repoRoot, 'src');
 const uiRoots = [join(srcRoot, 'App.tsx'), join(srcRoot, 'components')];
 const engineRoot = join(srcRoot, 'engine');
+const providerRoots = [
+  join(engineRoot, 'dataProviders.ts'),
+  join(engineRoot, 'providerPolicy.ts'),
+  join(engineRoot, 'providerGate.ts'),
+  join(engineRoot, 'providerCache.ts'),
+];
 
 function collectTypeScriptFiles(path: string): string[] {
   const stat = statSync(path);
@@ -26,6 +32,18 @@ const uiForbiddenBoundaries = [
   '/data/mockStocks',
 ];
 
+const providerForbiddenBoundaries = [
+  'strategyTypes',
+  '/strategies/',
+  '/strategy/',
+  './strategies/',
+  './strategy/',
+  '/execution',
+  './execution',
+  '/components/',
+  '/data/mockStocks',
+];
+
 const violations: string[] = [];
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
@@ -34,6 +52,17 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
     if (uiForbiddenBoundaries.some(boundary => specifier.includes(boundary))) {
       violations.push(
         `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data through the application/pipeline boundary.`,
+      );
+    }
+  }
+}
+
+for (const file of providerRoots.flatMap(collectTypeScriptFiles)) {
+  const source = readFileSync(file, 'utf8');
+  for (const specifier of importSpecifiers(source)) {
+    if (providerForbiddenBoundaries.some(boundary => specifier.includes(boundary))) {
+      violations.push(
+        `${relative(repoRoot, file)} imports ${specifier}; DataProvider infrastructure must remain upstream of Strategy/Risk/Execution and independent from UI/mock-universe implementations.`,
       );
     }
   }
@@ -55,5 +84,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  'Architecture-boundary smoke passed: UI cannot bypass the application boundary into raw provider/mock-data internals, and engine code remains UI-independent.',
+  'Architecture-boundary smoke passed: UI cannot bypass the application boundary, provider infrastructure stays upstream of Strategy/Risk/Execution, and engine code remains UI-independent.',
 );
