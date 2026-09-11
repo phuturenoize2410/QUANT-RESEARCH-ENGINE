@@ -1,6 +1,6 @@
 import { StockData, DailyBar, BandarmologyData } from '../types';
 import { MarketId } from './market/marketAdapter';
-import { MarketRegime } from './strategyTypes';
+import { MarketRegime } from './market/marketRegime';
 
 export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
 export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
