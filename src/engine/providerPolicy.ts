@@ -1,4 +1,5 @@
 import {
+  HealthCheckedProvider,
   MarketDataProvider,
   ProviderHealth,
   ProviderMetadata,
@@ -84,13 +85,13 @@ function providerErrorMessage(error: unknown): string {
  * Capture provider health behind a failure-safe boundary.
  *
  * Concrete adapters are external-system boundaries and are therefore allowed to
- * fail. The research engine should not leak those adapter exceptions into
- * feature/strategy/UI layers as generic errors. A failed health probe becomes a
- * canonical UNAVAILABLE snapshot so the existing readiness policy can reject the
- * provider before any market data is ingested.
+ * fail. Health handling depends only on the shared HealthCheckedProvider contract,
+ * so market-data and broker-flow adapters receive identical failure semantics.
+ * A failed health probe becomes a canonical UNAVAILABLE snapshot before any
+ * feature/strategy/UI consumer can interpret provider state independently.
  */
 export async function captureProviderHealth(
-  provider: MarketDataProvider,
+  provider: HealthCheckedProvider,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealth> {
   try {
