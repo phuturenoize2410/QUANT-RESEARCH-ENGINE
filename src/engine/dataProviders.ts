@@ -64,6 +64,31 @@ export interface BrokerDataProvider {
   getNetForeignFlow(ticker: string): Promise<number>;
 }
 
+function mockProviderHealth(
+  universeSize: number,
+  lastSuccessfulSyncAt: string | undefined,
+  healthyMessage: string,
+  checkedAt: string = new Date().toISOString(),
+): ProviderHealth {
+  if (universeSize === 0) {
+    return {
+      status: 'DEGRADED',
+      checkedAt,
+      lastSuccessfulSyncAt,
+      latencyMs: 0,
+      message: 'Mock provider adapter is operational, but no simulated universe is loaded.',
+    };
+  }
+
+  return {
+    status: 'HEALTHY',
+    checkedAt,
+    lastSuccessfulSyncAt,
+    latencyMs: 0,
+    message: healthyMessage,
+  };
+}
+
 /**
  * Concrete mock implementation. It intentionally identifies itself as MOCK so
  * downstream UI and research code can never mistake simulated data for a live feed.
@@ -84,15 +109,18 @@ export class MockMarketDataProvider implements MarketDataProvider {
 
   private universeCache: StockData[] = [];
   private regime: MarketRegime = 'BULLISH_TREND';
-  private lastSuccessfulSyncAt = new Date().toISOString();
+  private lastSuccessfulSyncAt?: string;
 
   constructor(initialUniverse: StockData[] = []) {
     this.universeCache = initialUniverse;
+    if (initialUniverse.length > 0) {
+      this.lastSuccessfulSyncAt = new Date().toISOString();
+    }
   }
 
   setUniverse(universe: StockData[]) {
     this.universeCache = universe;
-    this.lastSuccessfulSyncAt = new Date().toISOString();
+    this.lastSuccessfulSyncAt = universe.length > 0 ? new Date().toISOString() : undefined;
   }
 
   setRegime(regime: MarketRegime) {
@@ -100,13 +128,11 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getHealth(): Promise<ProviderHealth> {
-    return {
-      status: 'HEALTHY',
-      checkedAt: new Date().toISOString(),
-      lastSuccessfulSyncAt: this.lastSuccessfulSyncAt,
-      latencyMs: 0,
-      message: 'Mock provider operational. Data remains simulated.',
-    };
+    return mockProviderHealth(
+      this.universeCache.length,
+      this.lastSuccessfulSyncAt,
+      'Mock provider operational. Data remains simulated.',
+    );
   }
 
   async getQuote(ticker: string): Promise<MarketQuote> {
@@ -160,25 +186,26 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
   };
 
   private universeCache: StockData[] = [];
-  private lastSuccessfulSyncAt = new Date().toISOString();
+  private lastSuccessfulSyncAt?: string;
 
   constructor(initialUniverse: StockData[] = []) {
     this.universeCache = initialUniverse;
+    if (initialUniverse.length > 0) {
+      this.lastSuccessfulSyncAt = new Date().toISOString();
+    }
   }
 
   setUniverse(universe: StockData[]) {
     this.universeCache = universe;
-    this.lastSuccessfulSyncAt = new Date().toISOString();
+    this.lastSuccessfulSyncAt = universe.length > 0 ? new Date().toISOString() : undefined;
   }
 
   async getHealth(): Promise<ProviderHealth> {
-    return {
-      status: 'HEALTHY',
-      checkedAt: new Date().toISOString(),
-      lastSuccessfulSyncAt: this.lastSuccessfulSyncAt,
-      latencyMs: 0,
-      message: 'Mock broker provider operational. Data remains simulated.',
-    };
+    return mockProviderHealth(
+      this.universeCache.length,
+      this.lastSuccessfulSyncAt,
+      'Mock broker provider operational. Data remains simulated.',
+    );
   }
 
   async getBrokerSummary(ticker: string): Promise<BandarmologyData> {
