@@ -16,11 +16,12 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { StockData, DecisionCategory } from '../types';
+import { QuantMLEnsembleOutput } from '../engine/ml/types';
 import { FinalDecisionModal } from './FinalDecisionModal';
-import { QuantMLEnsembleEngine } from '../engine/ml/ensembleRouter';
 
 interface FinalShortlistViewProps {
   universe: StockData[];
+  topEnsemble: QuantMLEnsembleOutput | null;
   onSelectStock: (ticker: string) => void;
   onAddToJournal: (stock: StockData) => void;
   onOpenSettings: () => void;
@@ -28,6 +29,7 @@ interface FinalShortlistViewProps {
 
 export const FinalShortlistView: React.FC<FinalShortlistViewProps> = ({
   universe,
+  topEnsemble,
   onSelectStock,
   onAddToJournal,
   onOpenSettings,
@@ -41,7 +43,6 @@ export const FinalShortlistView: React.FC<FinalShortlistViewProps> = ({
   const candidates = universe;
 
   const topPick = candidates[0];
-  const topEnsemble = topPick ? QuantMLEnsembleEngine.evaluate(topPick) : null;
 
   const getDecisionBadge = (decision: DecisionCategory) => {
     switch (decision) {
