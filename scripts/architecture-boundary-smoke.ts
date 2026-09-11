@@ -52,6 +52,16 @@ const strategyRoots = collectTypeScriptFiles(engineRoot).filter(file => {
   );
 });
 
+/**
+ * Risk/Execution is downstream of Strategy and may consume strategy/domain
+ * outputs, but it must not bypass the spine by reaching directly into provider
+ * infrastructure, feature implementations, UI, or mock-universe data.
+ */
+const riskExecutionRoots = collectTypeScriptFiles(engineRoot).filter(file => {
+  const name = basename(file);
+  return /^(?:risk|execution).*\.ts$/i.test(name);
+});
+
 function importSpecifiers(source: string): string[] {
   return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)]
     .map(match => match[1]);
@@ -107,6 +117,27 @@ const strategyForbiddenBoundaries = [
   '/data/mockStocks',
 ];
 
+const riskExecutionForbiddenBoundaries = [
+  '/dataProviders',
+  './dataProviders',
+  '/providerPolicy',
+  './providerPolicy',
+  '/providerGate',
+  './providerGate',
+  '/providerCache',
+  './providerCache',
+  '/providerHealth',
+  './providerHealth',
+  '/featureContext',
+  './featureContext',
+  '/featureProvenance',
+  './featureProvenance',
+  '/ml/featureStore',
+  './ml/featureStore',
+  '/components/',
+  '/data/mockStocks',
+];
+
 const violations: string[] = [];
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
@@ -153,6 +184,17 @@ for (const file of strategyRoots) {
   }
 }
 
+for (const file of riskExecutionRoots) {
+  const source = readFileSync(file, 'utf8');
+  for (const specifier of importSpecifiers(source)) {
+    if (riskExecutionForbiddenBoundaries.some(boundary => specifier.includes(boundary))) {
+      violations.push(
+        `${relative(repoRoot, file)} imports ${specifier}; Risk/Execution must consume downstream strategy/domain contracts instead of bypassing the pipeline into providers, feature implementations, UI or mock-universe data.`,
+      );
+    }
+  }
+}
+
 for (const file of collectTypeScriptFiles(engineRoot)) {
   const source = readFileSync(file, 'utf8');
   for (const specifier of importSpecifiers(source)) {
@@ -169,5 +211,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass the application boundary; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass the application boundary; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
