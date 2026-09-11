@@ -84,6 +84,10 @@ const uiForbiddenBoundaries = [
  * FinalDecisionModal is the production-facing debt currently being migrated.
  * Keeping the exceptions exact prevents any other UI surface from introducing
  * direct ensemble/model execution while that migration is completed.
+ *
+ * Every exception must also be exercised by a real import. This prevents stale
+ * allowlist entries from surviving after a migration and silently becoming a
+ * reusable architecture bypass later.
  */
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   [
@@ -165,6 +169,7 @@ const riskExecutionForbiddenBoundaries = [
 ];
 
 const violations: string[] = [];
+const exercisedLegacyUiExceptions = new Set<string>();
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   const source = readFileSync(file, 'utf8');
@@ -172,12 +177,28 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   const exceptions = legacyUiBoundaryExceptions.get(filePath) ?? new Set<string>();
 
   for (const specifier of importSpecifiers(source)) {
+    const exceptionKey = `${filePath}::${specifier}`;
+    if (exceptions.has(specifier)) {
+      exercisedLegacyUiExceptions.add(exceptionKey);
+    }
+
     if (
       uiForbiddenBoundaries.some(boundary => specifier.includes(boundary)) &&
       !exceptions.has(specifier)
     ) {
       violations.push(
         `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data and decision-model outputs through the application/pipeline boundary.`,
+      );
+    }
+  }
+}
+
+for (const [filePath, exceptions] of legacyUiBoundaryExceptions) {
+  for (const specifier of exceptions) {
+    const exceptionKey = `${filePath}::${specifier}`;
+    if (!exercisedLegacyUiExceptions.has(exceptionKey)) {
+      violations.push(
+        `${filePath} retains unused legacy exception ${specifier}; remove stale UI boundary exceptions as soon as the direct import is migrated.`,
       );
     }
   }
@@ -243,5 +264,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision-model imports; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision-model imports; legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
