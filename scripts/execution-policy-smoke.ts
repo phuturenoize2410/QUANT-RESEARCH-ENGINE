@@ -3,6 +3,7 @@ import {
   DEFAULT_OVERNIGHT_EXIT_POLICY,
   DEFAULT_RESEARCH_POSITION_LOTS,
   deriveOvernightExitDecision,
+  executionCostsFromSettings,
   netReturnAfterCosts,
   normalizeExecutionCosts,
   normalizeOvernightExitPolicy,
@@ -94,6 +95,35 @@ if (defaultSizedPosition.lots !== DEFAULT_RESEARCH_POSITION_LOTS) {
   throw new Error('Strategy-generated journal positions must use the centralized default position size.');
 }
 
+// Mock research economics must remain aligned with the same Risk/Execution
+// transaction-cost contract used by execution and future backtests. Use
+// deliberately non-default assumptions so a stale hard-coded 0.50% hurdle is
+// caught immediately.
+const customSettings = {
+  ...DEFAULT_STRATEGY_SETTINGS,
+  buyFeePct: 0.11,
+  sellFeePct: 0.19,
+  slippagePct: 0.07,
+};
+const customCosts = executionCostsFromSettings(customSettings);
+const customFriction = totalFrictionPct(customCosts);
+const customStock = buildUniverse(customSettings)[0];
+if (!customStock) {
+  throw new Error('Prototype universe must provide a custom-cost stock fixture.');
+}
+
+const expectedMockNetGap = Math.round(
+  netReturnAfterCosts(customStock.expectedGrossGap, customCosts) * 100,
+) / 100;
+
+if (customStock.estimatedFee !== Math.round(customFriction * 100) / 100) {
+  throw new Error('Mock universe estimatedFee must follow the centralized execution-cost contract.');
+}
+
+if (customStock.expectedNetGap !== expectedMockNetGap) {
+  throw new Error('Mock universe expectedNetGap must deduct costs through the canonical Risk/Execution economics contract.');
+}
+
 console.log(
-  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
+  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, custom mock friction is ${customFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
 );
