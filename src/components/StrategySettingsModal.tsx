@@ -2,12 +2,18 @@ import React from 'react';
 import { X, RotateCcw, Sliders, Shield, AlertTriangle, Coins, Check } from 'lucide-react';
 import { StrategySettings } from '../types';
 import { DEFAULT_STRATEGY_SETTINGS } from '../engine/analytics';
+import { DEFAULT_EXECUTION_COSTS, totalFrictionPct } from '../engine/executionPolicy';
 
 interface StrategySettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: StrategySettings;
   onSave: (newSettings: StrategySettings) => void;
+}
+
+function parseExecutionCost(value: string, fallback: number): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
@@ -36,6 +42,12 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
     onSave(localSettings);
     onClose();
   };
+
+  const totalExecutionFriction = totalFrictionPct({
+    buyFeePct: localSettings.buyFeePct,
+    sellFeePct: localSettings.sellFeePct,
+    slippagePct: localSettings.slippagePct,
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
@@ -256,7 +268,7 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
             <div className="flex items-center justify-between border-b border-slate-700/60 pb-1.5">
               <span className="font-bold text-slate-200 uppercase tracking-wide flex items-center gap-1.5 text-xs">
                 <Coins className="w-3.5 h-3.5 text-amber-400" />
-                IDX Transaction Frictions (Total: {(localSettings.buyFeePct + localSettings.sellFeePct + localSettings.slippagePct).toFixed(2)}%)
+                IDX Transaction Frictions (Total: {totalExecutionFriction.toFixed(2)}%)
               </span>
               <span className="text-[10px] text-slate-400 font-mono">Standard Broker + Levy</span>
             </div>
@@ -270,10 +282,10 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0.05"
                   max="0.5"
                   value={localSettings.buyFeePct}
-                  onChange={e => handleChange('buyFeePct', parseFloat(e.target.value) || 0.15)}
+                  onChange={e => handleChange('buyFeePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.buyFeePct))}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
-                <span className="text-[10px] text-slate-500">IDX default ~0.15%</span>
+                <span className="text-[10px] text-slate-500">IDX default ~{DEFAULT_EXECUTION_COSTS.buyFeePct.toFixed(2)}%</span>
               </div>
 
               <div>
@@ -284,10 +296,10 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0.1"
                   max="0.6"
                   value={localSettings.sellFeePct}
-                  onChange={e => handleChange('sellFeePct', parseFloat(e.target.value) || 0.25)}
+                  onChange={e => handleChange('sellFeePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.sellFeePct))}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
-                <span className="text-[10px] text-slate-500">Includes 0.1% final tax</span>
+                <span className="text-[10px] text-slate-500">Includes applicable sell-side tax/levies</span>
               </div>
 
               <div>
@@ -298,10 +310,10 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0"
                   max="0.5"
                   value={localSettings.slippagePct}
-                  onChange={e => handleChange('slippagePct', parseFloat(e.target.value) || 0.10)}
+                  onChange={e => handleChange('slippagePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.slippagePct))}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
-                <span className="text-[10px] text-slate-500">Bid-ask spread at open</span>
+                <span className="text-[10px] text-slate-500">Bid-ask spread / execution impact estimate</span>
               </div>
             </div>
           </div>
