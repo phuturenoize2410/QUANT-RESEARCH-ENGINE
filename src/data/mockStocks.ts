@@ -16,6 +16,11 @@ import {
   generateStockAnalysisExplanation,
   DEFAULT_STRATEGY_SETTINGS
 } from '../engine/analytics';
+import {
+  executionCostsFromSettings,
+  netReturnAfterCosts,
+  totalFrictionPct,
+} from '../engine/executionPolicy';
 
 // Raw metadata for 54 popular IDX tickers across sectors
 interface RawTickerConfig {
@@ -671,10 +676,11 @@ export function buildUniverse(settings: StrategySettings = DEFAULT_STRATEGY_SETT
     if (technical.isExtended) techScore -= 20;
     techScore = Math.min(98, Math.max(15, techScore));
 
-    // Fees
-    const totalFee = settings.buyFeePct + settings.sellFeePct + settings.slippagePct;
+    // Canonical Risk/Execution transaction-friction policy
+    const executionCosts = executionCostsFromSettings(settings);
+    const totalFee = totalFrictionPct(executionCosts);
     const expectedGrossGap = historicalStats.avgOvernightGap;
-    const expectedNetGap = Math.round((expectedGrossGap - totalFee) * 100) / 100;
+    const expectedNetGap = Math.round(netReturnAfterCosts(expectedGrossGap, executionCosts) * 100) / 100;
 
     // Overnight Edge Score
     const { score: edgeScore, tailRiskScore } = computeOvernightEdgeScore(
