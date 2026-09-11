@@ -13,7 +13,7 @@
     "validate:provider": "tsx scripts/provider-health-smoke.ts && tsx scripts/provider-adapter-smoke.ts",
     "validate:execution": "tsx scripts/execution-policy-smoke.ts",
     "validate:scores": "tsx scripts/score-policy-smoke.ts",
-    "validate:application": "tsx scripts/research-application-smoke.ts",
+    "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts",
     "validate:opportunities": "tsx scripts/opportunity-map-smoke.ts",
     "check": "npm run lint && npm run validate:data && npm run validate:provider && npm run validate:execution && npm run validate:scores && npm run validate:application && npm run validate:opportunities && npm run build"
   },
