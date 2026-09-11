@@ -79,24 +79,16 @@ const uiForbiddenBoundaries = [
 ];
 
 /**
- * Temporary debt register for decision-model imports that pre-date the
- * application boundary. The ML Lab remains a research/debug surface and the
- * FinalDecisionModal is the production-facing debt currently being migrated.
- * Keeping the exceptions exact prevents any other UI surface from introducing
- * direct ensemble/model execution while that migration is completed.
+ * Temporary debt register for research/debug UI that pre-dates the application
+ * boundary. Production-facing FinalDecisionModal has been migrated and therefore
+ * no longer has an exception. Keeping remaining exceptions exact prevents other
+ * UI surfaces from introducing direct ensemble/model execution.
  *
  * Every exception must also be exercised by a real import. This prevents stale
  * allowlist entries from surviving after a migration and silently becoming a
  * reusable architecture bypass later.
  */
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
-  [
-    'src/components/FinalDecisionModal.tsx',
-    new Set([
-      '../engine/ml/ensembleRouter',
-      '../engine/ml/models',
-    ]),
-  ],
   [
     'src/components/MLLabView.tsx',
     new Set([
@@ -264,5 +256,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision-model imports; legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision-model imports; production decision UI has no model-engine exception; remaining legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
