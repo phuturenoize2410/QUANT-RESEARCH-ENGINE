@@ -1,11 +1,20 @@
 import {
-  HealthCheckedProvider,
   MarketDataProvider,
   ProviderHealth,
   ProviderMetadata,
   ProviderMode,
 } from './dataProviders';
 import { MarketId } from './market/marketAdapter';
+import {
+  captureProviderHealth,
+  getProviderHealthSnapshot,
+  normalizeProviderHealth,
+} from './providerHealth';
+
+// Backward-compatible exports for existing callers. Health normalization and
+// capture are implemented in providerHealth so non-market providers do not need
+// to depend on market-data research readiness policy.
+export { captureProviderHealth, normalizeProviderHealth } from './providerHealth';
 
 export type ResearchUseCase =
   | 'HISTORICAL_BACKTEST'
@@ -36,73 +45,8 @@ const MODE_RANK: Record<ProviderMode, number> = {
   REALTIME: 3,
 };
 
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
-
-function parseTimestamp(value?: string): number | undefined {
-  if (!value) return undefined;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function normalizeNonNegativeFinite(value?: number): number | undefined {
-  if (value === undefined || !Number.isFinite(value)) return undefined;
-  return Math.max(0, value);
-}
-
-function appendMessage(base: string | undefined, detail: string): string {
-  return base ? `${base} ${detail}` : detail;
-}
-
 function pushUnique(target: string[], message: string): void {
   if (!target.includes(message)) target.push(message);
-}
-
-function degradeHealth(
-  health: ProviderHealth,
-  detail: string,
-): ProviderHealth {
-  if (health.status === 'UNAVAILABLE' || health.status === 'STALE') {
-    return {
-      ...health,
-      message: appendMessage(health.message, detail),
-    };
-  }
-
-  return {
-    ...health,
-    status: 'DEGRADED',
-    message: appendMessage(health.message, detail),
-  };
-}
-
-function providerErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  if (typeof error === 'string' && error.trim()) return error.trim();
-  return 'Unknown provider health-check failure.';
-}
-
-/**
- * Capture provider health behind a failure-safe boundary.
- *
- * Concrete adapters are external-system boundaries and are therefore allowed to
- * fail. Health handling depends only on the shared HealthCheckedProvider contract,
- * so market-data and broker-flow adapters receive identical failure semantics.
- * A failed health probe becomes a canonical UNAVAILABLE snapshot before any
- * feature/strategy/UI consumer can interpret provider state independently.
- */
-export async function captureProviderHealth(
-  provider: HealthCheckedProvider,
-  nowMs: number = Date.now(),
-): Promise<ProviderHealth> {
-  try {
-    return normalizeProviderHealth(await provider.getHealth(), nowMs);
-  } catch (error) {
-    return {
-      status: 'UNAVAILABLE',
-      checkedAt: new Date(nowMs).toISOString(),
-      message: `Provider health check failed: ${providerErrorMessage(error)}`,
-    };
-  }
 }
 
 export function providerSupportsMarket(
@@ -143,74 +87,6 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   }
 
   return issues;
-}
-
-/**
- * Converts provider-reported health into one canonical health snapshot.
- *
- * Providers remain responsible for connectivity/capability checks, while the
- * engine owns timestamp, numeric and freshness semantics. This prevents future
- * Google Finance/free API/broker adapters from accidentally reporting HEALTHY
- * when their health payload is malformed or freshness cannot be established.
- */
-export function normalizeProviderHealth(
-  health: ProviderHealth,
-  nowMs: number = Date.now(),
-): ProviderHealth {
-  let normalized: ProviderHealth = {
-    ...health,
-    latencyMs: normalizeNonNegativeFinite(health.latencyMs),
-    staleAfterSeconds: normalizeNonNegativeFinite(health.staleAfterSeconds),
-  };
-
-  if (health.latencyMs !== undefined && normalized.latencyMs === undefined) {
-    normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
-  }
-
-  if (health.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
-    normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
-  }
-
-  const checkedAtMs = parseTimestamp(normalized.checkedAt);
-  if (checkedAtMs === undefined) {
-    normalized = degradeHealth(normalized, 'Provider health check timestamp is invalid.');
-  } else if (checkedAtMs > nowMs + MAX_CLOCK_SKEW_MS) {
-    normalized = degradeHealth(normalized, 'Provider health check timestamp is unexpectedly in the future.');
-  }
-
-  if (normalized.status === 'UNAVAILABLE') return normalized;
-
-  const lastSuccessfulSyncMs = parseTimestamp(normalized.lastSuccessfulSyncAt);
-  const staleAfterSeconds = normalized.staleAfterSeconds;
-
-  if (normalized.lastSuccessfulSyncAt && lastSuccessfulSyncMs === undefined) {
-    normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
-  }
-
-  if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > nowMs + MAX_CLOCK_SKEW_MS) {
-    normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
-  }
-
-  if (staleAfterSeconds !== undefined && lastSuccessfulSyncMs === undefined) {
-    normalized = degradeHealth(
-      normalized,
-      'Freshness threshold is declared but last successful sync time is unavailable.',
-    );
-  }
-
-  if (
-    lastSuccessfulSyncMs !== undefined &&
-    staleAfterSeconds !== undefined &&
-    nowMs - lastSuccessfulSyncMs > staleAfterSeconds * 1000
-  ) {
-    return {
-      ...normalized,
-      status: 'STALE',
-      message: appendMessage(normalized.message, 'Freshness threshold exceeded.'),
-    };
-  }
-
-  return normalized;
 }
 
 function evaluateNormalizedProviderReadiness(
@@ -333,16 +209,12 @@ export async function getProviderStatusSnapshot(
   nowMs: number = Date.now(),
   targetMarket?: MarketId,
 ): Promise<ProviderStatusSnapshot> {
-  const health = healthSnapshot
-    ? normalizeProviderHealth(healthSnapshot, nowMs)
-    : await captureProviderHealth(provider, nowMs);
+  const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
 
   return {
-    metadata: provider.metadata,
-    health,
-    readiness: buildReadinessMatrix(provider.metadata, health, targetMarket),
+    ...providerHealth,
+    readiness: buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket),
     targetMarket,
-    marketCompatible: targetMarket ? providerSupportsMarket(provider.metadata, targetMarket) : true,
-    capturedAt: new Date(nowMs).toISOString(),
+    marketCompatible: targetMarket ? providerSupportsMarket(providerHealth.metadata, targetMarket) : true,
   };
 }
