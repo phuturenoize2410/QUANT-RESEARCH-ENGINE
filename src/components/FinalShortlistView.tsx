@@ -16,12 +16,14 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { StockData, DecisionCategory } from '../types';
+import { DecisionCandidateEvaluation } from '../engine/researchApplication';
 import { QuantMLEnsembleOutput } from '../engine/ml/types';
 import { FinalDecisionModal } from './FinalDecisionModal';
 
 interface FinalShortlistViewProps {
   universe: StockData[];
   topEnsemble: QuantMLEnsembleOutput | null;
+  evaluateDecisionCandidate: (stock: StockData) => DecisionCandidateEvaluation;
   onSelectStock: (ticker: string) => void;
   onAddToJournal: (stock: StockData) => void;
   onOpenSettings: () => void;
@@ -30,6 +32,7 @@ interface FinalShortlistViewProps {
 export const FinalShortlistView: React.FC<FinalShortlistViewProps> = ({
   universe,
   topEnsemble,
+  evaluateDecisionCandidate,
   onSelectStock,
   onAddToJournal,
   onOpenSettings,
@@ -43,6 +46,9 @@ export const FinalShortlistView: React.FC<FinalShortlistViewProps> = ({
   const candidates = universe;
 
   const topPick = candidates[0];
+  const decisionModalEvaluation = decisionModalStock
+    ? evaluateDecisionCandidate(decisionModalStock)
+    : null;
 
   const getDecisionBadge = (decision: DecisionCategory) => {
     switch (decision) {
@@ -232,7 +238,7 @@ export const FinalShortlistView: React.FC<FinalShortlistViewProps> = ({
         <div className="flex items-start gap-2.5"><AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" /><div><span className="font-semibold text-slate-200">Execution Mandate: </span><span className="text-slate-400">Strategy executes in the 15:45 WIB pre-close call auction and sells into opening liquidity between 09:00 - 09:15 WIB. If open is negative and cut-loss is triggered, exit immediately. Never average down an overnight gap failure.</span></div></div>
       </div>
 
-      <FinalDecisionModal stock={decisionModalStock} isOpen={decisionModalStock !== null} onClose={() => setDecisionModalStock(null)} onAddToJournal={onAddToJournal} />
+      <FinalDecisionModal stock={decisionModalStock} evaluation={decisionModalEvaluation} isOpen={decisionModalStock !== null} onClose={() => setDecisionModalStock(null)} onAddToJournal={onAddToJournal} />
     </div>
   );
 };
