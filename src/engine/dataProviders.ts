@@ -64,6 +64,10 @@ export interface BrokerDataProvider {
   getNetForeignFlow(ticker: string): Promise<number>;
 }
 
+function copyUniverse(universe: readonly StockData[]): StockData[] {
+  return [...universe];
+}
+
 function mockProviderHealth(
   universeSize: number,
   lastSuccessfulSyncAt: string | undefined,
@@ -112,14 +116,14 @@ export class MockMarketDataProvider implements MarketDataProvider {
   private lastSuccessfulSyncAt?: string;
 
   constructor(initialUniverse: StockData[] = []) {
-    this.universeCache = initialUniverse;
+    this.universeCache = copyUniverse(initialUniverse);
     if (initialUniverse.length > 0) {
       this.lastSuccessfulSyncAt = new Date().toISOString();
     }
   }
 
   setUniverse(universe: StockData[]) {
-    this.universeCache = universe;
+    this.universeCache = copyUniverse(universe);
     this.lastSuccessfulSyncAt = universe.length > 0 ? new Date().toISOString() : undefined;
   }
 
@@ -163,7 +167,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getUniverse(): Promise<StockData[]> {
-    return this.universeCache;
+    return copyUniverse(this.universeCache);
   }
 
   getCurrentRegime(): MarketRegime {
@@ -189,14 +193,14 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
   private lastSuccessfulSyncAt?: string;
 
   constructor(initialUniverse: StockData[] = []) {
-    this.universeCache = initialUniverse;
+    this.universeCache = copyUniverse(initialUniverse);
     if (initialUniverse.length > 0) {
       this.lastSuccessfulSyncAt = new Date().toISOString();
     }
   }
 
   setUniverse(universe: StockData[]) {
-    this.universeCache = universe;
+    this.universeCache = copyUniverse(universe);
     this.lastSuccessfulSyncAt = universe.length > 0 ? new Date().toISOString() : undefined;
   }
 
