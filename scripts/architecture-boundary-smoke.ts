@@ -1,16 +1,10 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const srcRoot = join(repoRoot, 'src');
 const uiRoots = [join(srcRoot, 'App.tsx'), join(srcRoot, 'components')];
 const engineRoot = join(srcRoot, 'engine');
-const providerRoots = [
-  join(engineRoot, 'dataProviders.ts'),
-  join(engineRoot, 'providerPolicy.ts'),
-  join(engineRoot, 'providerGate.ts'),
-  join(engineRoot, 'providerCache.ts'),
-];
 
 function collectTypeScriptFiles(path: string): string[] {
   const stat = statSync(path);
@@ -18,6 +12,17 @@ function collectTypeScriptFiles(path: string): string[] {
 
   return readdirSync(path).flatMap(entry => collectTypeScriptFiles(join(path, entry)));
 }
+
+/**
+ * Treat every provider-prefixed engine module as upstream provider
+ * infrastructure automatically. This prevents a newly added provider health,
+ * cache, adapter-policy or status helper from silently escaping the architecture
+ * guard just because its filename was not manually added to a fixed allowlist.
+ */
+const providerRoots = collectTypeScriptFiles(engineRoot).filter(file => {
+  const name = basename(file);
+  return name === 'dataProviders.ts' || /^provider.*\.ts$/i.test(name);
+});
 
 function importSpecifiers(source: string): string[] {
   return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)]
@@ -29,6 +34,7 @@ const uiForbiddenBoundaries = [
   '/engine/providerPolicy',
   '/engine/providerGate',
   '/engine/providerCache',
+  '/engine/providerHealth',
   '/data/mockStocks',
 ];
 
@@ -57,7 +63,7 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   }
 }
 
-for (const file of providerRoots.flatMap(collectTypeScriptFiles)) {
+for (const file of providerRoots) {
   const source = readFileSync(file, 'utf8');
   for (const specifier of importSpecifiers(source)) {
     if (providerForbiddenBoundaries.some(boundary => specifier.includes(boundary))) {
@@ -84,5 +90,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  'Architecture-boundary smoke passed: UI cannot bypass the application boundary, provider infrastructure stays upstream of Strategy/Risk/Execution, and engine code remains UI-independent.',
+  `Architecture-boundary smoke passed: UI cannot bypass the application boundary, ${providerRoots.length} provider infrastructure modules stay upstream of Strategy/Risk/Execution, and engine code remains UI-independent.`,
 );
