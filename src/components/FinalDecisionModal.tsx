@@ -17,12 +17,12 @@ import {
   Layers,
   ChevronRight
 } from 'lucide-react';
+import { DecisionCandidateEvaluation } from '../engine/researchApplication';
 import { StockData } from '../types';
-import { QuantMLEnsembleEngine } from '../engine/ml/ensembleRouter';
-import { OvernightMLModel, GapRiskMLModel } from '../engine/ml/models';
 
 interface FinalDecisionModalProps {
   stock: StockData | null;
+  evaluation: DecisionCandidateEvaluation | null;
   isOpen: boolean;
   onClose: () => void;
   onAddToJournal?: (stock: StockData) => void;
@@ -30,15 +30,14 @@ interface FinalDecisionModalProps {
 
 export const FinalDecisionModal: React.FC<FinalDecisionModalProps> = ({
   stock,
+  evaluation,
   isOpen,
   onClose,
   onAddToJournal
 }) => {
-  if (!isOpen || !stock) return null;
+  if (!isOpen || !stock || !evaluation) return null;
 
-  const ensemble = QuantMLEnsembleEngine.evaluate(stock);
-  const overnightML = OvernightMLModel.predict(stock);
-  const gapRisk = GapRiskMLModel.predict(stock);
+  const { ensemble, overnightML, gapRisk } = evaluation;
 
   const getDecisionBadge = (decision: string) => {
     switch (decision) {
@@ -155,7 +154,7 @@ export const FinalDecisionModal: React.FC<FinalDecisionModalProps> = ({
             <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
               <div className="text-[10px] text-slate-400 font-sans">ML NET PROB</div>
               <div className="text-base font-bold text-cyan-400 mt-0.5">{ensemble.mlProbability}%</div>
-              <div className="text-[9px] text-slate-500 mt-1">After 0.40% Cost</div>
+              <div className="text-[9px] text-slate-500 mt-1">After Estimated Costs</div>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800">
