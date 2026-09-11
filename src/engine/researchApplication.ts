@@ -7,7 +7,12 @@ import {
 import { DEFAULT_RESEARCH_POSITION_LOTS } from './executionPolicy';
 import { FeatureContext } from './featureContext';
 import { QuantMLEnsembleEngine } from './ml/ensembleRouter';
-import { QuantMLEnsembleOutput } from './ml/types';
+import { GapRiskMLModel, OvernightMLModel } from './ml/models';
+import {
+  GapRiskMLPrediction,
+  OvernightMLPrediction,
+  QuantMLEnsembleOutput,
+} from './ml/types';
 import {
   createPrototypeResearchPipeline,
   ResearchPipeline,
@@ -15,6 +20,19 @@ import {
 } from './researchPipeline';
 
 export type { ManualMorningPositionInput } from './execution';
+
+/**
+ * Complete model output required by the final-decision presentation.
+ *
+ * Keeping this DTO at the application boundary prevents React components from
+ * independently invoking ensemble / ML models with mismatched point-in-time
+ * feature contexts as provider-backed data is introduced later.
+ */
+export interface DecisionCandidateEvaluation {
+  ensemble: QuantMLEnsembleOutput;
+  overnightML: OvernightMLPrediction;
+  gapRisk: GapRiskMLPrediction;
+}
 
 /**
  * Application orchestration boundary between React/UI and the quant core.
@@ -39,6 +57,17 @@ export class ResearchApplicationService {
     featureContext: FeatureContext,
   ): QuantMLEnsembleOutput {
     return QuantMLEnsembleEngine.evaluate(stock, featureContext);
+  }
+
+  evaluateDecisionCandidate(
+    stock: StockData,
+    featureContext: FeatureContext,
+  ): DecisionCandidateEvaluation {
+    return {
+      ensemble: QuantMLEnsembleEngine.evaluate(stock, featureContext),
+      overnightML: OvernightMLModel.predict(stock, featureContext),
+      gapRisk: GapRiskMLModel.predict(stock, featureContext),
+    };
   }
 
   buildStrategyJournalPosition(
