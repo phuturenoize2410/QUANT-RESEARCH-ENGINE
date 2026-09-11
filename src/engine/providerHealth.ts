@@ -13,8 +13,8 @@ function parseTimestamp(value?: string): number | undefined {
 }
 
 function normalizeNonNegativeFinite(value?: number): number | undefined {
-  if (value === undefined || !Number.isFinite(value)) return undefined;
-  return Math.max(0, value);
+  if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+  return value;
 }
 
 function appendMessage(base: string | undefined, detail: string): string {
