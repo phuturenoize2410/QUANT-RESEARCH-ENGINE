@@ -64,8 +64,32 @@ export interface BrokerDataProvider {
   getNetForeignFlow(ticker: string): Promise<number>;
 }
 
+export class ProviderDataError extends Error {
+  readonly providerId: string;
+  readonly ticker: string;
+
+  constructor(providerId: string, ticker: string, message?: string) {
+    super(message ?? `Provider ${providerId} has no data for ticker ${ticker}.`);
+    this.name = 'ProviderDataError';
+    this.providerId = providerId;
+    this.ticker = ticker;
+  }
+}
+
 function copyUniverse(universe: readonly StockData[]): StockData[] {
   return [...universe];
+}
+
+function requireStock(
+  universe: readonly StockData[],
+  ticker: string,
+  providerId: string,
+): StockData {
+  const stock = universe.find(item => item.ticker === ticker);
+  if (!stock) {
+    throw new ProviderDataError(providerId, ticker);
+  }
+  return stock;
 }
 
 function mockProviderHealth(
@@ -140,9 +164,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getQuote(ticker: string): Promise<MarketQuote> {
-    const stock = this.universeCache.find(s => s.ticker === ticker);
-    if (!stock) throw new Error(`Ticker ${ticker} not found in MarketDataProvider universe.`);
-
+    const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     const lastBar = stock.historicalBars[stock.historicalBars.length - 1];
     return {
       ticker: stock.ticker,
@@ -161,8 +183,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
   }
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
-    const stock = this.universeCache.find(s => s.ticker === ticker);
-    if (!stock) return [];
+    const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     return stock.historicalBars.slice(-limit);
   }
 
@@ -213,13 +234,10 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
   }
 
   async getBrokerSummary(ticker: string): Promise<BandarmologyData> {
-    const stock = this.universeCache.find(s => s.ticker === ticker);
-    if (!stock) throw new Error(`Ticker ${ticker} not found in BrokerDataProvider.`);
-    return stock.bandarmology;
+    return requireStock(this.universeCache, ticker, this.metadata.id).bandarmology;
   }
 
   async getNetForeignFlow(ticker: string): Promise<number> {
-    const stock = this.universeCache.find(s => s.ticker === ticker);
-    return stock ? stock.bandarmology.netForeignFlow : 0;
+    return requireStock(this.universeCache, ticker, this.metadata.id).bandarmology.netForeignFlow;
   }
 }
