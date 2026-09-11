@@ -73,8 +73,27 @@ const uiForbiddenBoundaries = [
   '/engine/providerGate',
   '/engine/providerCache',
   '/engine/providerHealth',
+  '/engine/ml/',
   '/data/mockStocks',
 ];
+
+/**
+ * Temporary debt register for direct UI -> model-engine imports that pre-date
+ * the application boundary. Keeping this list exact means no other component can
+ * introduce a new ML/model bypass while FinalDecisionModal is migrated to the
+ * already-available ResearchApplicationService decision DTO.
+ *
+ * Delete these entries as soon as that modal consumes DecisionCandidateEvaluation.
+ */
+const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
+  [
+    'src/components/FinalDecisionModal.tsx',
+    new Set([
+      '../engine/ml/ensembleRouter',
+      '../engine/ml/models',
+    ]),
+  ],
+]);
 
 const providerForbiddenBoundaries = [
   'strategyTypes',
@@ -142,10 +161,16 @@ const violations: string[] = [];
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   const source = readFileSync(file, 'utf8');
+  const filePath = relative(repoRoot, file).replaceAll('\\', '/');
+  const exceptions = legacyUiBoundaryExceptions.get(filePath) ?? new Set<string>();
+
   for (const specifier of importSpecifiers(source)) {
-    if (uiForbiddenBoundaries.some(boundary => specifier.includes(boundary))) {
+    if (
+      uiForbiddenBoundaries.some(boundary => specifier.includes(boundary)) &&
+      !exceptions.has(specifier)
+    ) {
       violations.push(
-        `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data through the application/pipeline boundary.`,
+        `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data and model outputs through the application/pipeline boundary.`,
       );
     }
   }
@@ -211,5 +236,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass the application boundary; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct ML/model imports; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
