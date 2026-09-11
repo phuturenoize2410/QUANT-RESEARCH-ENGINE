@@ -5,6 +5,9 @@ import {
   ManualMorningPositionInput,
 } from './execution';
 import { DEFAULT_RESEARCH_POSITION_LOTS } from './executionPolicy';
+import { FeatureContext } from './featureContext';
+import { QuantMLEnsembleEngine } from './ml/ensembleRouter';
+import { QuantMLEnsembleOutput } from './ml/types';
 import {
   createPrototypeResearchPipeline,
   ResearchPipeline,
@@ -17,9 +20,9 @@ export type { ManualMorningPositionInput } from './execution';
  * Application orchestration boundary between React/UI and the quant core.
  *
  * UI consumers submit user intent here; they do not choose market adapters or
- * call Risk/Execution primitives directly. The service always reuses the market
- * bound to the research pipeline, preventing a future non-IDX provider from
- * accidentally falling back to IDX execution microstructure.
+ * call Strategy/ML/Risk/Execution primitives directly. The service always reuses
+ * the market and point-in-time context owned by the research pipeline, preventing
+ * future provider-backed data from silently falling back to prototype assumptions.
  *
  * Canonical flow:
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> UI.
@@ -29,6 +32,13 @@ export class ResearchApplicationService {
 
   refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
     return this.pipeline.refresh(settings);
+  }
+
+  evaluateShortlistCandidate(
+    stock: StockData,
+    featureContext: FeatureContext,
+  ): QuantMLEnsembleOutput {
+    return QuantMLEnsembleEngine.evaluate(stock, featureContext);
   }
 
   buildStrategyJournalPosition(
