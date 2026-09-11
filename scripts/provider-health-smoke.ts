@@ -12,6 +12,7 @@ import {
   ProviderReadinessError,
 } from '../src/engine/providerGate';
 import {
+  MockBrokerDataProvider,
   MockMarketDataProvider,
   type ProviderHealth,
   type ProviderMetadata,
@@ -303,4 +304,21 @@ if (readinessError.status.health.status !== 'UNAVAILABLE'
   throw new Error('provider readiness error must expose health, target market and canonical capture time for downstream status surfaces.');
 }
 
-console.log('Provider-health smoke passed: canonical status snapshots contain adapter health failures, fail closed on missing runtime readiness decisions, survive readiness rejection, and enforce capability, health and target-market compatibility together.');
+class ThrowingBrokerHealthProvider extends MockBrokerDataProvider {
+  override async getHealth(): Promise<ProviderHealth> {
+    throw new Error('broker-flow adapter timeout');
+  }
+}
+
+const failedBrokerHealth = await captureProviderHealth(new ThrowingBrokerHealthProvider(), nowMs);
+if (failedBrokerHealth.status !== 'UNAVAILABLE') {
+  throw new Error('broker provider health exceptions must use the same canonical UNAVAILABLE semantics as market providers.');
+}
+if (failedBrokerHealth.checkedAt !== '2026-09-09T06:30:00.000Z') {
+  throw new Error('broker provider health capture must use the canonical capture instant.');
+}
+if (!failedBrokerHealth.message?.includes('broker-flow adapter timeout')) {
+  throw new Error('broker provider health capture must preserve useful adapter failure context.');
+}
+
+console.log('Provider-health smoke passed: shared health capture covers market and broker adapters, canonical status snapshots contain adapter health failures, fail closed on missing runtime readiness decisions, survive readiness rejection, and enforce capability, health and target-market compatibility together.');
