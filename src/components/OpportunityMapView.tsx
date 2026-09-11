@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { StockData } from '../types';
 import { getAllStrategies } from '../engine/strategies';
-import { classifyMarketRegime, computeEnsembleConsensus } from '../engine/quantLabEngine';
+import { classifyMarketRegime } from '../engine/quantLabEngine';
+import { buildOpportunityMapProjection } from '../engine/opportunityMapEngine';
 import { StockQuantProfileModal } from './StockQuantProfileModal';
 
 interface OpportunityMapViewProps {
@@ -38,57 +39,29 @@ export const OpportunityMapView: React.FC<OpportunityMapViewProps> = ({
 
   const strategies = useMemo(() => getAllStrategies(), []);
   const regimeInfo = useMemo(() => classifyMarketRegime(universe), [universe]);
-
-  // Compute ensemble and strategy evaluations for each stock
-  const stockOpportunities = useMemo(() => {
-    return universe.map(stock => {
-      const ensemble = computeEnsembleConsensus(stock, strategies);
-      const strategyScores = strategies.map(strat => ({
-        strategy: strat,
-        scoreResult: strat.score(stock),
-      }));
-
-      // Top strategy
-      const topStrat = [...strategyScores].sort((a, b) => b.scoreResult.score - a.scoreResult.score)[0];
-
-      return {
-        stock,
-        ensemble,
-        topStrategy: topStrat.strategy,
-        topScoreResult: topStrat.scoreResult,
-        allScores: strategyScores,
-      };
-    });
-  }, [universe, strategies]);
-
-  // Filter opportunities
-  const filteredOpportunities = useMemo(() => {
-    return stockOpportunities.filter(item => {
-      // Session filter
-      if (sessionFilter === 'AM' && item.topStrategy.operationalSession === 'PM_SESSION') return false;
-      if (sessionFilter === 'PM' && item.topStrategy.operationalSession === 'AM_SESSION') return false;
-
-      // Strategy filter
-      if (strategyFilter !== 'ALL' && item.topStrategy.id !== strategyFilter) return false;
-
-      // Sector filter
-      if (sectorFilter !== 'ALL' && item.stock.sector !== sectorFilter) return false;
-
-      // Show actionable candidates (score >= 50 or signal BUY/STRONG BUY/WATCH)
-      return item.topScoreResult.score >= 45;
-    }).sort((a, b) => b.topScoreResult.score - a.topScoreResult.score);
-  }, [stockOpportunities, sessionFilter, strategyFilter, sectorFilter]);
+  const opportunityProjection = useMemo(
+    () =>
+      buildOpportunityMapProjection(
+        universe,
+        {
+          session: sessionFilter,
+          strategyId: strategyFilter,
+          sector: sectorFilter,
+        },
+        strategies,
+      ),
+    [universe, sessionFilter, strategyFilter, sectorFilter, strategies],
+  );
+  const filteredOpportunities = opportunityProjection.opportunities;
+  const {
+    strongBuyCount,
+    buyCount,
+    averageExpectedReturnPct,
+  } = opportunityProjection.summary;
 
   const uniqueSectors = useMemo(() => {
     return Array.from(new Set(universe.map(s => s.sector))).sort();
   }, [universe]);
-
-  // Summary Metrics
-  const strongBuyCount = filteredOpportunities.filter(o => o.topScoreResult.signal === 'STRONG BUY').length;
-  const buyCount = filteredOpportunities.filter(o => o.topScoreResult.signal === 'BUY').length;
-  const avgExpReturn = filteredOpportunities.length > 0 
-    ? (filteredOpportunities.reduce((acc, o) => acc + o.topScoreResult.expectedReturnPct, 0) / filteredOpportunities.length).toFixed(1)
-    : '0';
 
   return (
     <div className="w-full space-y-4 text-slate-100">
@@ -210,7 +183,7 @@ export const OpportunityMapView: React.FC<OpportunityMapViewProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
           <div className="text-[11px] font-mono text-slate-400 uppercase">Actionable Setups</div>
-          <div className="text-2xl font-bold font-mono text-slate-100 mt-0.5">{filteredOpportunities.length}</div>
+          <div className="text-2xl font-bold font-mono text-slate-100 mt-0.5">{opportunityProjection.summary.actionableSetups}</div>
         </div>
         <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30">
           <div className="text-[11px] font-mono text-emerald-400 uppercase">Strong Conviction</div>
@@ -222,7 +195,7 @@ export const OpportunityMapView: React.FC<OpportunityMapViewProps> = ({
         </div>
         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
           <div className="text-[11px] font-mono text-slate-400 uppercase">Avg Expected Return</div>
-          <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">+{avgExpReturn}%</div>
+          <div className="text-2xl font-bold font-mono text-emerald-400 mt-0.5">+{averageExpectedReturnPct.toFixed(1)}%</div>
         </div>
       </div>
 
