@@ -33,6 +33,17 @@ export interface ProviderHealth {
   message?: string;
 }
 
+/**
+ * Smallest provider contract required by infrastructure health/status handling.
+ * Market-data and broker-flow adapters both cross external-system boundaries, so
+ * health capture must not be coupled to quote/universe methods that only market
+ * data providers implement.
+ */
+export interface HealthCheckedProvider {
+  readonly metadata: ProviderMetadata;
+  getHealth(): Promise<ProviderHealth>;
+}
+
 export interface MarketQuote {
   ticker: string;
   price: number;
@@ -48,18 +59,14 @@ export interface MarketQuote {
   source: MarketDataSource;
 }
 
-export interface MarketDataProvider {
-  readonly metadata: ProviderMetadata;
-  getHealth(): Promise<ProviderHealth>;
+export interface MarketDataProvider extends HealthCheckedProvider {
   getQuote(ticker: string): Promise<MarketQuote>;
   getDailyBars(ticker: string, limit?: number): Promise<DailyBar[]>;
   getUniverse(): Promise<StockData[]>;
   getCurrentRegime(): MarketRegime;
 }
 
-export interface BrokerDataProvider {
-  readonly metadata: ProviderMetadata;
-  getHealth(): Promise<ProviderHealth>;
+export interface BrokerDataProvider extends HealthCheckedProvider {
   getBrokerSummary(ticker: string): Promise<BandarmologyData>;
   getNetForeignFlow(ticker: string): Promise<number>;
 }
