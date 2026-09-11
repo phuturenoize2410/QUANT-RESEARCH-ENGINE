@@ -24,8 +24,18 @@ await assertEmptyProviderIsDegraded('broker adapter', new MockBrokerDataProvider
 // Health only depends on adapter load state here; the sentinel is intentionally
 // not consumed as market data. This keeps the smoke focused on provider status.
 const loadedSentinel = {} as StockData;
-const marketProvider = new MockMarketDataProvider([loadedSentinel]);
-const brokerProvider = new MockBrokerDataProvider([loadedSentinel]);
+const initialUniverse = [loadedSentinel];
+const marketProvider = new MockMarketDataProvider(initialUniverse);
+const brokerProvider = new MockBrokerDataProvider(initialUniverse);
+
+// Provider state must not be mutable through an input array after construction.
+initialUniverse.length = 0;
+if ((await marketProvider.getHealth()).status !== 'HEALTHY') {
+  throw new Error('market adapter: constructor input mutation must not clear provider-owned universe state.');
+}
+if ((await brokerProvider.getHealth()).status !== 'HEALTHY') {
+  throw new Error('broker adapter: constructor input mutation must not clear provider-owned universe state.');
+}
 
 for (const [name, provider] of [
   ['market adapter', marketProvider],
@@ -40,9 +50,31 @@ for (const [name, provider] of [
   }
 }
 
+// Market consumers receive a snapshot array, not the provider's cache object.
+const marketUniverseSnapshot = await marketProvider.getUniverse();
+marketUniverseSnapshot.length = 0;
+const secondMarketSnapshot = await marketProvider.getUniverse();
+if (secondMarketSnapshot.length !== 1) {
+  throw new Error('market adapter: getUniverse() consumer mutation must not alter provider-owned cache.');
+}
+if ((await marketProvider.getHealth()).status !== 'HEALTHY') {
+  throw new Error('market adapter: consumer snapshot mutation must not affect provider health.');
+}
+
+const replacementUniverse = [loadedSentinel];
+marketProvider.setUniverse(replacementUniverse);
+brokerProvider.setUniverse(replacementUniverse);
+replacementUniverse.length = 0;
+if ((await marketProvider.getUniverse()).length !== 1) {
+  throw new Error('market adapter: setUniverse() must copy its input before storing it.');
+}
+if ((await brokerProvider.getHealth()).status !== 'HEALTHY') {
+  throw new Error('broker adapter: setUniverse() input mutation must not alter provider-owned state.');
+}
+
 marketProvider.setUniverse([]);
 brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers report DEGRADED until simulated data is loaded and clear successful-sync state when their universe is emptied.');
+console.log('Provider-adapter smoke passed: mock providers own their universe snapshots, report DEGRADED until simulated data is loaded, and clear successful-sync state when emptied.');
