@@ -83,8 +83,42 @@ export class ProviderDataError extends Error {
   }
 }
 
+function copyDailyBars(bars: readonly DailyBar[]): DailyBar[] {
+  return bars.map(bar => ({ ...bar }));
+}
+
+function copyBandarmology(data: BandarmologyData): BandarmologyData {
+  return {
+    ...data,
+    topBuyers: data.topBuyers.map(item => ({ ...item })),
+    topSellers: data.topSellers.map(item => ({ ...item })),
+  };
+}
+
+/**
+ * Providers own their cached records. Clone nested mutable structures at the
+ * adapter boundary so feature/strategy/UI consumers cannot mutate provider state
+ * through a previously returned snapshot (and callers cannot mutate stored input
+ * after setUniverse/constructor ingestion).
+ */
+function copyStock(stock: StockData): StockData {
+  return {
+    ...stock,
+    historicalBars: copyDailyBars(stock.historicalBars),
+    technical: { ...stock.technical },
+    bandarmology: copyBandarmology(stock.bandarmology),
+    historicalStats: {
+      ...stock.historicalStats,
+      matchedTrades: stock.historicalStats.matchedTrades.map(trade => ({ ...trade })),
+    },
+    prefilterFailReasons: [...stock.prefilterFailReasons],
+    positiveFactors: [...stock.positiveFactors],
+    riskFactors: [...stock.riskFactors],
+  };
+}
+
 function copyUniverse(universe: readonly StockData[]): StockData[] {
-  return [...universe];
+  return universe.map(copyStock);
 }
 
 function requireStock(
@@ -191,7 +225,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
-    return stock.historicalBars.slice(-limit);
+    return copyDailyBars(stock.historicalBars.slice(-limit));
   }
 
   async getUniverse(): Promise<StockData[]> {
@@ -241,7 +275,7 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
   }
 
   async getBrokerSummary(ticker: string): Promise<BandarmologyData> {
-    return requireStock(this.universeCache, ticker, this.metadata.id).bandarmology;
+    return copyBandarmology(requireStock(this.universeCache, ticker, this.metadata.id).bandarmology);
   }
 
   async getNetForeignFlow(ticker: string): Promise<number> {

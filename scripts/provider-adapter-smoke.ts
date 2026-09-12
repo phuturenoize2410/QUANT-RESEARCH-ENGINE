@@ -44,20 +44,53 @@ async function assertMissingDataFailsExplicitly(
 await assertEmptyProviderIsDegraded('market adapter', new MockMarketDataProvider());
 await assertEmptyProviderIsDegraded('broker adapter', new MockBrokerDataProvider());
 
-// Health only depends on adapter load state here; the sentinel is intentionally
-// not consumed as market data. This keeps the smoke focused on provider status.
-const loadedSentinel = { ticker: 'TEST' } as StockData;
+// This deliberately minimal sentinel contains every nested mutable structure used
+// by this smoke test. It is cast to StockData because provider snapshot ownership,
+// not domain-value completeness, is the contract under test here.
+const loadedSentinel = {
+  ticker: 'TEST',
+  price: 100,
+  change: 1,
+  changePct: 1,
+  volume: 1000,
+  turnover: 100000,
+  historicalBars: [
+    { date: '2026-09-11', open: 99, high: 101, low: 98, close: 100, volume: 1000, turnover: 100000 },
+  ],
+  technical: { rsi14: 50 },
+  bandarmology: {
+    netForeignFlow: 123,
+    topBuyers: [{ brokerCode: 'AA', brokerName: 'Alpha' }],
+    topSellers: [{ brokerCode: 'BB', brokerName: 'Beta' }],
+  },
+  historicalStats: {
+    matchedTrades: [{ date: '2026-09-10', gapPct: 0.5 }],
+  },
+  prefilterFailReasons: ['NONE'],
+  positiveFactors: ['A'],
+  riskFactors: ['B'],
+} as unknown as StockData;
+
 const initialUniverse = [loadedSentinel];
 const marketProvider = new MockMarketDataProvider(initialUniverse);
 const brokerProvider = new MockBrokerDataProvider(initialUniverse);
 
-// Provider state must not be mutable through an input array after construction.
+// Provider state must not be mutable through the input array or nested input records
+// after construction.
 initialUniverse.length = 0;
-if ((await marketProvider.getHealth()).status !== 'HEALTHY') {
-  throw new Error('market adapter: constructor input mutation must not clear provider-owned universe state.');
+loadedSentinel.historicalBars[0].close = 999;
+loadedSentinel.bandarmology.topBuyers[0].brokerCode = 'MUTATED';
+loadedSentinel.positiveFactors[0] = 'MUTATED';
+
+const constructorSnapshot = await marketProvider.getUniverse();
+if (constructorSnapshot[0].historicalBars[0].close !== 100) {
+  throw new Error('market adapter: constructor must snapshot nested historical bars.');
 }
-if ((await brokerProvider.getHealth()).status !== 'HEALTHY') {
-  throw new Error('broker adapter: constructor input mutation must not clear provider-owned universe state.');
+if (constructorSnapshot[0].bandarmology.topBuyers[0].brokerCode !== 'AA') {
+  throw new Error('market adapter: constructor must snapshot nested broker-flow records.');
+}
+if (constructorSnapshot[0].positiveFactors[0] !== 'A') {
+  throw new Error('market adapter: constructor must snapshot nested factor arrays.');
 }
 
 for (const [name, provider] of [
@@ -99,26 +132,75 @@ await assertMissingDataFailsExplicitly(
   'MISSING',
 );
 
-// Market consumers receive a snapshot array, not the provider's cache object.
+// Market consumers receive detached nested snapshots, not references into the
+// provider-owned cache.
 const marketUniverseSnapshot = await marketProvider.getUniverse();
 marketUniverseSnapshot.length = 0;
 const secondMarketSnapshot = await marketProvider.getUniverse();
 if (secondMarketSnapshot.length !== 1) {
   throw new Error('market adapter: getUniverse() consumer mutation must not alter provider-owned cache.');
 }
+secondMarketSnapshot[0].historicalBars[0].close = 777;
+secondMarketSnapshot[0].bandarmology.topBuyers[0].brokerCode = 'CHANGED';
+secondMarketSnapshot[0].historicalStats.matchedTrades[0].gapPct = 99;
+secondMarketSnapshot[0].prefilterFailReasons[0] = 'CHANGED';
+if ((await marketProvider.getUniverse())[0].historicalBars[0].close !== 100) {
+  throw new Error('market adapter: nested universe snapshot mutation must not alter cached bars.');
+}
+if ((await marketProvider.getUniverse())[0].bandarmology.topBuyers[0].brokerCode !== 'AA') {
+  throw new Error('market adapter: nested universe snapshot mutation must not alter cached broker flow.');
+}
+if ((await marketProvider.getUniverse())[0].historicalStats.matchedTrades[0].gapPct !== 0.5) {
+  throw new Error('market adapter: nested universe snapshot mutation must not alter cached historical stats.');
+}
+if ((await marketProvider.getUniverse())[0].prefilterFailReasons[0] !== 'NONE') {
+  throw new Error('market adapter: nested universe snapshot mutation must not alter cached reason arrays.');
+}
 if ((await marketProvider.getHealth()).status !== 'HEALTHY') {
   throw new Error('market adapter: consumer snapshot mutation must not affect provider health.');
 }
 
-const replacementUniverse = [loadedSentinel];
+const bars = await marketProvider.getDailyBars('TEST');
+bars[0].close = 555;
+if ((await marketProvider.getDailyBars('TEST'))[0].close !== 100) {
+  throw new Error('market adapter: getDailyBars() must return detached bar snapshots.');
+}
+
+const brokerSummary = await brokerProvider.getBrokerSummary('TEST');
+brokerSummary.topBuyers[0].brokerCode = 'CHANGED';
+if ((await brokerProvider.getBrokerSummary('TEST')).topBuyers[0].brokerCode !== 'AA') {
+  throw new Error('broker adapter: getBrokerSummary() must return a detached broker-flow snapshot.');
+}
+
+const replacementSentinel = {
+  ...loadedSentinel,
+  historicalBars: [
+    { date: '2026-09-11', open: 99, high: 101, low: 98, close: 100, volume: 1000, turnover: 100000 },
+  ],
+  bandarmology: {
+    ...loadedSentinel.bandarmology,
+    topBuyers: [{ ...loadedSentinel.bandarmology.topBuyers[0], brokerCode: 'AA' }],
+    topSellers: [{ ...loadedSentinel.bandarmology.topSellers[0], brokerCode: 'BB' }],
+  },
+  historicalStats: {
+    ...loadedSentinel.historicalStats,
+    matchedTrades: [{ ...loadedSentinel.historicalStats.matchedTrades[0], gapPct: 0.5 }],
+  },
+  prefilterFailReasons: ['NONE'],
+  positiveFactors: ['A'],
+  riskFactors: ['B'],
+} as StockData;
+const replacementUniverse = [replacementSentinel];
 marketProvider.setUniverse(replacementUniverse);
 brokerProvider.setUniverse(replacementUniverse);
 replacementUniverse.length = 0;
-if ((await marketProvider.getUniverse()).length !== 1) {
-  throw new Error('market adapter: setUniverse() must copy its input before storing it.');
+replacementSentinel.historicalBars[0].close = 888;
+replacementSentinel.bandarmology.topBuyers[0].brokerCode = 'MUTATED';
+if ((await marketProvider.getUniverse())[0].historicalBars[0].close !== 100) {
+  throw new Error('market adapter: setUniverse() must snapshot nested input records before storing them.');
 }
-if ((await brokerProvider.getHealth()).status !== 'HEALTHY') {
-  throw new Error('broker adapter: setUniverse() input mutation must not alter provider-owned state.');
+if ((await brokerProvider.getBrokerSummary('TEST')).topBuyers[0].brokerCode !== 'AA') {
+  throw new Error('broker adapter: setUniverse() must snapshot nested broker-flow input before storing it.');
 }
 
 marketProvider.setUniverse([]);
@@ -126,4 +208,4 @@ brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers own their universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
+console.log('Provider-adapter smoke passed: mock providers own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
