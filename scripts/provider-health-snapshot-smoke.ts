@@ -70,6 +70,38 @@ if (!normalizedSnapshot.health.message?.includes('Invalid provider latency metad
   throw new Error('shared provider health snapshots must preserve canonical normalization context.');
 }
 
+const malformedMetadataProvider = new MockMarketDataProvider();
+const malformedMetadata = malformedMetadataProvider.metadata as unknown as {
+  source: unknown;
+  supportedMarkets: unknown;
+};
+malformedMetadata.source = 'UNKNOWN_FEED';
+malformedMetadata.supportedMarkets = undefined;
+const malformedMetadataSnapshot = await getProviderHealthSnapshot(
+  malformedMetadataProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-11T12:00:00.000Z',
+  },
+  nowMs,
+);
+
+if (malformedMetadataSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('malformed provider metadata must fail closed before downstream research layers use the adapter.');
+}
+if (
+  !malformedMetadataSnapshot.health.message?.includes('source') ||
+  !malformedMetadataSnapshot.health.message?.includes('supportedMarkets')
+) {
+  throw new Error('metadata validation failures must preserve actionable invalid-field context.');
+}
+if (malformedMetadataSnapshot.metadata.supportedMarkets.length !== 0) {
+  throw new Error('invalid supported-market payloads must be sanitized to an empty capability list.');
+}
+if (!Object.isFrozen(malformedMetadataSnapshot.metadata.supportedMarkets)) {
+  throw new Error('sanitized provider capability lists must remain immutable.');
+}
+
 class ThrowingBrokerProvider extends MockBrokerDataProvider {
   override async getHealth(): Promise<ProviderHealth> {
     throw new Error('broker status endpoint unavailable');
@@ -87,4 +119,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, injected payloads are normalized and detached from caller state, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, injected payloads are normalized and detached from caller state, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
