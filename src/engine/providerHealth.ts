@@ -155,6 +155,17 @@ export function normalizeProviderHealth(
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
   }
 
+  if (
+    checkedAtMs !== undefined &&
+    lastSuccessfulSyncMs !== undefined &&
+    lastSuccessfulSyncMs > checkedAtMs + MAX_CLOCK_SKEW_MS
+  ) {
+    normalized = degradeHealth(
+      normalized,
+      'Last successful sync timestamp is later than the provider health check timestamp.',
+    );
+  }
+
   if (staleAfterSeconds !== undefined && lastSuccessfulSyncMs === undefined) {
     normalized = degradeHealth(
       normalized,

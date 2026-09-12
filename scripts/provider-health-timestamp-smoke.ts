@@ -57,6 +57,31 @@ if (!invalidLastSync.message?.includes('Last successful sync timestamp is invali
   throw new Error('invalid lastSuccessfulSyncAt values must expose an explicit diagnostic.');
 }
 
+const impossibleChronology = normalize({
+  status: 'HEALTHY',
+  checkedAt: '2026-09-09T06:00:00.000Z',
+  lastSuccessfulSyncAt: '2026-09-09T06:20:00.000Z',
+  staleAfterSeconds: 3600,
+});
+
+if (impossibleChronology.status !== 'DEGRADED') {
+  throw new Error('lastSuccessfulSyncAt materially later than checkedAt must degrade provider health.');
+}
+if (!impossibleChronology.message?.includes('later than the provider health check timestamp')) {
+  throw new Error('impossible provider timestamp chronology must expose an explicit diagnostic.');
+}
+
+const toleratedClockSkew = normalize({
+  status: 'HEALTHY',
+  checkedAt: '2026-09-09T06:25:00.000Z',
+  lastSuccessfulSyncAt: '2026-09-09T06:29:00.000Z',
+  staleAfterSeconds: 3600,
+});
+
+if (toleratedClockSkew.status !== 'HEALTHY') {
+  throw new Error('small provider timestamp skew within the canonical tolerance must remain healthy.');
+}
+
 const unavailableInvalidTimestamp = normalize({
   status: 'UNAVAILABLE',
   checkedAt: 'invalid-date',
@@ -69,4 +94,4 @@ if (unavailableInvalidTimestamp.status !== 'UNAVAILABLE') {
   throw new Error('canonicalization must preserve terminal UNAVAILABLE status.');
 }
 
-console.log('Provider health timestamp smoke passed: external timestamp payloads are canonicalized to UTC ISO and malformed values are stripped before downstream consumption.');
+console.log('Provider health timestamp smoke passed: external timestamps are canonicalized, malformed values are stripped, and impossible health/sync chronology is degraded before downstream consumption.');
