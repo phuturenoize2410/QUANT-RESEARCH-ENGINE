@@ -33,6 +33,48 @@ const service = new ResearchApplicationService(marketBoundPipeline);
 const stock = buildUniverse()[0];
 assert.ok(stock, 'prototype universe should provide a stock fixture');
 
+const defaultSettings = service.getDefaultStrategySettings();
+assert.deepEqual(defaultSettings, DEFAULT_STRATEGY_SETTINGS);
+assert.notEqual(
+  defaultSettings,
+  DEFAULT_STRATEGY_SETTINGS,
+  'application boundary must return a defensive default-settings copy',
+);
+defaultSettings.buyFeePct = 99;
+assert.equal(
+  service.getDefaultStrategySettings().buyFeePct,
+  DEFAULT_STRATEGY_SETTINGS.buyFeePct,
+  'UI edits must not mutate canonical strategy defaults',
+);
+
+const executionSettings = service.getDefaultStrategySettings();
+assert.equal(
+  service.calculateExecutionFrictionPct(executionSettings),
+  executionSettings.buyFeePct + executionSettings.sellFeePct + executionSettings.slippagePct,
+  'execution friction shown in UI must come from canonical execution policy',
+);
+const parsedExecutionSettings = service.applyExecutionCostInput(
+  executionSettings,
+  'slippagePct',
+  '0.12',
+);
+assert.equal(parsedExecutionSettings.slippagePct, 0.12);
+assert.equal(
+  executionSettings.slippagePct,
+  DEFAULT_STRATEGY_SETTINGS.slippagePct,
+  'execution input parsing must not mutate the caller settings object',
+);
+const fallbackExecutionSettings = service.applyExecutionCostInput(
+  executionSettings,
+  'buyFeePct',
+  'not-a-number',
+);
+assert.equal(
+  fallbackExecutionSettings.buyFeePct,
+  DEFAULT_STRATEGY_SETTINGS.buyFeePct,
+  'invalid execution-cost input must fail back to the canonical default',
+);
+
 const snapshot = await service.refresh(DEFAULT_STRATEGY_SETTINGS);
 const decisionEvaluation = service.evaluateDecisionCandidate(
   stock,
