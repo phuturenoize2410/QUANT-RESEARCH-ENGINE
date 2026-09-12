@@ -1,8 +1,10 @@
 import {
   HealthCheckedProvider,
+  MarketDataSource,
   ProviderHealth,
   ProviderHealthStatus,
   ProviderMetadata,
+  ProviderMode,
 } from './dataProviders';
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -12,6 +14,14 @@ const PROVIDER_HEALTH_STATUSES: readonly ProviderHealthStatus[] = [
   'STALE',
   'UNAVAILABLE',
 ];
+const MARKET_DATA_SOURCES: readonly MarketDataSource[] = [
+  'MOCK_ENGINE',
+  'GOOGLE_FINANCE',
+  'FREE_API',
+  'IDX_FEED',
+  'BROKER_API',
+];
+const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'DELAYED', 'EOD', 'REALTIME'];
 
 function parseTimestamp(value?: string): number | undefined {
   if (!value) return undefined;
@@ -26,6 +36,14 @@ function normalizeNonNegativeFinite(value?: number): number | undefined {
 
 function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
   return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
+}
+
+function isMarketDataSource(value: unknown): value is MarketDataSource {
+  return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource);
+}
+
+function isProviderMode(value: unknown): value is ProviderMode {
+  return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode);
 }
 
 function appendMessage(base: string | undefined, detail: string): string {
@@ -46,6 +64,17 @@ function degradeHealth(
   return {
     ...health,
     status: 'DEGRADED',
+    message: appendMessage(health.message, detail),
+  };
+}
+
+function failHealthClosed(
+  health: ProviderHealth,
+  detail: string,
+): ProviderHealth {
+  return {
+    ...health,
+    status: 'UNAVAILABLE',
     message: appendMessage(health.message, detail),
   };
 }
@@ -161,11 +190,52 @@ export async function captureProviderHealth(
   }
 }
 
-function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata {
-  return Object.freeze({
-    ...metadata,
-    supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
-  });
+function snapshotProviderMetadata(metadata: ProviderMetadata): {
+  metadata: ProviderMetadata;
+  issues: string[];
+} {
+  const runtimeMetadata = metadata as ProviderMetadata & {
+    id?: unknown;
+    name?: unknown;
+    source?: unknown;
+    mode?: unknown;
+    isPaid?: unknown;
+    supportedMarkets?: unknown;
+    supportsHistorical?: unknown;
+    supportsIntraday?: unknown;
+    supportsRealtime?: unknown;
+  };
+  const issues: string[] = [];
+
+  if (typeof runtimeMetadata.id !== 'string' || !runtimeMetadata.id.trim()) issues.push('id');
+  if (typeof runtimeMetadata.name !== 'string' || !runtimeMetadata.name.trim()) issues.push('name');
+  if (!isMarketDataSource(runtimeMetadata.source)) issues.push('source');
+  if (!isProviderMode(runtimeMetadata.mode)) issues.push('mode');
+  if (typeof runtimeMetadata.isPaid !== 'boolean') issues.push('isPaid');
+  if (typeof runtimeMetadata.supportsHistorical !== 'boolean') issues.push('supportsHistorical');
+  if (typeof runtimeMetadata.supportsIntraday !== 'boolean') issues.push('supportsIntraday');
+  if (typeof runtimeMetadata.supportsRealtime !== 'boolean') issues.push('supportsRealtime');
+
+  const supportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets)
+    ? runtimeMetadata.supportedMarkets.filter(
+        (market): market is string => typeof market === 'string' && market.trim().length > 0,
+      )
+    : [];
+  if (
+    !Array.isArray(runtimeMetadata.supportedMarkets) ||
+    supportedMarkets.length !== runtimeMetadata.supportedMarkets.length ||
+    supportedMarkets.length === 0
+  ) {
+    issues.push('supportedMarkets');
+  }
+
+  return {
+    metadata: Object.freeze({
+      ...metadata,
+      supportedMarkets: Object.freeze([...supportedMarkets]),
+    }) as ProviderMetadata,
+    issues,
+  };
 }
 
 function snapshotProviderHealth(health: ProviderHealth): ProviderHealth {
@@ -197,12 +267,20 @@ export async function getProviderHealthSnapshot(
   healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealthSnapshot> {
-  const health = healthSnapshot
+  const capturedMetadata = snapshotProviderMetadata(provider.metadata);
+  let health = healthSnapshot
     ? normalizeProviderHealth(healthSnapshot, nowMs)
     : await captureProviderHealth(provider, nowMs);
 
+  if (capturedMetadata.issues.length > 0) {
+    health = failHealthClosed(
+      health,
+      `Invalid provider metadata fields: ${capturedMetadata.issues.join(', ')}; failing closed as UNAVAILABLE.`,
+    );
+  }
+
   return Object.freeze({
-    metadata: snapshotProviderMetadata(provider.metadata),
+    metadata: capturedMetadata.metadata,
     health: snapshotProviderHealth(health),
     capturedAt: new Date(nowMs).toISOString(),
   });
