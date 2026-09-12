@@ -1,5 +1,9 @@
 import { MorningPosition, StockData, StrategySettings } from '../types';
 import {
+  PROTOTYPE_MORNING_JOURNAL_PROVENANCE,
+  PROTOTYPE_MORNING_POSITIONS,
+} from '../data/prototypeMorningJournal';
+import {
   PROTOTYPE_STRATEGY_LAB_CATALOG,
   STRATEGY_LAB_PROVENANCE,
   StrategyLabCombination,
@@ -78,6 +82,15 @@ export interface StrategyLabCatalogSnapshot {
 }
 
 /**
+ * Presentation-safe seed for the Morning Exit journal. Explicit provenance keeps
+ * demonstration fills separate from future broker/live/backtest evidence.
+ */
+export interface MorningJournalSeedSnapshot {
+  provenance: typeof PROTOTYPE_MORNING_JOURNAL_PROVENANCE;
+  positions: MorningPosition[];
+}
+
+/**
  * Application orchestration boundary between React/UI and the quant core.
  *
  * UI consumers submit user intent here; they do not choose market adapters or
@@ -93,6 +106,13 @@ export class ResearchApplicationService {
 
   refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
     return this.pipeline.refresh(settings);
+  }
+
+  getMorningJournalSeed(): MorningJournalSeedSnapshot {
+    return {
+      provenance: PROTOTYPE_MORNING_JOURNAL_PROVENANCE,
+      positions: PROTOTYPE_MORNING_POSITIONS.map(position => ({ ...position })),
+    };
   }
 
   evaluateShortlistCandidate(
