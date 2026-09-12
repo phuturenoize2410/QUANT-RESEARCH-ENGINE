@@ -23,27 +23,23 @@ import {
 import { ResearchPipelineSnapshot } from './engine/researchPipeline';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
-const INITIAL_MORNING_POSITIONS: MorningPosition[] = [
-  { id:'pos-1', ticker:'BBCA', name:'Bank Central Asia Tbk', purchaseDate:'Yesterday 15:42 WIB', entryPrice:10300, lots:150, totalCostIDR:154500000, currentOpenPrice:10450, openGapPct:1.46, grossProfitIDR:2250000, netProfitIDR:1632000, netProfitPct:1.06, cutLossLevel:10150, takeProfitLevel:10450, exitStatus:'TAKE PROFIT', notes:'Green open gap confirmed. Selling into opening liquidity at 09:02 WIB.' },
-  { id:'pos-2', ticker:'BRIS', name:'Bank Syariah Indonesia Tbk', purchaseDate:'Yesterday 15:44 WIB', entryPrice:3050, lots:300, totalCostIDR:91500000, currentOpenPrice:3120, openGapPct:2.30, grossProfitIDR:2100000, netProfitIDR:1734000, netProfitPct:1.90, cutLossLevel:3000, takeProfitLevel:3120, exitStatus:'TAKE PROFIT', notes:'Strong opening gap-up. Pre-close broker accumulation followed through.' },
-  { id:'pos-3', ticker:'ASII', name:'Astra International Tbk', purchaseDate:'Yesterday 15:38 WIB', entryPrice:5125, lots:200, totalCostIDR:102500000, currentOpenPrice:5175, openGapPct:0.98, grossProfitIDR:1000000, netProfitIDR:588000, netProfitPct:0.57, cutLossLevel:5050, takeProfitLevel:5200, exitStatus:'FLAT / EXIT', notes:'Small positive gap. Executed early exit as planned.' },
-  { id:'pos-4', ticker:'MBMA', name:'Merdeka Battery Materials Tbk', purchaseDate:'Yesterday 15:43 WIB', entryPrice:575, lots:1000, totalCostIDR:57500000, currentOpenPrice:565, openGapPct:-1.74, grossProfitIDR:-1000000, netProfitIDR:-1229000, netProfitPct:-2.14, cutLossLevel:568, takeProfitLevel:590, exitStatus:'CUT LOSS', notes:'NEGATIVE OPEN TRIGGERED: Exited immediately at 09:00:30 WIB per stop rule.' },
-  { id:'pos-5', ticker:'ADRO', name:'Adaro Energy Indonesia Tbk', purchaseDate:'Yesterday 15:45 WIB', entryPrice:3740, lots:250, totalCostIDR:93500000, currentOpenPrice:3820, openGapPct:2.14, grossProfitIDR:2000000, netProfitIDR:1622000, netProfitPct:1.73, cutLossLevel:3690, takeProfitLevel:3820, exitStatus:'TAKE PROFIT', notes:'Energy sector gap-up. Target met at open.' },
-];
-
 export default function App() {
+  const researchApplication = useMemo(() => createPrototypeResearchApplicationService(), []);
+  const morningJournalSeed = useMemo(
+    () => researchApplication.getMorningJournalSeed(),
+    [researchApplication],
+  );
+
   const [strategySettings, setStrategySettings] = useState<StrategySettings>(DEFAULT_STRATEGY_SETTINGS);
   const [activeTab, setActiveTab] = useState<string>('shortlist');
   const [selectedTicker, setSelectedTicker] = useState<string>('BBCA');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-  const [positions, setPositions] = useState<MorningPosition[]>(INITIAL_MORNING_POSITIONS);
+  const [positions, setPositions] = useState<MorningPosition[]>(() => morningJournalSeed.positions);
   const [notification, setNotification] = useState<string | null>(null);
   const [researchSnapshot, setResearchSnapshot] = useState<ResearchPipelineSnapshot | null>(null);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
-
-  const researchApplication = useMemo(() => createPrototypeResearchApplicationService(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,7 +169,14 @@ export default function App() {
           {activeTab === 'backtest' && <OvernightBacktestView universe={universe} settings={strategySettings} onUpdateSettings={setStrategySettings} onSelectStock={handleSelectStock} />}
           {activeTab === 'strategylab' && <StrategyLabView universe={universe} getCatalog={handleGetStrategyLabCatalog} onSelectStock={handleSelectStock} />}
           {activeTab === 'bandarmology' && <BandarmologyView universe={universe} onSelectStock={handleSelectStock} />}
-          {activeTab === 'morning_exit' && <MorningExitDashboardView positions={positions} onUpdatePosition={handleUpdatePosition} onRemovePosition={handleRemovePosition} onAddManualPosition={handleAddManualPosition} universe={universe} onSelectStock={handleSelectStock} />}
+          {activeTab === 'morning_exit' && (
+            <div className="space-y-3">
+              <div className="rounded border border-amber-500/40 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-200">
+                {morningJournalSeed.provenance.label} — seeded rows are demonstration fixtures, not broker fills or backtest evidence. New journal entries remain simulated until a validated execution provider is introduced.
+              </div>
+              <MorningExitDashboardView positions={positions} onUpdatePosition={handleUpdatePosition} onRemovePosition={handleRemovePosition} onAddManualPosition={handleAddManualPosition} universe={universe} onSelectStock={handleSelectStock} />
+            </div>
+          )}
         </main>
       </div>
       <StrategySettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={strategySettings} onSave={(newSettings) => { setStrategySettings(newSettings); showNotification('Updated Strategy Scoring Weights and Execution Costs.'); }} />
