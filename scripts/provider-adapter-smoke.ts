@@ -106,10 +106,27 @@ for (const [name, provider] of [
   }
 }
 
+// Provider requests use the same canonical symbol normalization as instrument identity.
+// Future adapters can therefore map provider-specific symbols without leaking casing or
+// whitespace differences into feature/strategy consumers.
+const normalizedQuote = await marketProvider.getQuote('  test  ');
+if (normalizedQuote.ticker !== 'TEST' || normalizedQuote.price !== 100) {
+  throw new Error('market adapter: quote lookup must canonicalize symbol identity.');
+}
+if ((await marketProvider.getDailyBars(' test ')).length !== 1) {
+  throw new Error('market adapter: daily-bar lookup must canonicalize symbol identity.');
+}
+if ((await brokerProvider.getBrokerSummary(' test ')).netForeignFlow !== 123) {
+  throw new Error('broker adapter: broker-summary lookup must canonicalize symbol identity.');
+}
+if ((await brokerProvider.getNetForeignFlow(' test ')) !== 123) {
+  throw new Error('broker adapter: foreign-flow lookup must canonicalize symbol identity.');
+}
+
 // Missing ticker data must fail explicitly rather than silently becoming [] or 0.
 await assertMissingDataFailsExplicitly(
   'market quote',
-  () => marketProvider.getQuote('MISSING'),
+  () => marketProvider.getQuote(' missing '),
   marketProvider.metadata.id,
   'MISSING',
 );
@@ -208,4 +225,4 @@ brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
+console.log('Provider-adapter smoke passed: mock providers use canonical instrument symbols, own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
