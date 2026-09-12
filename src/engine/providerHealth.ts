@@ -1,10 +1,17 @@
 import {
   HealthCheckedProvider,
   ProviderHealth,
+  ProviderHealthStatus,
   ProviderMetadata,
 } from './dataProviders';
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const PROVIDER_HEALTH_STATUSES: readonly ProviderHealthStatus[] = [
+  'HEALTHY',
+  'DEGRADED',
+  'STALE',
+  'UNAVAILABLE',
+];
 
 function parseTimestamp(value?: string): number | undefined {
   if (!value) return undefined;
@@ -15,6 +22,10 @@ function parseTimestamp(value?: string): number | undefined {
 function normalizeNonNegativeFinite(value?: number): number | undefined {
   if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
   return value;
+}
+
+function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
+  return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
 }
 
 function appendMessage(base: string | undefined, detail: string): string {
@@ -57,11 +68,28 @@ export function normalizeProviderHealth(
   health: ProviderHealth,
   nowMs: number = Date.now(),
 ): ProviderHealth {
+  const reportedStatus = (health as { status?: unknown }).status;
+  const hasValidStatus = isProviderHealthStatus(reportedStatus);
+
   let normalized: ProviderHealth = {
     ...health,
+    status: hasValidStatus ? reportedStatus : 'UNAVAILABLE',
     latencyMs: normalizeNonNegativeFinite(health.latencyMs),
     staleAfterSeconds: normalizeNonNegativeFinite(health.staleAfterSeconds),
   };
+
+  // Provider payloads cross a runtime boundary. TypeScript cannot guarantee that
+  // JSON/free-feed/paid-adapter responses actually honour the declared union, so
+  // unknown status values must fail closed before Feature/Strategy/UI sees them.
+  if (!hasValidStatus) {
+    normalized = {
+      ...normalized,
+      message: appendMessage(
+        normalized.message,
+        `Invalid provider health status "${String(reportedStatus)}"; failing closed as UNAVAILABLE.`,
+      ),
+    };
+  }
 
   if (health.latencyMs !== undefined && normalized.latencyMs === undefined) {
     normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
