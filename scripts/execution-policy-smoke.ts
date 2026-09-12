@@ -2,6 +2,7 @@ import {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_OVERNIGHT_EXIT_POLICY,
   DEFAULT_RESEARCH_POSITION_LOTS,
+  EXECUTION_POLICY_PERCENT_MAX,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
   netReturnAfterCosts,
@@ -35,6 +36,19 @@ if (
   malformed.slippagePct !== DEFAULT_EXECUTION_COSTS.slippagePct
 ) {
   throw new Error('Malformed execution costs must fall back to canonical defaults.');
+}
+
+const outOfDomainCosts = normalizeExecutionCosts({
+  buyFeePct: EXECUTION_POLICY_PERCENT_MAX + 0.01,
+  sellFeePct: 10_000,
+  slippagePct: EXECUTION_POLICY_PERCENT_MAX,
+});
+if (
+  outOfDomainCosts.buyFeePct !== DEFAULT_EXECUTION_COSTS.buyFeePct ||
+  outOfDomainCosts.sellFeePct !== DEFAULT_EXECUTION_COSTS.sellFeePct ||
+  outOfDomainCosts.slippagePct !== EXECUTION_POLICY_PERCENT_MAX
+) {
+  throw new Error('Execution-cost percentages must stay inside the canonical 0-100 domain.');
 }
 
 const grossReturnPct = 1.5;
@@ -86,6 +100,21 @@ if (
   throw new Error('Malformed overnight risk thresholds must fall back to canonical defaults.');
 }
 
+const outOfDomainExitPolicy = normalizeOvernightExitPolicy({
+  stopLossPct: EXECUTION_POLICY_PERCENT_MAX + 1,
+  takeProfitPct: 1_000,
+  takeProfitGapPct: EXECUTION_POLICY_PERCENT_MAX,
+  cutLossGapPct: EXECUTION_POLICY_PERCENT_MAX + 0.01,
+});
+if (
+  outOfDomainExitPolicy.stopLossPct !== DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct ||
+  outOfDomainExitPolicy.takeProfitPct !== DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct ||
+  outOfDomainExitPolicy.takeProfitGapPct !== EXECUTION_POLICY_PERCENT_MAX ||
+  outOfDomainExitPolicy.cutLossGapPct !== DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct
+) {
+  throw new Error('Overnight risk percentages must stay inside the canonical 0-100 domain.');
+}
+
 const stock = buildUniverse()[0];
 if (!stock) {
   throw new Error('Prototype universe must provide a stock fixture.');
@@ -125,5 +154,5 @@ if (customStock.expectedNetGap !== expectedMockNetGap) {
 }
 
 console.log(
-  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, custom mock friction is ${customFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
+  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, percentage inputs are bounded to 0-${EXECUTION_POLICY_PERCENT_MAX}%, custom mock friction is ${customFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
 );
