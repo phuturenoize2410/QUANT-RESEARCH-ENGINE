@@ -14,10 +14,21 @@ import {
   QuantMLEnsembleOutput,
 } from './ml/types';
 import {
+  STANDARD_CONDITIONS,
+  evaluateConditionalProbability,
+  findHistoricalAnalogs,
+  runSetupDiscovery,
+} from './quantLabEngine';
+import {
   createPrototypeResearchPipeline,
   ResearchPipeline,
   ResearchPipelineSnapshot,
 } from './researchPipeline';
+import {
+  ConditionCriterion,
+  ConditionalProbabilityResult,
+  HistoricalAnalog,
+} from './strategyTypes';
 
 export type { ManualMorningPositionInput } from './execution';
 
@@ -32,6 +43,21 @@ export interface DecisionCandidateEvaluation {
   ensemble: QuantMLEnsembleOutput;
   overnightML: OvernightMLPrediction;
   gapRisk: GapRiskMLPrediction;
+}
+
+/** Presentation-safe condition metadata. The executable predicate remains in the quant core. */
+export type QuantLabConditionDefinition = Pick<
+  ConditionCriterion,
+  'id' | 'name' | 'category' | 'description'
+>;
+
+/**
+ * Conditional-probability output plus the exact stocks selected by the same
+ * engine predicates. This prevents React from re-implementing filter logic.
+ */
+export interface QuantLabConditionalEvaluation {
+  result: ConditionalProbabilityResult;
+  matchingStocks: StockData[];
 }
 
 /**
@@ -68,6 +94,43 @@ export class ResearchApplicationService {
       overnightML: OvernightMLModel.predict(stock, featureContext),
       gapRisk: GapRiskMLModel.predict(stock, featureContext),
     };
+  }
+
+  getQuantLabConditions(): QuantLabConditionDefinition[] {
+    return STANDARD_CONDITIONS.map(({ id, name, category, description }) => ({
+      id,
+      name,
+      category,
+      description,
+    }));
+  }
+
+  evaluateQuantLabConditions(
+    universe: StockData[],
+    selectedConditionIds: string[],
+  ): QuantLabConditionalEvaluation {
+    const selected = new Set(selectedConditionIds);
+    const criteria = STANDARD_CONDITIONS.filter(condition => selected.has(condition.id));
+    const matchingStocks = criteria.length === 0
+      ? [...universe]
+      : universe.filter(stock => criteria.every(condition => condition.evaluate(stock)));
+
+    return {
+      result: evaluateConditionalProbability(universe, selectedConditionIds),
+      matchingStocks,
+    };
+  }
+
+  discoverQuantLabSetups(universe: StockData[]): ConditionalProbabilityResult[] {
+    return runSetupDiscovery(universe);
+  }
+
+  findQuantLabAnalogs(
+    targetStock: StockData,
+    universe: StockData[],
+    limit: number = 6,
+  ): HistoricalAnalog[] {
+    return findHistoricalAnalogs(targetStock, universe, limit);
   }
 
   buildStrategyJournalPosition(
