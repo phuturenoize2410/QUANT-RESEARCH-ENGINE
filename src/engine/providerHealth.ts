@@ -168,6 +168,10 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata 
   });
 }
 
+function snapshotProviderHealth(health: ProviderHealth): ProviderHealth {
+  return Object.freeze({ ...health });
+}
+
 /**
  * Vendor-neutral health/status envelope shared by every external data adapter.
  *
@@ -197,9 +201,9 @@ export async function getProviderHealthSnapshot(
     ? normalizeProviderHealth(healthSnapshot, nowMs)
     : await captureProviderHealth(provider, nowMs);
 
-  return {
+  return Object.freeze({
     metadata: snapshotProviderMetadata(provider.metadata),
-    health,
+    health: snapshotProviderHealth(health),
     capturedAt: new Date(nowMs).toISOString(),
-  };
+  });
 }
