@@ -14,9 +14,9 @@ import { OpportunityMapView } from './components/OpportunityMapView';
 import { StrategyLeaderboardView } from './components/StrategyLeaderboardView';
 import { QuantLabView } from './components/QuantLabView';
 import { MLLabView } from './components/MLLabView';
-import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
 import {
   createPrototypeResearchApplicationService,
+  ExecutionCostSettingKey,
   ManualMorningPositionInput,
   StrategyLabSortMetric,
 } from './engine/researchApplication';
@@ -25,12 +25,16 @@ import { StrategySettings, StockData, MorningPosition } from './types';
 
 export default function App() {
   const researchApplication = useMemo(() => createPrototypeResearchApplicationService(), []);
+  const defaultStrategySettings = useMemo(
+    () => researchApplication.getDefaultStrategySettings(),
+    [researchApplication],
+  );
   const morningJournalSeed = useMemo(
     () => researchApplication.getMorningJournalSeed(),
     [researchApplication],
   );
 
-  const [strategySettings, setStrategySettings] = useState<StrategySettings>(DEFAULT_STRATEGY_SETTINGS);
+  const [strategySettings, setStrategySettings] = useState<StrategySettings>(() => defaultStrategySettings);
   const [activeTab, setActiveTab] = useState<string>('shortlist');
   const [selectedTicker, setSelectedTicker] = useState<string>('BBCA');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -101,6 +105,16 @@ export default function App() {
   const handleGetStrategyLabCatalog = useCallback((sortBy: StrategyLabSortMetric, category?: string) => (
     researchApplication.getStrategyLabCatalog(sortBy, category)
   ), [researchApplication]);
+
+  const handleCalculateExecutionFriction = useCallback((settings: StrategySettings) => (
+    researchApplication.calculateExecutionFrictionPct(settings)
+  ), [researchApplication]);
+
+  const handleApplyExecutionCostInput = useCallback((
+    settings: StrategySettings,
+    key: ExecutionCostSettingKey,
+    rawValue: string,
+  ) => researchApplication.applyExecutionCostInput(settings, key, rawValue), [researchApplication]);
 
   const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
@@ -179,7 +193,15 @@ export default function App() {
           )}
         </main>
       </div>
-      <StrategySettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={strategySettings} onSave={(newSettings) => { setStrategySettings(newSettings); showNotification('Updated Strategy Scoring Weights and Execution Costs.'); }} />
+      <StrategySettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={strategySettings}
+        defaultSettings={defaultStrategySettings}
+        calculateExecutionFrictionPct={handleCalculateExecutionFriction}
+        applyExecutionCostInput={handleApplyExecutionCostInput}
+        onSave={(newSettings) => { setStrategySettings(newSettings); showNotification('Updated Strategy Scoring Weights and Execution Costs.'); }}
+      />
     </div>
   );
 }
