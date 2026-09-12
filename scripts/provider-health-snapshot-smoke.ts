@@ -28,6 +28,15 @@ if (marketSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('shared provider health snapshot must expose the canonical capture instant.');
 }
 
+const capturedProviderName = marketSnapshot.metadata.name;
+marketProvider.metadata.name = 'Mutated adapter metadata';
+if (marketSnapshot.metadata.name !== capturedProviderName) {
+  throw new Error('provider health snapshots must retain point-in-time metadata instead of a live adapter reference.');
+}
+if (!Object.isFrozen(marketSnapshot.metadata) || !Object.isFrozen(marketSnapshot.metadata.supportedMarkets)) {
+  throw new Error('provider health snapshot metadata and supported-market capability lists must be immutable.');
+}
+
 const brokerProvider = new MockBrokerDataProvider();
 const brokerSnapshot = await getProviderHealthSnapshot(brokerProvider, injectedHealth, nowMs);
 
@@ -69,4 +78,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters share one vendor-neutral metadata/health/capture envelope, injected payloads are normalized, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, injected payloads are normalized, and adapter failures are contained as canonical UNAVAILABLE state.');
