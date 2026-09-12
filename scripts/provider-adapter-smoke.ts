@@ -3,6 +3,7 @@ import {
   MockBrokerDataProvider,
   MockMarketDataProvider,
   ProviderDataError,
+  ProviderRequestError,
 } from '../src/engine/dataProviders';
 
 async function assertEmptyProviderIsDegraded(
@@ -37,6 +38,25 @@ async function assertMissingDataFailsExplicitly(
     }
     if (error.providerId !== providerId || error.ticker !== ticker) {
       throw new Error(`${name}: ProviderDataError must preserve provider and ticker identity.`);
+    }
+  }
+}
+
+async function assertInvalidRequestFailsExplicitly(
+  name: string,
+  action: () => Promise<unknown>,
+  providerId: string,
+  field: 'ticker' | 'limit',
+) {
+  try {
+    await action();
+    throw new Error(`${name}: invalid provider request must fail before returning provider data.`);
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError)) {
+      throw new Error(`${name}: expected ProviderRequestError for invalid ${field}.`);
+    }
+    if (error.providerId !== providerId || error.field !== field) {
+      throw new Error(`${name}: ProviderRequestError must preserve provider and invalid field identity.`);
     }
   }
 }
@@ -121,6 +141,29 @@ if ((await brokerProvider.getBrokerSummary(' test ')).netForeignFlow !== 123) {
 }
 if ((await brokerProvider.getNetForeignFlow(' test ')) !== 123) {
   throw new Error('broker adapter: foreign-flow lookup must canonicalize symbol identity.');
+}
+
+// Invalid requests fail at the provider contract boundary instead of relying on
+// adapter-specific behavior. This keeps future free/paid providers interchangeable.
+await assertInvalidRequestFailsExplicitly(
+  'blank market quote ticker',
+  () => marketProvider.getQuote('   '),
+  marketProvider.metadata.id,
+  'ticker',
+);
+await assertInvalidRequestFailsExplicitly(
+  'blank broker ticker',
+  () => brokerProvider.getBrokerSummary('\t'),
+  brokerProvider.metadata.id,
+  'ticker',
+);
+for (const invalidLimit of [0, -1, 1.5, Number.NaN]) {
+  await assertInvalidRequestFailsExplicitly(
+    `invalid historical limit ${String(invalidLimit)}`,
+    () => marketProvider.getDailyBars('TEST', invalidLimit),
+    marketProvider.metadata.id,
+    'limit',
+  );
 }
 
 // Missing ticker data must fail explicitly rather than silently becoming [] or 0.
@@ -225,4 +268,4 @@ brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers use canonical instrument symbols, own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on missing ticker data, and clear successful-sync state when emptied.');
+console.log('Provider-adapter smoke passed: mock providers validate canonical request contracts, own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on invalid/missing ticker data, and clear successful-sync state when emptied.');
