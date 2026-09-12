@@ -252,6 +252,29 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
   if (typeof runtimeMetadata.supportsRealtime !== 'boolean') issues.push('supportsRealtime');
   if (runtimeMetadata.notes !== undefined && notes === undefined) issues.push('notes');
 
+  const hasValidSource = isMarketDataSource(runtimeMetadata.source);
+  const hasValidMode = isProviderMode(runtimeMetadata.mode);
+  const hasValidRealtimeCapability = typeof runtimeMetadata.supportsRealtime === 'boolean';
+
+  // Capability semantics are part of the provider contract, not a UI concern.
+  // Fail closed when an adapter advertises combinations that cannot be true at
+  // the same time. This keeps future Google Finance/free API/paid feed adapters
+  // honest before Feature/Strategy layers make readiness decisions from metadata.
+  if (
+    hasValidMode &&
+    hasValidRealtimeCapability &&
+    (runtimeMetadata.mode === 'REALTIME') !== runtimeMetadata.supportsRealtime
+  ) {
+    issues.push('mode/supportsRealtime');
+  }
+  if (
+    hasValidSource &&
+    hasValidMode &&
+    (runtimeMetadata.source === 'MOCK_ENGINE') !== (runtimeMetadata.mode === 'MOCK')
+  ) {
+    issues.push('source/mode');
+  }
+
   const rawSupportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets)
     ? runtimeMetadata.supportedMarkets
     : [];
