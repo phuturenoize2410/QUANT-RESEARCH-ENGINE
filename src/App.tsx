@@ -18,6 +18,7 @@ import { DEFAULT_STRATEGY_SETTINGS } from './engine/analytics';
 import {
   createPrototypeResearchApplicationService,
   ManualMorningPositionInput,
+  StrategyLabSortMetric,
 } from './engine/researchApplication';
 import { ResearchPipelineSnapshot } from './engine/researchPipeline';
 import { StrategySettings, StockData, MorningPosition } from './types';
@@ -101,6 +102,10 @@ export default function App() {
     researchApplication.findQuantLabAnalogs(stock, stocks, limit)
   ), [researchApplication]);
 
+  const handleGetStrategyLabCatalog = useCallback((sortBy: StrategyLabSortMetric, category?: string) => (
+    researchApplication.getStrategyLabCatalog(sortBy, category)
+  ), [researchApplication]);
+
   const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
   const handleRefreshData = useCallback(() => {
@@ -166,7 +171,7 @@ export default function App() {
           {activeTab === 'analysis' && selectedStock && <StockAnalysisView selectedStock={selectedStock} universe={universe} onSelectStock={setSelectedTicker} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'gapdown' && <GapDownLabView universe={universe} onSelectStock={handleSelectStock} />}
           {activeTab === 'backtest' && <OvernightBacktestView universe={universe} settings={strategySettings} onUpdateSettings={setStrategySettings} onSelectStock={handleSelectStock} />}
-          {activeTab === 'strategylab' && <StrategyLabView universe={universe} onSelectStock={handleSelectStock} />}
+          {activeTab === 'strategylab' && <StrategyLabView universe={universe} getCatalog={handleGetStrategyLabCatalog} onSelectStock={handleSelectStock} />}
           {activeTab === 'bandarmology' && <BandarmologyView universe={universe} onSelectStock={handleSelectStock} />}
           {activeTab === 'morning_exit' && <MorningExitDashboardView positions={positions} onUpdatePosition={handleUpdatePosition} onRemovePosition={handleRemovePosition} onAddManualPosition={handleAddManualPosition} universe={universe} onSelectStock={handleSelectStock} />}
         </main>
