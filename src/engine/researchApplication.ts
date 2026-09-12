@@ -1,5 +1,10 @@
 import { MorningPosition, StockData, StrategySettings } from '../types';
 import {
+  PROTOTYPE_STRATEGY_LAB_CATALOG,
+  STRATEGY_LAB_PROVENANCE,
+  StrategyLabCombination,
+} from '../data/strategyLabPrototypeCatalog';
+import {
   buildManualMorningPosition,
   buildMorningPositionFromStock,
   ManualMorningPositionInput,
@@ -58,6 +63,18 @@ export type QuantLabConditionDefinition = Pick<
 export interface QuantLabConditionalEvaluation {
   result: ConditionalProbabilityResult;
   matchingStocks: StockData[];
+}
+
+export type StrategyLabSortMetric = 'edge' | 'winRate' | 'lowestBadGap' | 'netExpectancy';
+
+/**
+ * Presentation-safe Strategy Lab snapshot. The application boundary owns how
+ * prototype research rows are filtered and ranked, so React cannot accidentally
+ * become the research engine when real point-in-time evidence replaces the mock catalog.
+ */
+export interface StrategyLabCatalogSnapshot {
+  provenance: typeof STRATEGY_LAB_PROVENANCE;
+  combinations: StrategyLabCombination[];
 }
 
 /**
@@ -131,6 +148,26 @@ export class ResearchApplicationService {
     limit: number = 6,
   ): HistoricalAnalog[] {
     return findHistoricalAnalogs(targetStock, universe, limit);
+  }
+
+  getStrategyLabCatalog(
+    sortBy: StrategyLabSortMetric = 'edge',
+    category: string = 'ALL',
+  ): StrategyLabCatalogSnapshot {
+    const combinations = PROTOTYPE_STRATEGY_LAB_CATALOG
+      .filter(combo => category === 'ALL' || combo.category === category)
+      .slice()
+      .sort((a, b) => {
+        if (sortBy === 'winRate') return b.greenOpenRate - a.greenOpenRate;
+        if (sortBy === 'lowestBadGap') return a.badGapProb - b.badGapProb;
+        if (sortBy === 'netExpectancy') return b.expectedValue - a.expectedValue;
+        return b.riskAdjustedEdgeScore - a.riskAdjustedEdgeScore;
+      });
+
+    return {
+      provenance: STRATEGY_LAB_PROVENANCE,
+      combinations,
+    };
   }
 
   buildStrategyJournalPosition(
