@@ -49,6 +49,28 @@ assert.equal(
   'ensemble and detail model must share the same point-in-time feature context',
 );
 
+const edgeCatalog = service.getStrategyLabCatalog('edge');
+assert.equal(edgeCatalog.provenance.isBacktestEvidence, false);
+assert.equal(edgeCatalog.provenance.mode, 'PROTOTYPE_SIMULATION');
+assert.ok(edgeCatalog.combinations.length > 1);
+assert.ok(
+  edgeCatalog.combinations[0].riskAdjustedEdgeScore >= edgeCatalog.combinations[1].riskAdjustedEdgeScore,
+  'application boundary should rank Strategy Lab rows by risk-adjusted edge',
+);
+
+const safestGapCatalog = service.getStrategyLabCatalog('lowestBadGap');
+assert.ok(
+  safestGapCatalog.combinations[0].badGapProb <= safestGapCatalog.combinations[1].badGapProb,
+  'application boundary should own bad-gap ranking',
+);
+
+const institutionalFlowCatalog = service.getStrategyLabCatalog('winRate', 'Institutional Flow');
+assert.ok(institutionalFlowCatalog.combinations.length > 0);
+assert.ok(
+  institutionalFlowCatalog.combinations.every(combo => combo.category === 'Institutional Flow'),
+  'application boundary should own Strategy Lab category filtering',
+);
+
 const lots = 2;
 const strategyPosition = service.buildStrategyJournalPosition(
   stock,
