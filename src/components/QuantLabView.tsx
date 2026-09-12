@@ -1,75 +1,80 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  FlaskConical, 
-  Search, 
-  TrendingUp, 
-  Sparkles, 
-  BarChart2, 
-  Layers, 
-  ShieldAlert, 
-  CheckCircle2, 
-  AlertTriangle, 
-  ArrowUpRight, 
+import {
+  FlaskConical,
+  CheckCircle2,
+  AlertTriangle,
   RotateCcw,
   Sliders,
   History,
-  Info
 } from 'lucide-react';
 import { StockData } from '../types';
-import { 
-  STANDARD_CONDITIONS, 
-  evaluateConditionalProbability, 
-  runSetupDiscovery, 
-  findHistoricalAnalogs 
-} from '../engine/quantLabEngine';
+import {
+  QuantLabConditionDefinition,
+  QuantLabConditionalEvaluation,
+} from '../engine/researchApplication';
+import {
+  ConditionalProbabilityResult,
+  HistoricalAnalog,
+} from '../engine/strategyTypes';
 import { StockQuantProfileModal } from './StockQuantProfileModal';
 
 interface QuantLabViewProps {
   universe: StockData[];
+  conditionCatalog: QuantLabConditionDefinition[];
+  evaluateConditionalProbability: (
+    universe: StockData[],
+    selectedConditionIds: string[],
+  ) => QuantLabConditionalEvaluation;
+  runSetupDiscovery: (universe: StockData[]) => ConditionalProbabilityResult[];
+  findHistoricalAnalogs: (
+    targetStock: StockData,
+    universe: StockData[],
+    limit: number,
+  ) => HistoricalAnalog[];
   onSelectStock: (ticker: string) => void;
   onAddToJournal: (stock: StockData) => void;
 }
 
 export const QuantLabView: React.FC<QuantLabViewProps> = ({
   universe,
+  conditionCatalog,
+  evaluateConditionalProbability,
+  runSetupDiscovery,
+  findHistoricalAnalogs,
   onSelectStock,
   onAddToJournal,
 }) => {
   const [activeTab, setActiveTab] = useState<'CONDITIONAL_PROB' | 'SETUP_DISCOVERY' | 'ANALOGS'>('CONDITIONAL_PROB');
-  
-  // Conditional Probability state
+
   const [selectedConditionIds, setSelectedConditionIds] = useState<string[]>([
     'cond-macd-cross',
     'cond-price-above-ma50',
     'cond-bandar-acc',
   ]);
 
-  // Analog state
   const [targetTicker, setTargetTicker] = useState<string>(universe[0]?.ticker || 'BBCA');
   const [profileStock, setProfileStock] = useState<StockData | null>(null);
 
-  // Compute Conditional Probability
-  const conditionalResult = useMemo(() => {
-    return evaluateConditionalProbability(universe, selectedConditionIds);
-  }, [universe, selectedConditionIds]);
+  const conditionalEvaluation = useMemo(() => (
+    evaluateConditionalProbability(universe, selectedConditionIds)
+  ), [evaluateConditionalProbability, universe, selectedConditionIds]);
+  const conditionalResult = conditionalEvaluation.result;
 
-  // Discovered Setups
-  const discoveredSetups = useMemo(() => {
-    return runSetupDiscovery(universe);
-  }, [universe]);
+  const discoveredSetups = useMemo(() => (
+    runSetupDiscovery(universe)
+  ), [runSetupDiscovery, universe]);
 
-  // Historical Analogs for target stock
-  const targetStock = useMemo(() => {
-    return universe.find(s => s.ticker === targetTicker) || universe[0];
-  }, [universe, targetTicker]);
+  const targetStock = useMemo(() => (
+    universe.find(s => s.ticker === targetTicker) || universe[0]
+  ), [universe, targetTicker]);
 
   const analogs = useMemo(() => {
     if (!targetStock) return [];
     return findHistoricalAnalogs(targetStock, universe, 6);
-  }, [targetStock, universe]);
+  }, [findHistoricalAnalogs, targetStock, universe]);
 
   const toggleCondition = (id: string) => {
-    setSelectedConditionIds(prev => 
+    setSelectedConditionIds(prev =>
       prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
     );
   };
@@ -80,8 +85,6 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
 
   return (
     <div className="w-full space-y-4 text-slate-100">
-      
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
@@ -123,14 +126,9 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
         </div>
       </div>
 
-      {/* TAB 1: CONDITIONAL PROBABILITY ENGINE */}
       {activeTab === 'CONDITIONAL_PROB' && (
         <div className="space-y-6">
-          
-          {/* Workbench Grid: Left Selector, Right Analytics */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Condition Selection Panel */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <span className="text-xs font-mono font-bold text-slate-300 uppercase">
@@ -146,7 +144,7 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
               </div>
 
               <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
-                {STANDARD_CONDITIONS.map(cond => {
+                {conditionCatalog.map(cond => {
                   const isChecked = selectedConditionIds.includes(cond.id);
                   return (
                     <button
@@ -173,10 +171,7 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
               </div>
             </div>
 
-            {/* Results Panel */}
             <div className="lg:col-span-2 space-y-4">
-              
-              {/* Outcome Metrics Banner */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
                 <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
                   <span>Conditional Edge Calculation</span>
@@ -227,7 +222,6 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                   </div>
                 </div>
 
-                {/* Sample Size Warning */}
                 {conditionalResult.sampleWarning && (
                   <div className="mt-4 p-3 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-300 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -236,20 +230,16 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                 )}
               </div>
 
-              {/* Matching Stocks List */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
                   <span className="font-bold text-slate-300 uppercase">
                     Stocks Meeting ALL Selected Criteria ({conditionalResult.matchedSamples})
                   </span>
-                  <span className="text-slate-500">Live IDX Universe</span>
+                  <span className="text-slate-500">Current Research Universe</span>
                 </div>
 
                 <div className="divide-y divide-slate-800/60 mt-2">
-                  {universe.filter(s => {
-                    const criteria = STANDARD_CONDITIONS.filter(c => selectedConditionIds.includes(c.id));
-                    return criteria.every(crit => crit.evaluate(s));
-                  }).map(stk => (
+                  {conditionalEvaluation.matchingStocks.map(stk => (
                     <div key={stk.ticker} className="py-3 flex items-center justify-between gap-3 text-xs font-mono">
                       <div className="flex items-center gap-3">
                         <button
@@ -292,13 +282,11 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                   )}
                 </div>
               </div>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: SETUP DISCOVERY */}
       {activeTab === 'SETUP_DISCOVERY' && (
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs">
@@ -312,7 +300,7 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {discoveredSetups.map((setup, idx) => (
-              <div 
+              <div
                 key={idx}
                 className="p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between"
               >
@@ -326,7 +314,6 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Conditions List */}
                   <div className="space-y-1 my-3">
                     {setup.conditionNames.map((cName, cIdx) => (
                       <div key={cIdx} className="flex items-center gap-1.5 text-xs text-slate-200 font-medium">
@@ -336,7 +323,6 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                     ))}
                   </div>
 
-                  {/* Metrics */}
                   <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono my-3">
                     <div className="p-2 rounded bg-slate-950 border border-slate-800">
                       <div className="text-[10px] text-slate-400">Win Rate</div>
@@ -369,11 +355,8 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
         </div>
       )}
 
-      {/* TAB 3: HISTORICAL ANALOGS */}
-      {activeTab === 'ANALOGS' && (
+      {activeTab === 'ANALOGS' && targetStock && (
         <div className="space-y-6">
-          
-          {/* Target Stock Selector */}
           <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <History className="w-5 h-5 text-emerald-400" />
@@ -401,10 +384,9 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
             </div>
           </div>
 
-          {/* Analogs Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {analogs.map((analog) => (
-              <div 
+              <div
                 key={analog.id}
                 className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between"
               >
@@ -421,17 +403,15 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Matching Factors */}
                   <div className="space-y-1 mb-3">
-                    {analog.setupFactors.map((f, i) => (
-                      <div key={i} className="text-[11px] text-slate-300 flex items-center gap-1.5">
+                    {analog.setupFactors.map((factor, index) => (
+                      <div key={index} className="text-[11px] text-slate-300 flex items-center gap-1.5">
                         <span className="text-emerald-400 font-bold">•</span>
-                        <span>{f}</span>
+                        <span>{factor}</span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Forward Returns */}
                   <div className="grid grid-cols-4 gap-1.5 text-center text-xs font-mono my-3 p-2 rounded bg-slate-950 border border-slate-800">
                     <div>
                       <div className="text-[10px] text-slate-400">+1D</div>
@@ -467,11 +447,9 @@ export const QuantLabView: React.FC<QuantLabViewProps> = ({
               </div>
             ))}
           </div>
-
         </div>
       )}
 
-      {/* Stock Quant Profile Modal */}
       {profileStock && (
         <StockQuantProfileModal
           stock={profileStock}
