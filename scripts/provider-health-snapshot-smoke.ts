@@ -70,6 +70,42 @@ if (!normalizedSnapshot.health.message?.includes('Invalid provider latency metad
   throw new Error('shared provider health snapshots must preserve canonical normalization context.');
 }
 
+const canonicalMetadataProvider = new MockMarketDataProvider();
+const canonicalMetadata = canonicalMetadataProvider.metadata as unknown as {
+  id: string;
+  name: string;
+  notes?: string;
+  supportedMarkets: string[];
+};
+canonicalMetadata.id = '  future-idx-adapter  ';
+canonicalMetadata.name = '  Future IDX Adapter  ';
+canonicalMetadata.notes = '  Vendor-neutral test adapter  ';
+canonicalMetadata.supportedMarkets = [' idx ', 'IDX', ' us '];
+const canonicalMetadataSnapshot = await getProviderHealthSnapshot(
+  canonicalMetadataProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-11T12:00:00.000Z',
+  },
+  nowMs,
+);
+
+if (canonicalMetadataSnapshot.health.status !== 'HEALTHY') {
+  throw new Error('valid provider metadata formatting differences must canonicalize without degrading health.');
+}
+if (canonicalMetadataSnapshot.metadata.id !== 'future-idx-adapter') {
+  throw new Error('provider ids must be trimmed at the shared provider boundary.');
+}
+if (canonicalMetadataSnapshot.metadata.name !== 'Future IDX Adapter') {
+  throw new Error('provider names must be trimmed at the shared provider boundary.');
+}
+if (canonicalMetadataSnapshot.metadata.notes !== 'Vendor-neutral test adapter') {
+  throw new Error('provider notes must be trimmed before downstream status/UI consumption.');
+}
+if (canonicalMetadataSnapshot.metadata.supportedMarkets.join(',') !== 'IDX,US') {
+  throw new Error('supported market identities must be trimmed, uppercased and deduplicated at the provider boundary.');
+}
+
 const malformedMetadataProvider = new MockMarketDataProvider();
 const malformedMetadata = malformedMetadataProvider.metadata as unknown as {
   source: unknown;
@@ -119,4 +155,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, injected payloads are normalized and detached from caller state, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
