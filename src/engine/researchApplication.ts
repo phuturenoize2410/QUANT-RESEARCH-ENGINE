@@ -8,12 +8,17 @@ import {
   STRATEGY_LAB_PROVENANCE,
   StrategyLabCombination,
 } from '../data/strategyLabPrototypeCatalog';
+import { DEFAULT_STRATEGY_SETTINGS } from './analytics';
 import {
   buildManualMorningPosition,
   buildMorningPositionFromStock,
   ManualMorningPositionInput,
 } from './execution';
-import { DEFAULT_RESEARCH_POSITION_LOTS } from './executionPolicy';
+import {
+  DEFAULT_EXECUTION_COSTS,
+  DEFAULT_RESEARCH_POSITION_LOTS,
+  totalFrictionPct,
+} from './executionPolicy';
 import { FeatureContext } from './featureContext';
 import { QuantMLEnsembleEngine } from './ml/ensembleRouter';
 import { GapRiskMLModel, OvernightMLModel } from './ml/models';
@@ -40,6 +45,8 @@ import {
 } from './strategyTypes';
 
 export type { ManualMorningPositionInput } from './execution';
+
+export type ExecutionCostSettingKey = 'buyFeePct' | 'sellFeePct' | 'slippagePct';
 
 /**
  * Complete model output required by the final-decision presentation.
@@ -106,6 +113,32 @@ export class ResearchApplicationService {
 
   refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
     return this.pipeline.refresh(settings);
+  }
+
+  getDefaultStrategySettings(): StrategySettings {
+    return { ...DEFAULT_STRATEGY_SETTINGS };
+  }
+
+  calculateExecutionFrictionPct(settings: StrategySettings): number {
+    return totalFrictionPct({
+      buyFeePct: settings.buyFeePct,
+      sellFeePct: settings.sellFeePct,
+      slippagePct: settings.slippagePct,
+    });
+  }
+
+  applyExecutionCostInput(
+    settings: StrategySettings,
+    key: ExecutionCostSettingKey,
+    rawValue: string,
+  ): StrategySettings {
+    const parsed = Number.parseFloat(rawValue);
+    const fallback = DEFAULT_EXECUTION_COSTS[key];
+
+    return {
+      ...settings,
+      [key]: Number.isFinite(parsed) ? parsed : fallback,
+    };
   }
 
   getMorningJournalSeed(): MorningJournalSeedSnapshot {
