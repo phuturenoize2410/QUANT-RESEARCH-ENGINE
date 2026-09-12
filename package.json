@@ -10,7 +10,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "validate:data": "tsx scripts/data-quality-smoke.ts",
-    "validate:provider": "tsx scripts/provider-health-smoke.ts && tsx scripts/provider-health-contract-smoke.ts && tsx scripts/provider-health-snapshot-smoke.ts && tsx scripts/provider-adapter-smoke.ts && tsx scripts/provider-gate-smoke.ts",
+    "validate:provider": "tsx scripts/provider-health-smoke.ts && tsx scripts/provider-health-contract-smoke.ts && tsx scripts/provider-health-snapshot-smoke.ts && tsx scripts/provider-health-timestamp-smoke.ts && tsx scripts/provider-adapter-smoke.ts && tsx scripts/provider-gate-smoke.ts",
     "validate:execution": "tsx scripts/execution-policy-smoke.ts",
     "validate:scores": "tsx scripts/score-policy-smoke.ts",
     "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts",
