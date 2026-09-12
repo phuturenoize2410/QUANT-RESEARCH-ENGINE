@@ -138,6 +138,56 @@ if (!Object.isFrozen(malformedMetadataSnapshot.metadata.supportedMarkets)) {
   throw new Error('sanitized provider capability lists must remain immutable.');
 }
 
+const contradictoryRealtimeProvider = new MockMarketDataProvider();
+const contradictoryRealtimeMetadata = contradictoryRealtimeProvider.metadata as unknown as {
+  source: 'FREE_API';
+  mode: 'EOD';
+  supportsRealtime: boolean;
+};
+contradictoryRealtimeMetadata.source = 'FREE_API';
+contradictoryRealtimeMetadata.mode = 'EOD';
+contradictoryRealtimeMetadata.supportsRealtime = true;
+const contradictoryRealtimeSnapshot = await getProviderHealthSnapshot(
+  contradictoryRealtimeProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-11T12:00:00.000Z',
+  },
+  nowMs,
+);
+
+if (contradictoryRealtimeSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('provider metadata must fail closed when EOD/delayed capability claims contradict supportsRealtime.');
+}
+if (!contradictoryRealtimeSnapshot.health.message?.includes('mode/supportsRealtime')) {
+  throw new Error('contradictory realtime capability failures must expose actionable metadata context.');
+}
+
+const contradictoryMockProvider = new MockMarketDataProvider();
+const contradictoryMockMetadata = contradictoryMockProvider.metadata as unknown as {
+  source: 'MOCK_ENGINE';
+  mode: 'REALTIME';
+  supportsRealtime: boolean;
+};
+contradictoryMockMetadata.source = 'MOCK_ENGINE';
+contradictoryMockMetadata.mode = 'REALTIME';
+contradictoryMockMetadata.supportsRealtime = true;
+const contradictoryMockSnapshot = await getProviderHealthSnapshot(
+  contradictoryMockProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-11T12:00:00.000Z',
+  },
+  nowMs,
+);
+
+if (contradictoryMockSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('MOCK_ENGINE adapters must not claim a non-MOCK delivery mode.');
+}
+if (!contradictoryMockSnapshot.health.message?.includes('source/mode')) {
+  throw new Error('mock/source mode contradictions must expose actionable metadata context.');
+}
+
 class ThrowingBrokerProvider extends MockBrokerDataProvider {
   override async getHealth(): Promise<ProviderHealth> {
     throw new Error('broker status endpoint unavailable');
@@ -155,4 +205,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, contradictory mode/realtime and mock/source capability claims fail closed, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
