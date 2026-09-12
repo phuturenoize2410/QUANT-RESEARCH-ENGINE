@@ -208,6 +208,17 @@ export async function captureProviderHealth(
   }
 }
 
+function canonicalMetadataText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function canonicalMarketId(value: unknown): string | undefined {
+  const text = canonicalMetadataText(value);
+  return text?.toUpperCase();
+}
+
 function snapshotProviderMetadata(metadata: ProviderMetadata): {
   metadata: ProviderMetadata;
   issues: string[];
@@ -222,26 +233,36 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
     supportsHistorical?: unknown;
     supportsIntraday?: unknown;
     supportsRealtime?: unknown;
+    notes?: unknown;
   };
   const issues: string[] = [];
+  const id = canonicalMetadataText(runtimeMetadata.id);
+  const name = canonicalMetadataText(runtimeMetadata.name);
+  const notes = runtimeMetadata.notes === undefined
+    ? undefined
+    : canonicalMetadataText(runtimeMetadata.notes);
 
-  if (typeof runtimeMetadata.id !== 'string' || !runtimeMetadata.id.trim()) issues.push('id');
-  if (typeof runtimeMetadata.name !== 'string' || !runtimeMetadata.name.trim()) issues.push('name');
+  if (!id) issues.push('id');
+  if (!name) issues.push('name');
   if (!isMarketDataSource(runtimeMetadata.source)) issues.push('source');
   if (!isProviderMode(runtimeMetadata.mode)) issues.push('mode');
   if (typeof runtimeMetadata.isPaid !== 'boolean') issues.push('isPaid');
   if (typeof runtimeMetadata.supportsHistorical !== 'boolean') issues.push('supportsHistorical');
   if (typeof runtimeMetadata.supportsIntraday !== 'boolean') issues.push('supportsIntraday');
   if (typeof runtimeMetadata.supportsRealtime !== 'boolean') issues.push('supportsRealtime');
+  if (runtimeMetadata.notes !== undefined && notes === undefined) issues.push('notes');
 
-  const supportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets)
-    ? runtimeMetadata.supportedMarkets.filter(
-        (market): market is string => typeof market === 'string' && market.trim().length > 0,
-      )
+  const rawSupportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets)
+    ? runtimeMetadata.supportedMarkets
     : [];
+  const canonicalSupportedMarkets = rawSupportedMarkets
+    .map(canonicalMarketId)
+    .filter((market): market is string => Boolean(market));
+  const supportedMarkets = [...new Set(canonicalSupportedMarkets)];
+
   if (
     !Array.isArray(runtimeMetadata.supportedMarkets) ||
-    supportedMarkets.length !== runtimeMetadata.supportedMarkets.length ||
+    canonicalSupportedMarkets.length !== rawSupportedMarkets.length ||
     supportedMarkets.length === 0
   ) {
     issues.push('supportedMarkets');
@@ -250,6 +271,9 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
   return {
     metadata: Object.freeze({
       ...metadata,
+      id: id ?? '',
+      name: name ?? '',
+      notes,
       supportedMarkets: Object.freeze([...supportedMarkets]),
     }) as ProviderMetadata,
     issues,
