@@ -6,6 +6,10 @@ export interface ExecutionCosts {
   slippagePct: number;
 }
 
+/** Canonical percentage domain for execution/risk policy inputs. */
+export const EXECUTION_POLICY_PERCENT_MIN = 0;
+export const EXECUTION_POLICY_PERCENT_MAX = 100;
+
 /**
  * Canonical default transaction-friction assumptions for the research engine.
  *
@@ -66,22 +70,27 @@ export interface OvernightExitDecision {
   exitStatus: ExitDecisionStatus;
 }
 
-function finiteNonNegative(value: number, fallback: number): number {
-  return Number.isFinite(value) && value >= 0 ? value : fallback;
+function finitePolicyPercentage(value: number, fallback: number): number {
+  return Number.isFinite(value) &&
+    value >= EXECUTION_POLICY_PERCENT_MIN &&
+    value <= EXECUTION_POLICY_PERCENT_MAX
+    ? value
+    : fallback;
 }
 
 /**
  * Keep all transaction-friction assumptions behind one boundary so backtests,
  * simulated execution and future broker/provider integrations cannot silently
- * diverge on fees or slippage.
+ * diverge on fees or slippage. Percentage inputs outside the canonical 0-100
+ * domain fail closed to defaults rather than contaminating downstream P/L.
  */
 export function normalizeExecutionCosts(
   costs: Partial<ExecutionCosts> = DEFAULT_EXECUTION_COSTS,
 ): ExecutionCosts {
   return {
-    buyFeePct: finiteNonNegative(costs.buyFeePct ?? DEFAULT_EXECUTION_COSTS.buyFeePct, DEFAULT_EXECUTION_COSTS.buyFeePct),
-    sellFeePct: finiteNonNegative(costs.sellFeePct ?? DEFAULT_EXECUTION_COSTS.sellFeePct, DEFAULT_EXECUTION_COSTS.sellFeePct),
-    slippagePct: finiteNonNegative(costs.slippagePct ?? DEFAULT_EXECUTION_COSTS.slippagePct, DEFAULT_EXECUTION_COSTS.slippagePct),
+    buyFeePct: finitePolicyPercentage(costs.buyFeePct ?? DEFAULT_EXECUTION_COSTS.buyFeePct, DEFAULT_EXECUTION_COSTS.buyFeePct),
+    sellFeePct: finitePolicyPercentage(costs.sellFeePct ?? DEFAULT_EXECUTION_COSTS.sellFeePct, DEFAULT_EXECUTION_COSTS.sellFeePct),
+    slippagePct: finitePolicyPercentage(costs.slippagePct ?? DEFAULT_EXECUTION_COSTS.slippagePct, DEFAULT_EXECUTION_COSTS.slippagePct),
   };
 }
 
@@ -89,10 +98,10 @@ export function normalizeOvernightExitPolicy(
   policy: Partial<OvernightExitPolicy> = DEFAULT_OVERNIGHT_EXIT_POLICY,
 ): OvernightExitPolicy {
   return {
-    stopLossPct: finiteNonNegative(policy.stopLossPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct, DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct),
-    takeProfitPct: finiteNonNegative(policy.takeProfitPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct),
-    takeProfitGapPct: finiteNonNegative(policy.takeProfitGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct),
-    cutLossGapPct: finiteNonNegative(policy.cutLossGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct),
+    stopLossPct: finitePolicyPercentage(policy.stopLossPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct, DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct),
+    takeProfitPct: finitePolicyPercentage(policy.takeProfitPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct),
+    takeProfitGapPct: finitePolicyPercentage(policy.takeProfitGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct),
+    cutLossGapPct: finitePolicyPercentage(policy.cutLossGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct),
   };
 }
 
