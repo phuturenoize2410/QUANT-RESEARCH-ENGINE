@@ -81,9 +81,9 @@ const uiForbiddenBoundaries = [
 
 /**
  * Temporary debt register for research/debug UI that pre-dates the application
- * boundary. Production-facing FinalDecisionModal has been migrated and therefore
- * no longer has an exception. Keeping remaining exceptions exact prevents other
- * UI surfaces from introducing direct engine/model execution.
+ * boundary. Production-facing FinalDecisionModal and QuantLabView have been
+ * migrated and therefore no longer have exceptions. Keeping remaining exceptions
+ * exact prevents other UI surfaces from introducing direct engine/model execution.
  *
  * Every exception must also be exercised by a real import. This prevents stale
  * allowlist entries from surviving after a migration and silently becoming a
@@ -95,12 +95,6 @@ const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
     new Set([
       '../engine/ml/ensembleRouter',
       '../engine/ml/models',
-    ]),
-  ],
-  [
-    'src/components/QuantLabView.tsx',
-    new Set([
-      '../engine/quantLabEngine',
     ]),
   ],
 ]);
@@ -263,5 +257,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; production decision UI has no model-engine exception; remaining legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; FinalDecisionModal and QuantLabView have no engine exceptions; remaining legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
