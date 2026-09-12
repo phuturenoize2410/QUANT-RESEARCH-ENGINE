@@ -72,6 +72,18 @@ export interface BrokerDataProvider extends HealthCheckedProvider {
   getNetForeignFlow(ticker: string): Promise<number>;
 }
 
+export class ProviderRequestError extends Error {
+  readonly providerId: string;
+  readonly field: 'ticker' | 'limit';
+
+  constructor(providerId: string, field: 'ticker' | 'limit', message: string) {
+    super(message);
+    this.name = 'ProviderRequestError';
+    this.providerId = providerId;
+    this.field = field;
+  }
+}
+
 export class ProviderDataError extends Error {
   readonly providerId: string;
   readonly ticker: string;
@@ -122,12 +134,35 @@ function copyUniverse(universe: readonly StockData[]): StockData[] {
   return universe.map(copyStock);
 }
 
+function canonicalProviderTicker(ticker: string, providerId: string): string {
+  const canonicalTicker = normalizeSymbol(ticker);
+  if (!canonicalTicker) {
+    throw new ProviderRequestError(
+      providerId,
+      'ticker',
+      `Provider ${providerId} requires a non-empty ticker.`,
+    );
+  }
+  return canonicalTicker;
+}
+
+function validateHistoricalLimit(limit: number, providerId: string): number {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new ProviderRequestError(
+      providerId,
+      'limit',
+      `Provider ${providerId} requires historical limit to be a positive integer.`,
+    );
+  }
+  return limit;
+}
+
 function requireStock(
   universe: readonly StockData[],
   ticker: string,
   providerId: string,
 ): StockData {
-  const canonicalTicker = normalizeSymbol(ticker);
+  const canonicalTicker = canonicalProviderTicker(ticker, providerId);
   const stock = universe.find(item => normalizeSymbol(item.ticker) === canonicalTicker);
   if (!stock) {
     throw new ProviderDataError(providerId, canonicalTicker);
@@ -227,7 +262,8 @@ export class MockMarketDataProvider implements MarketDataProvider {
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
-    return copyDailyBars(stock.historicalBars.slice(-limit));
+    const validatedLimit = validateHistoricalLimit(limit, this.metadata.id);
+    return copyDailyBars(stock.historicalBars.slice(-validatedLimit));
   }
 
   async getUniverse(): Promise<StockData[]> {
