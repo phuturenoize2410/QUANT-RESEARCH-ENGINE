@@ -29,6 +29,11 @@ function parseTimestamp(value?: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function canonicalTimestamp(value?: string): string | undefined {
+  const parsed = parseTimestamp(value);
+  return parsed === undefined ? undefined : new Date(parsed).toISOString();
+}
+
 function normalizeNonNegativeFinite(value?: number): number | undefined {
   if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
   return value;
@@ -99,10 +104,14 @@ export function normalizeProviderHealth(
 ): ProviderHealth {
   const reportedStatus = (health as { status?: unknown }).status;
   const hasValidStatus = isProviderHealthStatus(reportedStatus);
+  const checkedAtMs = parseTimestamp(health.checkedAt);
+  const lastSuccessfulSyncMs = parseTimestamp(health.lastSuccessfulSyncAt);
 
   let normalized: ProviderHealth = {
     ...health,
     status: hasValidStatus ? reportedStatus : 'UNAVAILABLE',
+    checkedAt: canonicalTimestamp(health.checkedAt),
+    lastSuccessfulSyncAt: canonicalTimestamp(health.lastSuccessfulSyncAt),
     latencyMs: normalizeNonNegativeFinite(health.latencyMs),
     staleAfterSeconds: normalizeNonNegativeFinite(health.staleAfterSeconds),
   };
@@ -128,7 +137,6 @@ export function normalizeProviderHealth(
     normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
   }
 
-  const checkedAtMs = parseTimestamp(normalized.checkedAt);
   if (checkedAtMs === undefined) {
     normalized = degradeHealth(normalized, 'Provider health check timestamp is invalid.');
   } else if (checkedAtMs > nowMs + MAX_CLOCK_SKEW_MS) {
@@ -137,10 +145,9 @@ export function normalizeProviderHealth(
 
   if (normalized.status === 'UNAVAILABLE') return normalized;
 
-  const lastSuccessfulSyncMs = parseTimestamp(normalized.lastSuccessfulSyncAt);
   const staleAfterSeconds = normalized.staleAfterSeconds;
 
-  if (normalized.lastSuccessfulSyncAt && lastSuccessfulSyncMs === undefined) {
+  if (health.lastSuccessfulSyncAt && lastSuccessfulSyncMs === undefined) {
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
   }
 
