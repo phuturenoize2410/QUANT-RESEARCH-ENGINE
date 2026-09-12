@@ -1,25 +1,29 @@
 import React from 'react';
 import { X, RotateCcw, Sliders, Shield, AlertTriangle, Coins, Check } from 'lucide-react';
 import { StrategySettings } from '../types';
-import { DEFAULT_STRATEGY_SETTINGS } from '../engine/analytics';
-import { DEFAULT_EXECUTION_COSTS, totalFrictionPct } from '../engine/executionPolicy';
+import { ExecutionCostSettingKey } from '../engine/researchApplication';
 
 interface StrategySettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: StrategySettings;
+  defaultSettings: StrategySettings;
+  calculateExecutionFrictionPct: (settings: StrategySettings) => number;
+  applyExecutionCostInput: (
+    settings: StrategySettings,
+    key: ExecutionCostSettingKey,
+    rawValue: string,
+  ) => StrategySettings;
   onSave: (newSettings: StrategySettings) => void;
-}
-
-function parseExecutionCost(value: string, fallback: number): number {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
   isOpen,
   onClose,
   settings,
+  defaultSettings,
+  calculateExecutionFrictionPct,
+  applyExecutionCostInput,
   onSave
 }) => {
   const [localSettings, setLocalSettings] = React.useState<StrategySettings>(settings);
@@ -34,8 +38,12 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleExecutionCostChange = (key: ExecutionCostSettingKey, rawValue: string) => {
+    setLocalSettings(prev => applyExecutionCostInput(prev, key, rawValue));
+  };
+
   const handleReset = () => {
-    setLocalSettings(DEFAULT_STRATEGY_SETTINGS);
+    setLocalSettings({ ...defaultSettings });
   };
 
   const handleApply = () => {
@@ -43,11 +51,7 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
     onClose();
   };
 
-  const totalExecutionFriction = totalFrictionPct({
-    buyFeePct: localSettings.buyFeePct,
-    sellFeePct: localSettings.sellFeePct,
-    slippagePct: localSettings.slippagePct,
-  });
+  const totalExecutionFriction = calculateExecutionFrictionPct(localSettings);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
@@ -282,10 +286,10 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0.05"
                   max="0.5"
                   value={localSettings.buyFeePct}
-                  onChange={e => handleChange('buyFeePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.buyFeePct))}
+                  onChange={e => handleExecutionCostChange('buyFeePct', e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
-                <span className="text-[10px] text-slate-500">IDX default ~{DEFAULT_EXECUTION_COSTS.buyFeePct.toFixed(2)}%</span>
+                <span className="text-[10px] text-slate-500">IDX default ~{defaultSettings.buyFeePct.toFixed(2)}%</span>
               </div>
 
               <div>
@@ -296,7 +300,7 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0.1"
                   max="0.6"
                   value={localSettings.sellFeePct}
-                  onChange={e => handleChange('sellFeePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.sellFeePct))}
+                  onChange={e => handleExecutionCostChange('sellFeePct', e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
                 <span className="text-[10px] text-slate-500">Includes applicable sell-side tax/levies</span>
@@ -310,7 +314,7 @@ export const StrategySettingsModal: React.FC<StrategySettingsModalProps> = ({
                   min="0"
                   max="0.5"
                   value={localSettings.slippagePct}
-                  onChange={e => handleChange('slippagePct', parseExecutionCost(e.target.value, DEFAULT_EXECUTION_COSTS.slippagePct))}
+                  onChange={e => handleExecutionCostChange('slippagePct', e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-200 text-xs"
                 />
                 <span className="text-[10px] text-slate-500">Bid-ask spread / execution impact estimate</span>
