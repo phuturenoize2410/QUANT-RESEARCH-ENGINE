@@ -161,6 +161,13 @@ export async function captureProviderHealth(
   }
 }
 
+function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata {
+  return Object.freeze({
+    ...metadata,
+    supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
+  });
+}
+
 /**
  * Vendor-neutral health/status envelope shared by every external data adapter.
  *
@@ -191,7 +198,7 @@ export async function getProviderHealthSnapshot(
     : await captureProviderHealth(provider, nowMs);
 
   return {
-    metadata: provider.metadata,
+    metadata: snapshotProviderMetadata(provider.metadata),
     health,
     capturedAt: new Date(nowMs).toISOString(),
   };
