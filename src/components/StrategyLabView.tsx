@@ -1,36 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import {
-  PROTOTYPE_STRATEGY_LAB_CATALOG,
-  STRATEGY_LAB_PROVENANCE,
-} from '../data/strategyLabPrototypeCatalog';
+  StrategyLabCatalogSnapshot,
+  StrategyLabSortMetric,
+} from '../engine/researchApplication';
 import { StockData } from '../types';
 
 interface StrategyLabViewProps {
   universe: StockData[];
+  getCatalog: (sortBy: StrategyLabSortMetric, category?: string) => StrategyLabCatalogSnapshot;
   onSelectStock: (ticker: string) => void;
 }
 
-type SortMetric = 'edge' | 'winRate' | 'lowestBadGap' | 'netExpectancy';
-
 export const StrategyLabView: React.FC<StrategyLabViewProps> = ({
   universe,
+  getCatalog,
   onSelectStock,
 }) => {
-  const [sortBy, setSortBy] = useState<SortMetric>('edge');
+  const [sortBy, setSortBy] = useState<StrategyLabSortMetric>('edge');
   const [filterCategory] = useState<string>('ALL');
 
-  const sortedCombinations = useMemo(() => {
-    return [...PROTOTYPE_STRATEGY_LAB_CATALOG]
-      .filter(combo => filterCategory === 'ALL' || combo.category === filterCategory)
-      .sort((a, b) => {
-        if (sortBy === 'edge') return b.riskAdjustedEdgeScore - a.riskAdjustedEdgeScore;
-        if (sortBy === 'winRate') return b.greenOpenRate - a.greenOpenRate;
-        if (sortBy === 'lowestBadGap') return a.badGapProb - b.badGapProb;
-        if (sortBy === 'netExpectancy') return b.expectedValue - a.expectedValue;
-        return 0;
-      });
-  }, [sortBy, filterCategory]);
+  const catalogSnapshot = useMemo(
+    () => getCatalog(sortBy, filterCategory),
+    [getCatalog, sortBy, filterCategory],
+  );
+  const sortedCombinations = catalogSnapshot.combinations;
 
   const knownUniverseTickers = useMemo(
     () => new Set(universe.map(stock => stock.ticker)),
@@ -64,10 +58,10 @@ export const StrategyLabView: React.FC<StrategyLabViewProps> = ({
 
       <div className="rounded-lg border border-amber-700/50 bg-amber-950/20 px-4 py-3">
         <div className="text-[11px] font-black uppercase tracking-wider text-amber-300">
-          {STRATEGY_LAB_PROVENANCE.label}
+          {catalogSnapshot.provenance.label}
         </div>
         <div className="mt-1 text-xs text-amber-100/75">
-          {STRATEGY_LAB_PROVENANCE.description}
+          {catalogSnapshot.provenance.description}
         </div>
       </div>
 
