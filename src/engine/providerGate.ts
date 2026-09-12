@@ -8,24 +8,45 @@ import {
 const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => ({
   useCase,
   allowed: false,
-  reasons: [`Provider readiness snapshot is missing the ${useCase} decision.`],
+  reasons: [`Provider readiness snapshot is missing or malformed for ${useCase}.`],
   warnings: [],
 });
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(item => typeof item === 'string');
+
+/**
+ * Runtime guard for readiness payloads crossing adapter/cache/persistence boundaries.
+ * TypeScript types do not protect against malformed JSON, stale cached snapshots or
+ * third-party adapters. A readiness decision is usable only when its use case,
+ * boolean decision and diagnostic arrays all satisfy the canonical contract.
+ */
+export function isProviderReadiness(value: unknown, useCase: ResearchUseCase): value is ProviderReadiness {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Partial<ProviderReadiness>;
+  return (
+    candidate.useCase === useCase &&
+    typeof candidate.allowed === 'boolean' &&
+    isStringArray(candidate.reasons) &&
+    isStringArray(candidate.warnings)
+  );
+}
 
 /**
  * Resolve one canonical readiness decision without trusting runtime payload shape.
  *
  * ProviderStatusSnapshot is strongly typed inside the engine, but future provider
  * adapters, caches and persisted status payloads are external boundaries at
- * runtime. A malformed or older snapshot must fail closed rather than causing a
- * generic TypeError that bypasses provider status handling.
+ * runtime. Missing, malformed or older snapshots fail closed instead of allowing
+ * truthy non-boolean values or incomplete diagnostics to bypass provider policy.
  */
 export function getProviderReadiness(
   status: ProviderStatusSnapshot,
   useCase: ResearchUseCase,
 ): ProviderReadiness {
-  const readiness = status.readiness?.[useCase] as ProviderReadiness | undefined;
-  return readiness ?? missingReadiness(useCase);
+  const readiness = status.readiness?.[useCase] as unknown;
+  return isProviderReadiness(readiness, useCase) ? readiness : missingReadiness(useCase);
 }
 
 export class ProviderReadinessError extends Error {
@@ -67,7 +88,8 @@ export class ProviderReadinessError extends Error {
  * market, freshness or capability rules locally. Keeping the thrown error typed
  * and carrying the original ProviderStatusSnapshot gives downstream status
  * surfaces a stable, vendor-neutral failure contract without re-evaluating policy.
- * Missing runtime readiness decisions fail closed through the same typed error.
+ * Missing or malformed runtime readiness decisions fail closed through the same
+ * typed error.
  */
 export function assertProviderReady(
   status: ProviderStatusSnapshot,
