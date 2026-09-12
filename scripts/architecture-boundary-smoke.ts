@@ -56,10 +56,19 @@ const strategyRoots = collectTypeScriptFiles(engineRoot).filter(file => {
  * Risk/Execution is downstream of Strategy and may consume strategy/domain
  * outputs, but it must not bypass the spine by reaching directly into provider
  * infrastructure, feature implementations, UI, or mock-universe data.
+ *
+ * Detect both filename-style modules (riskEngine.ts / executionPolicy.ts) and
+ * directory-style modules (engine/risk/* / engine/execution/*). This keeps the
+ * architecture guard effective if either domain grows into a module tree later.
  */
 const riskExecutionRoots = collectTypeScriptFiles(engineRoot).filter(file => {
+  const normalized = file.replaceAll('\\', '/');
   const name = basename(file);
-  return /^(?:risk|execution).*\.ts$/i.test(name);
+  return (
+    /^(?:risk|execution).*\.ts$/i.test(name) ||
+    normalized.includes('/engine/risk/') ||
+    normalized.includes('/engine/execution/')
+  );
 });
 
 function importSpecifiers(source: string): string[] {
@@ -111,6 +120,8 @@ const providerForbiddenBoundaries = [
   '/strategy/',
   './strategies/',
   './strategy/',
+  '/risk',
+  './risk',
   '/execution',
   './execution',
   '/components/',
@@ -123,6 +134,8 @@ const featureForbiddenBoundaries = [
   '/strategy/',
   './strategies/',
   './strategy/',
+  '/risk',
+  './risk',
   '/execution',
   './execution',
   '/components/',
@@ -140,6 +153,8 @@ const strategyForbiddenBoundaries = [
   './providerCache',
   '/providerHealth',
   './providerHealth',
+  '/risk',
+  './risk',
   '/execution',
   './execution',
   '/components/',
@@ -263,5 +278,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
