@@ -49,6 +49,31 @@ assert.equal(
   'ensemble and detail model must share the same point-in-time feature context',
 );
 
+const journalSeed = service.getMorningJournalSeed();
+assert.equal(journalSeed.provenance.source, 'PROTOTYPE_SIMULATION');
+assert.equal(journalSeed.provenance.isLiveTradingEvidence, false);
+assert.equal(journalSeed.provenance.isBacktestEvidence, false);
+assert.ok(journalSeed.positions.length > 0, 'prototype journal should expose demonstration rows');
+
+const secondJournalSeed = service.getMorningJournalSeed();
+assert.notEqual(
+  journalSeed.positions,
+  secondJournalSeed.positions,
+  'application boundary must return a defensive journal-array copy',
+);
+assert.notEqual(
+  journalSeed.positions[0],
+  secondJournalSeed.positions[0],
+  'application boundary must return defensive position copies',
+);
+const canonicalTicker = secondJournalSeed.positions[0]?.ticker;
+if (journalSeed.positions[0]) journalSeed.positions[0].ticker = 'MUTATED';
+assert.equal(
+  service.getMorningJournalSeed().positions[0]?.ticker,
+  canonicalTicker,
+  'UI journal edits must not mutate the canonical prototype fixture',
+);
+
 const edgeCatalog = service.getStrategyLabCatalog('edge');
 assert.equal(edgeCatalog.provenance.isBacktestEvidence, false);
 assert.equal(edgeCatalog.provenance.mode, 'PROTOTYPE_SIMULATION');
