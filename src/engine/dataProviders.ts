@@ -1,5 +1,6 @@
 import { StockData, DailyBar, BandarmologyData } from '../types';
 import { MarketId } from './market/marketAdapter';
+import { normalizeSymbol } from './market/instrumentIdentity';
 import { MarketRegime } from './market/marketRegime';
 
 export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
@@ -126,9 +127,10 @@ function requireStock(
   ticker: string,
   providerId: string,
 ): StockData {
-  const stock = universe.find(item => item.ticker === ticker);
+  const canonicalTicker = normalizeSymbol(ticker);
+  const stock = universe.find(item => normalizeSymbol(item.ticker) === canonicalTicker);
   if (!stock) {
-    throw new ProviderDataError(providerId, ticker);
+    throw new ProviderDataError(providerId, canonicalTicker);
   }
   return stock;
 }
@@ -208,7 +210,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     const lastBar = stock.historicalBars[stock.historicalBars.length - 1];
     return {
-      ticker: stock.ticker,
+      ticker: normalizeSymbol(stock.ticker),
       price: stock.price,
       open: lastBar ? lastBar.open : stock.price,
       high: lastBar ? lastBar.high : stock.price,
