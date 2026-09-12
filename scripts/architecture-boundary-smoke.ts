@@ -73,8 +73,7 @@ const uiForbiddenBoundaries = [
   '/engine/providerGate',
   '/engine/providerCache',
   '/engine/providerHealth',
-  '/engine/ml/ensembleRouter',
-  '/engine/ml/models',
+  '/engine/ml/',
   '/engine/quantLabEngine',
   '/data/mockStocks',
 ];
@@ -85,6 +84,11 @@ const uiForbiddenBoundaries = [
  * migrated and therefore no longer have exceptions. Keeping remaining exceptions
  * exact prevents other UI surfaces from introducing direct engine/model execution.
  *
+ * All ML engine modules are forbidden to UI by default. MLLabView remains the
+ * only explicitly registered legacy research surface while its model execution,
+ * feature leakage audit, registry state and ensemble routing are migrated behind
+ * an application boundary incrementally.
+ *
  * Every exception must also be exercised by a real import. This prevents stale
  * allowlist entries from surviving after a migration and silently becoming a
  * reusable architecture bypass later.
@@ -93,8 +97,10 @@ const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   [
     'src/components/MLLabView.tsx',
     new Set([
-      '../engine/ml/ensembleRouter',
+      '../engine/ml/featureStore',
       '../engine/ml/models',
+      '../engine/ml/ensembleRouter',
+      '../engine/ml/modelRegistry',
     ]),
   ],
 ]);
@@ -257,5 +263,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; FinalDecisionModal and QuantLabView have no engine exceptions; remaining legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
