@@ -73,6 +73,10 @@ export default function App() {
       researchSnapshot.featureContext,
     );
   }, [researchApplication, researchSnapshot]);
+  const quantLabConditions = useMemo(
+    () => researchApplication.getQuantLabConditions(),
+    [researchApplication],
+  );
 
   const handleEvaluateDecisionCandidate = useCallback((stock: StockData) => {
     if (!researchSnapshot) {
@@ -84,6 +88,18 @@ export default function App() {
       researchSnapshot.featureContext,
     );
   }, [researchApplication, researchSnapshot]);
+
+  const handleEvaluateQuantLabConditions = useCallback((stocks: StockData[], conditionIds: string[]) => (
+    researchApplication.evaluateQuantLabConditions(stocks, conditionIds)
+  ), [researchApplication]);
+
+  const handleDiscoverQuantLabSetups = useCallback((stocks: StockData[]) => (
+    researchApplication.discoverQuantLabSetups(stocks)
+  ), [researchApplication]);
+
+  const handleFindQuantLabAnalogs = useCallback((stock: StockData, stocks: StockData[], limit: number) => (
+    researchApplication.findQuantLabAnalogs(stock, stocks, limit)
+  ), [researchApplication]);
 
   const handleSelectStock = useCallback((ticker: string) => { setSelectedTicker(ticker); setActiveTab('analysis'); }, []);
   const showNotification = (msg: string) => { setNotification(msg); setTimeout(() => setNotification(null), 4000); };
@@ -145,7 +161,7 @@ export default function App() {
           {activeTab === 'ml_lab' && <MLLabView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'opportunity_map' && <OpportunityMapView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'leaderboard' && <StrategyLeaderboardView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
-          {activeTab === 'quantlab' && <QuantLabView universe={universe} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
+          {activeTab === 'quantlab' && <QuantLabView universe={universe} conditionCatalog={quantLabConditions} evaluateConditionalProbability={handleEvaluateQuantLabConditions} runSetupDiscovery={handleDiscoverQuantLabSetups} findHistoricalAnalogs={handleFindQuantLabAnalogs} onSelectStock={handleSelectStock} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'screener' && <TodaysScreenerView universe={universe} onSelectStock={handleSelectStock} onNavigateToShortlist={() => setActiveTab('shortlist')} />}
           {activeTab === 'analysis' && selectedStock && <StockAnalysisView selectedStock={selectedStock} universe={universe} onSelectStock={setSelectedTicker} onAddToJournal={handleAddToJournal} />}
           {activeTab === 'gapdown' && <GapDownLabView universe={universe} onSelectStock={handleSelectStock} />}
