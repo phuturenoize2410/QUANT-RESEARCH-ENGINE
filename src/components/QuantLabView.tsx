@@ -8,10 +8,10 @@ import {
   History,
 } from 'lucide-react';
 import { StockData } from '../types';
-import {
+import type {
   QuantLabConditionDefinition,
   QuantLabConditionalEvaluation,
-} from '../engine/researchApplication';
+} from '../application/researchApplication';
 import {
   ConditionalProbabilityResult,
   HistoricalAnalog,
