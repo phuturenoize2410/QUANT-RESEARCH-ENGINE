@@ -75,7 +75,12 @@ export function providerSupportsMarket(
   metadata: ProviderMetadata,
   marketId: MarketId,
 ): boolean {
-  return Array.isArray(metadata.supportedMarkets) && metadata.supportedMarkets.includes(marketId);
+  if (!Array.isArray(metadata.supportedMarkets)) return false;
+
+  const canonicalTargetMarket = marketId.trim().toUpperCase();
+  return metadata.supportedMarkets.some(
+    market => typeof market === 'string' && market.trim().toUpperCase() === canonicalTargetMarket,
+  );
 }
 
 /**
