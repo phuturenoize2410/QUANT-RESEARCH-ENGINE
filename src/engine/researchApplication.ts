@@ -46,6 +46,13 @@ import {
 
 export type { ManualMorningPositionInput } from './execution';
 
+/**
+ * UI-facing snapshot contract owned by the application boundary.
+ * React consumers must not depend on the concrete research-pipeline module even
+ * while this contract is currently structurally identical to its pipeline snapshot.
+ */
+export type ResearchApplicationSnapshot = ResearchPipelineSnapshot;
+
 export type ExecutionCostSettingKey = 'buyFeePct' | 'sellFeePct' | 'slippagePct';
 
 /**
@@ -111,7 +118,7 @@ export interface MorningJournalSeedSnapshot {
 export class ResearchApplicationService {
   constructor(private readonly pipeline: ResearchPipeline) {}
 
-  refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
+  refresh(settings: StrategySettings): Promise<ResearchApplicationSnapshot> {
     return this.pipeline.refresh(settings);
   }
 
