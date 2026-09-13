@@ -82,8 +82,24 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
     issues.push('Provider capability contract is invalid: real-time support requires intraday support.');
   }
 
+  if (metadata.supportsRealtime && metadata.mode !== 'REALTIME') {
+    issues.push('Provider capability contract is invalid: real-time support requires REALTIME mode.');
+  }
+
   if (metadata.mode === 'REALTIME' && !metadata.supportsRealtime) {
     issues.push('Provider capability contract is invalid: REALTIME mode requires real-time support.');
+  }
+
+  if (metadata.mode === 'EOD' && metadata.supportsIntraday) {
+    issues.push('Provider capability contract is invalid: EOD mode cannot declare intraday support.');
+  }
+
+  if (metadata.mode === 'MOCK' && metadata.source !== 'MOCK_ENGINE') {
+    issues.push('Provider capability contract is invalid: MOCK mode requires MOCK_ENGINE source.');
+  }
+
+  if (metadata.source === 'MOCK_ENGINE' && metadata.mode !== 'MOCK') {
+    issues.push('Provider capability contract is invalid: MOCK_ENGINE source requires MOCK mode.');
   }
 
   return issues;
