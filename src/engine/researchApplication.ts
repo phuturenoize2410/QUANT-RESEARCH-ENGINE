@@ -17,6 +17,7 @@ import {
 import {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_RESEARCH_POSITION_LOTS,
+  normalizeExecutionCosts,
   totalFrictionPct,
 } from './executionPolicy';
 import { FeatureContext } from './featureContext';
@@ -141,10 +142,16 @@ export class ResearchApplicationService {
   ): StrategySettings {
     const parsed = Number.parseFloat(rawValue);
     const fallback = DEFAULT_EXECUTION_COSTS[key];
+    const normalizedCosts = normalizeExecutionCosts({
+      buyFeePct: settings.buyFeePct,
+      sellFeePct: settings.sellFeePct,
+      slippagePct: settings.slippagePct,
+      [key]: Number.isFinite(parsed) ? parsed : fallback,
+    });
 
     return {
       ...settings,
-      [key]: Number.isFinite(parsed) ? parsed : fallback,
+      [key]: normalizedCosts[key],
     };
   }
 
