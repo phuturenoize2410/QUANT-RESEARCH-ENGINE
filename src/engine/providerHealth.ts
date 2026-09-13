@@ -23,20 +23,26 @@ const MARKET_DATA_SOURCES: readonly MarketDataSource[] = [
 ];
 const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'DELAYED', 'EOD', 'REALTIME'];
 
-function parseTimestamp(value?: string): number | undefined {
-  if (!value) return undefined;
+function parseTimestamp(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function canonicalTimestamp(value?: string): string | undefined {
+function canonicalTimestamp(value: unknown): string | undefined {
   const parsed = parseTimestamp(value);
   return parsed === undefined ? undefined : new Date(parsed).toISOString();
 }
 
-function normalizeNonNegativeFinite(value?: number): number | undefined {
-  if (value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+function normalizeNonNegativeFinite(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
   return value;
+}
+
+function canonicalHealthMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
@@ -102,18 +108,28 @@ export function normalizeProviderHealth(
   health: ProviderHealth,
   nowMs: number = Date.now(),
 ): ProviderHealth {
-  const reportedStatus = (health as { status?: unknown }).status;
+  const runtimeHealth = health as ProviderHealth & {
+    status?: unknown;
+    checkedAt?: unknown;
+    lastSuccessfulSyncAt?: unknown;
+    latencyMs?: unknown;
+    staleAfterSeconds?: unknown;
+    message?: unknown;
+  };
+  const reportedStatus = runtimeHealth.status;
   const hasValidStatus = isProviderHealthStatus(reportedStatus);
-  const checkedAtMs = parseTimestamp(health.checkedAt);
-  const lastSuccessfulSyncMs = parseTimestamp(health.lastSuccessfulSyncAt);
+  const checkedAtMs = parseTimestamp(runtimeHealth.checkedAt);
+  const lastSuccessfulSyncMs = parseTimestamp(runtimeHealth.lastSuccessfulSyncAt);
+  const canonicalMessage = canonicalHealthMessage(runtimeHealth.message);
 
   let normalized: ProviderHealth = {
     ...health,
     status: hasValidStatus ? reportedStatus : 'UNAVAILABLE',
-    checkedAt: canonicalTimestamp(health.checkedAt),
-    lastSuccessfulSyncAt: canonicalTimestamp(health.lastSuccessfulSyncAt),
-    latencyMs: normalizeNonNegativeFinite(health.latencyMs),
-    staleAfterSeconds: normalizeNonNegativeFinite(health.staleAfterSeconds),
+    checkedAt: canonicalTimestamp(runtimeHealth.checkedAt) ?? '',
+    lastSuccessfulSyncAt: canonicalTimestamp(runtimeHealth.lastSuccessfulSyncAt),
+    latencyMs: normalizeNonNegativeFinite(runtimeHealth.latencyMs),
+    staleAfterSeconds: normalizeNonNegativeFinite(runtimeHealth.staleAfterSeconds),
+    message: canonicalMessage,
   };
 
   // Provider payloads cross a runtime boundary. TypeScript cannot guarantee that
@@ -129,11 +145,15 @@ export function normalizeProviderHealth(
     };
   }
 
-  if (health.latencyMs !== undefined && normalized.latencyMs === undefined) {
+  if (runtimeHealth.message !== undefined && canonicalMessage === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid provider health message ignored.');
+  }
+
+  if (runtimeHealth.latencyMs !== undefined && normalized.latencyMs === undefined) {
     normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
   }
 
-  if (health.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
+  if (runtimeHealth.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
     normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
   }
 
@@ -150,7 +170,7 @@ export function normalizeProviderHealth(
 
   const staleAfterSeconds = normalized.staleAfterSeconds;
 
-  if (health.lastSuccessfulSyncAt && lastSuccessfulSyncMs === undefined) {
+  if (runtimeHealth.lastSuccessfulSyncAt !== undefined && lastSuccessfulSyncMs === undefined) {
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
   }
 
