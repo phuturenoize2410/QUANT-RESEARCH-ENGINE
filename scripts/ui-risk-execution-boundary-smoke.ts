@@ -40,8 +40,6 @@ function isDirectDecisionPolicyImport(specifier: string): boolean {
  * the debt register cannot silently accumulate obsolete exemptions.
  */
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
-  ['src/components/FinalDecisionModal.tsx', new Set(['../engine/researchApplication'])],
-  ['src/components/QuantLabView.tsx', new Set(['../engine/researchApplication'])],
   ['src/components/MorningExitDashboardView.tsx', new Set(['../engine/execution'])],
 ]);
 
