@@ -4,6 +4,7 @@ import { MockMarketDataProvider } from '../src/engine/dataProviders';
 import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
 import {
   evaluateProviderReadiness,
+  getProviderReadinessMatrix,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
 
@@ -168,6 +169,34 @@ await expectHealthBoundaryFailure(
     metadata.supportsRealtime = true;
   },
   'supportsRealtime/supportsIntraday',
+);
+
+const readinessMatrixProvider = new MockMarketDataProvider();
+const readinessMatrixMetadata = readinessMatrixProvider.metadata as ProviderMetadata;
+readinessMatrixMetadata.source = 'FREE_API';
+readinessMatrixMetadata.mode = 'EOD';
+readinessMatrixMetadata.supportsIntraday = true;
+readinessMatrixMetadata.supportsRealtime = false;
+
+const readinessMatrix = await getProviderReadinessMatrix(
+  readinessMatrixProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-13T02:00:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-13T01:59:00.000Z',
+  },
+  Date.parse('2026-09-13T02:00:00.000Z'),
+  'IDX',
+);
+
+assert.equal(
+  readinessMatrix.EOD_RESEARCH.allowed,
+  false,
+  'matrix-only readiness callers must not bypass canonical runtime metadata validation',
+);
+assert.ok(
+  readinessMatrix.EOD_RESEARCH.reasons.includes('Provider is unavailable.'),
+  'invalid runtime provider metadata must be reflected as canonical unavailable health in readiness',
 );
 
 console.log('Provider metadata contract smoke checks passed.');
