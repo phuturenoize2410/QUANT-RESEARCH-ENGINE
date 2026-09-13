@@ -7,6 +7,7 @@ import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
 import {
   evaluateProviderReadiness,
   getProviderReadinessMatrix,
+  providerSupportsMarket,
   validateProviderMetadata,
 } from '../src/engine/providerPolicy';
 
@@ -124,6 +125,34 @@ assert.deepEqual(
   validateProviderMetadata(validMockMetadata),
   [],
   'mock adapters should remain valid when source and delivery mode agree',
+);
+
+const mixedCaseMarketMetadata = {
+  ...baseMetadata,
+  id: 'mixed-case-market-provider',
+  supportedMarkets: [' idx '],
+} as unknown as ProviderMetadata;
+
+assert.equal(
+  providerSupportsMarket(mixedCaseMarketMetadata, 'IDX'),
+  true,
+  'market compatibility must use the same trim/case normalization as canonical provider metadata snapshots',
+);
+
+const mixedCaseDirectReadiness = evaluateProviderReadiness(
+  mixedCaseMarketMetadata,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-13T02:00:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-13T01:59:00.000Z',
+  },
+  'EOD_RESEARCH',
+  'IDX',
+);
+assert.equal(
+  mixedCaseDirectReadiness.allowed,
+  true,
+  'direct readiness must not disagree with the canonical snapshot path only because provider market casing differs',
 );
 
 const malformedRuntimeMetadata = {
