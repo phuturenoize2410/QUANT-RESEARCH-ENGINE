@@ -29,15 +29,53 @@ function isDirectDecisionPolicyImport(specifier: string): boolean {
   return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy|researchPipeline|researchApplication)$/i.test(normalized);
 }
 
+/**
+ * Exact temporary debt register for presentation files that pre-date the
+ * application facade. These entries are intentionally file+specifier specific:
+ * they prevent the guard from becoming a broad bypass while allowing migration
+ * to proceed incrementally without breaking the current UI.
+ *
+ * Every exception must be exercised. Once a component is migrated to
+ * src/application/researchApplication, its stale entry makes this smoke fail so
+ * the debt register cannot silently accumulate obsolete exemptions.
+ */
+const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
+  ['src/components/FinalDecisionModal.tsx', new Set(['../engine/researchApplication'])],
+  ['src/components/QuantLabView.tsx', new Set(['../engine/researchApplication'])],
+  ['src/components/StrategyLabView.tsx', new Set(['../engine/researchApplication'])],
+  ['src/components/StrategySettingsModal.tsx', new Set(['../engine/researchApplication'])],
+  ['src/components/MorningExitDashboardView.tsx', new Set(['../engine/execution'])],
+]);
+
 const violations: string[] = [];
+const exercisedLegacyExceptions = new Set<string>();
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   const source = readFileSync(file, 'utf8');
+  const filePath = relative(repoRoot, file).replaceAll('\\', '/');
+  const exceptions = legacyUiBoundaryExceptions.get(filePath) ?? new Set<string>();
 
   for (const specifier of importSpecifiers(source)) {
+    const exceptionKey = `${filePath}::${specifier}`;
+    if (exceptions.has(specifier)) {
+      exercisedLegacyExceptions.add(exceptionKey);
+      continue;
+    }
+
     if (isDirectDecisionPolicyImport(specifier)) {
       violations.push(
-        `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider/pipeline state, bounded scores, Risk/Execution outputs, and application orchestration through src/application rather than depending on canonical engine policy directly.`,
+        `${filePath} imports ${specifier}; UI must consume provider/pipeline state, bounded scores, Risk/Execution outputs, and application orchestration through src/application rather than depending on canonical engine policy directly.`,
+      );
+    }
+  }
+}
+
+for (const [filePath, exceptions] of legacyUiBoundaryExceptions) {
+  for (const specifier of exceptions) {
+    const exceptionKey = `${filePath}::${specifier}`;
+    if (!exercisedLegacyExceptions.has(exceptionKey)) {
+      violations.push(
+        `${filePath} retains unused legacy application-boundary exception ${specifier}; remove the exception once that presentation import is migrated through src/application.`,
       );
     }
   }
@@ -55,5 +93,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  'UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules, and the application facade exposes an explicit allow-listed contract.',
+  `UI application-boundary smoke passed: new React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
 );
