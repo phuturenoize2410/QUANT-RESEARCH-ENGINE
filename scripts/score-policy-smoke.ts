@@ -37,6 +37,16 @@ assert.equal(clampScore(120, { min: Number.NaN, max: 80 }), 80);
 assert.equal(clampScore(Number.NaN, { min: Number.NaN, max: Number.POSITIVE_INFINITY }), 0);
 assert.equal(roundScore(72.6, { min: Number.NaN, max: Number.POSITIVE_INFINITY }), 73);
 
+// Runtime score metadata can come from external configuration despite compile-time
+// typing. Malformed shapes must fail closed to the canonical 0-100 contract.
+assert.deepEqual(normalizeScoreBounds(null), NORMALIZED_SCORE_BOUNDS);
+assert.deepEqual(normalizeScoreBounds(['0', '100']), NORMALIZED_SCORE_BOUNDS);
+assert.deepEqual(normalizeScoreBounds({ min: '10', max: '90' }), NORMALIZED_SCORE_BOUNDS);
+assert.deepEqual(normalizeScoreBounds({ min: 10, max: '90' }), { min: 10, max: 100 });
+assert.deepEqual(normalizeScoreBounds({ min: -20, max: 80 }), { min: -20, max: 80 });
+assert.equal(clampScore(150, null as unknown as { min: number; max: number }), 100);
+assert.equal(roundScore(Number.NaN, ['bad'] as unknown as { min: number; max: number }), 0);
+
 assert.equal(clampNormalizedScore(-5), 0);
 assert.equal(clampNormalizedScore(101), 100);
 assert.equal(roundNormalizedScore(72.6), 73);
