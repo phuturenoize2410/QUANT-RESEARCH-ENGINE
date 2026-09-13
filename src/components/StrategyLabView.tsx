@@ -3,7 +3,7 @@ import { Sparkles } from 'lucide-react';
 import {
   StrategyLabCatalogSnapshot,
   StrategyLabSortMetric,
-} from '../engine/researchApplication';
+} from '../application/researchApplication';
 import { StockData } from '../types';
 
 interface StrategyLabViewProps {
