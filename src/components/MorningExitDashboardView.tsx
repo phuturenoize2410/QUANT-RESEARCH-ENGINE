@@ -13,7 +13,7 @@ import {
   Info
 } from 'lucide-react';
 import { MorningPosition, ExitDecisionStatus, StockData } from '../types';
-import type { ManualMorningPositionInput } from '../engine/execution';
+import type { ManualMorningPositionInput } from '../application/researchApplication';
 
 interface MorningExitDashboardViewProps {
   positions: MorningPosition[];
