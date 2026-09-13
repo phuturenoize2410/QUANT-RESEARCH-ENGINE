@@ -17,7 +17,7 @@ import {
   Layers,
   ChevronRight
 } from 'lucide-react';
-import { DecisionCandidateEvaluation } from '../engine/researchApplication';
+import type { DecisionCandidateEvaluation } from '../application/researchApplication';
 import { StockData } from '../types';
 
 interface FinalDecisionModalProps {
