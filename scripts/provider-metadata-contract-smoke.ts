@@ -1,4 +1,6 @@
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ProviderMetadata } from '../src/engine/dataProviders';
 import { MockMarketDataProvider } from '../src/engine/dataProviders';
 import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
@@ -247,6 +249,23 @@ assert.equal(
 assert.ok(
   readinessMatrix.EOD_RESEARCH.reasons.includes('Provider is unavailable.'),
   'invalid runtime provider metadata must be reflected as canonical unavailable health in readiness',
+);
+
+const researchPipelineSource = readFileSync(
+  resolve(process.cwd(), 'src/engine/researchPipeline.ts'),
+  'utf8',
+);
+assert.ok(
+  researchPipelineSource.includes(
+    'buildFeatureProvenance(vector, featureContext, providerStatus.metadata)',
+  ),
+  'feature provenance must use the canonical metadata captured by provider status before ingestion',
+);
+assert.ok(
+  !researchPipelineSource.includes(
+    'buildFeatureProvenance(vector, featureContext, this.provider.metadata)',
+  ),
+  'feature provenance must not re-read mutable raw provider metadata after the readiness boundary',
 );
 
 console.log('Provider metadata contract smoke checks passed.');
