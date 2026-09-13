@@ -14,6 +14,16 @@ import {
   QuantMLEnsembleEngine,
   PortfolioMLRiskEngine,
 } from '../engine/ml/ensembleRouter';
+import {
+  CHAMPION_OVERNIGHT_MODEL,
+  CHALLENGER_OVERNIGHT_MODEL,
+  getChampionChallengerComparison,
+  WALK_FORWARD_RECORDS,
+  ACTIVE_DRIFT_METRICS,
+  RETRAINING_HISTORY,
+  INITIAL_ACTUAL_TRADE_RESIDUALS,
+  ActualTradeResidual,
+} from '../engine/ml/modelRegistry';
 
 /**
  * Presentation-facing read model for the ML Lab.
@@ -38,4 +48,26 @@ export function evaluateMLLabReadModel(currentStock: StockData, universe: StockD
   };
 }
 
+/**
+ * Registry-facing presentation snapshot for the ML Lab.
+ *
+ * Keep champion/challenger, walk-forward, drift, retraining and residual seed
+ * data behind the same application seam as live ML evaluation. This prevents
+ * React from coupling directly to model-registry implementation details while
+ * preserving the current simulated research behavior verbatim.
+ */
+export function getMLLabRegistryReadModel() {
+  return {
+    championOvernightModel: CHAMPION_OVERNIGHT_MODEL,
+    challengerOvernightModel: CHALLENGER_OVERNIGHT_MODEL,
+    championComparison: getChampionChallengerComparison(),
+    walkForwardRecords: WALK_FORWARD_RECORDS,
+    activeDriftMetrics: ACTIVE_DRIFT_METRICS,
+    retrainingHistory: RETRAINING_HISTORY,
+    initialActualTradeResiduals: INITIAL_ACTUAL_TRADE_RESIDUALS,
+  };
+}
+
 export type MLLabReadModel = ReturnType<typeof evaluateMLLabReadModel>;
+export type MLLabRegistryReadModel = ReturnType<typeof getMLLabRegistryReadModel>;
+export type { ActualTradeResidual };
