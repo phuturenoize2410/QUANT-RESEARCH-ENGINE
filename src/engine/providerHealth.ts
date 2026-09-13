@@ -137,10 +137,13 @@ export function normalizeProviderHealth(
     normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
   }
 
+  // checkedAt anchors the health snapshot itself. If this timestamp cannot be
+  // trusted, downstream research cannot know whether the reported status is
+  // current, so fail closed rather than treating it as a non-blocking warning.
   if (checkedAtMs === undefined) {
-    normalized = degradeHealth(normalized, 'Provider health check timestamp is invalid.');
+    normalized = failHealthClosed(normalized, 'Provider health check timestamp is invalid.');
   } else if (checkedAtMs > nowMs + MAX_CLOCK_SKEW_MS) {
-    normalized = degradeHealth(normalized, 'Provider health check timestamp is unexpectedly in the future.');
+    normalized = failHealthClosed(normalized, 'Provider health check timestamp is unexpectedly in the future.');
   }
 
   if (normalized.status === 'UNAVAILABLE') return normalized;
