@@ -254,6 +254,7 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
 
   const hasValidSource = isMarketDataSource(runtimeMetadata.source);
   const hasValidMode = isProviderMode(runtimeMetadata.mode);
+  const hasValidIntradayCapability = typeof runtimeMetadata.supportsIntraday === 'boolean';
   const hasValidRealtimeCapability = typeof runtimeMetadata.supportsRealtime === 'boolean';
 
   // Capability semantics are part of the provider contract, not a UI concern.
@@ -266,6 +267,22 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
     (runtimeMetadata.mode === 'REALTIME') !== runtimeMetadata.supportsRealtime
   ) {
     issues.push('mode/supportsRealtime');
+  }
+  if (
+    hasValidRealtimeCapability &&
+    hasValidIntradayCapability &&
+    runtimeMetadata.supportsRealtime &&
+    !runtimeMetadata.supportsIntraday
+  ) {
+    issues.push('supportsRealtime/supportsIntraday');
+  }
+  if (
+    hasValidMode &&
+    hasValidIntradayCapability &&
+    runtimeMetadata.mode === 'EOD' &&
+    runtimeMetadata.supportsIntraday
+  ) {
+    issues.push('mode/supportsIntraday');
   }
   if (
     hasValidSource &&
