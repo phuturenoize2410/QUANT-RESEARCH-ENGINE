@@ -18,14 +18,15 @@ function importSpecifiers(source: string): string[] {
 }
 
 /**
- * UI may render canonical decision outputs, but it must not execute Risk/Execution
- * policy or re-apply canonical score bounds itself. Keeping scorePolicy behind the
- * application/pipeline boundary prevents React surfaces from drifting away from
- * the same bounded scores consumed by strategy, ranking and decision services.
+ * UI may render canonical application outputs, but it must not execute
+ * Risk/Execution policy, re-apply canonical score bounds, or depend directly on
+ * the concrete research-pipeline contract. Keeping these modules behind the
+ * application boundary prevents React surfaces from drifting away from the same
+ * provider -> feature -> strategy -> risk/execution flow used by the engine.
  */
 function isDirectDecisionPolicyImport(specifier: string): boolean {
   const normalized = specifier.replaceAll('\\', '/');
-  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy)$/i.test(normalized);
+  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy|researchPipeline)$/i.test(normalized);
 }
 
 const violations: string[] = [];
@@ -36,16 +37,16 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   for (const specifier of importSpecifiers(source)) {
     if (isDirectDecisionPolicyImport(specifier)) {
       violations.push(
-        `${relative(repoRoot, file)} imports ${specifier}; UI must consume bounded score and Risk/Execution outputs through the application/pipeline boundary rather than executing canonical policy directly.`,
+        `${relative(repoRoot, file)} imports ${specifier}; UI must consume provider/pipeline state, bounded scores, and Risk/Execution outputs through the application boundary rather than depending on canonical engine policy directly.`,
       );
     }
   }
 }
 
 if (violations.length > 0) {
-  throw new Error(`UI decision-policy boundary violations:\n- ${violations.join('\n- ')}`);
+  throw new Error(`UI application-boundary violations:\n- ${violations.join('\n- ')}`);
 }
 
 console.log(
-  'UI decision-policy boundary smoke passed: React surfaces cannot directly import scorePolicy or risk/execution engine modules and must consume canonical outputs through the application/pipeline boundary.',
+  'UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, scorePolicy, or risk/execution engine modules and must consume canonical outputs through researchApplication.',
 );
