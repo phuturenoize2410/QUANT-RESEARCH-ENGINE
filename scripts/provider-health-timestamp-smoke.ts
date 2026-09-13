@@ -33,11 +33,24 @@ const invalidCheckedAt = normalize({
 if (invalidCheckedAt.checkedAt !== undefined) {
   throw new Error('invalid checkedAt values must be removed from the canonical provider-health payload.');
 }
-if (invalidCheckedAt.status !== 'DEGRADED') {
-  throw new Error('invalid checkedAt values must degrade provider health.');
+if (invalidCheckedAt.status !== 'UNAVAILABLE') {
+  throw new Error('invalid checkedAt values must fail provider health closed as unavailable.');
 }
 if (!invalidCheckedAt.message?.includes('health check timestamp is invalid')) {
   throw new Error('invalid checkedAt values must expose an explicit diagnostic.');
+}
+
+const futureCheckedAt = normalize({
+  status: 'HEALTHY',
+  checkedAt: '2026-09-09T06:36:00.000Z',
+  lastSuccessfulSyncAt: '2026-09-09T06:29:30.000Z',
+});
+
+if (futureCheckedAt.status !== 'UNAVAILABLE') {
+  throw new Error('health checks beyond canonical clock-skew tolerance must fail closed as unavailable.');
+}
+if (!futureCheckedAt.message?.includes('health check timestamp is unexpectedly in the future')) {
+  throw new Error('future checkedAt rejection must expose an explicit diagnostic.');
 }
 
 const invalidLastSync = normalize({
@@ -94,4 +107,4 @@ if (unavailableInvalidTimestamp.status !== 'UNAVAILABLE') {
   throw new Error('canonicalization must preserve terminal UNAVAILABLE status.');
 }
 
-console.log('Provider health timestamp smoke passed: external timestamps are canonicalized, malformed values are stripped, and impossible health/sync chronology is degraded before downstream consumption.');
+console.log('Provider health timestamp smoke passed: external timestamps are canonicalized, untrustworthy health-capture times fail closed, and sync chronology remains explicitly diagnosed before downstream consumption.');
