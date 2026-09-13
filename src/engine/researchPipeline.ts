@@ -189,7 +189,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     const featureProvenanceByTicker = Object.fromEntries(
       Object.entries(featuresByTicker).map(([ticker, vector]) => [
         ticker,
-        buildFeatureProvenance(vector, featureContext, this.provider.metadata),
+        buildFeatureProvenance(vector, featureContext, providerStatus.metadata),
       ]),
     );
 
