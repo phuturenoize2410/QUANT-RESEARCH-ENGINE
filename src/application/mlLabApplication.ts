@@ -24,6 +24,7 @@ import {
   INITIAL_ACTUAL_TRADE_RESIDUALS,
   ActualTradeResidual,
 } from '../engine/ml/modelRegistry';
+import { MLModelDefinition } from '../engine/ml/types';
 
 /**
  * Presentation-facing read model for the ML Lab.
@@ -48,23 +49,42 @@ export function evaluateMLLabReadModel(currentStock: StockData, universe: StockD
   };
 }
 
+function cloneRegistryModel(model: MLModelDefinition): MLModelDefinition {
+  return {
+    ...model,
+    features: [...model.features],
+    hyperparameters: { ...model.hyperparameters },
+    metrics: { ...model.metrics },
+    calibrationBuckets: model.calibrationBuckets.map(bucket => ({ ...bucket })),
+  };
+}
+
 /**
  * Registry-facing presentation snapshot for the ML Lab.
  *
- * Keep champion/challenger, walk-forward, drift, retraining and residual seed
- * data behind the same application seam as live ML evaluation. This prevents
- * React from coupling directly to model-registry implementation details while
- * preserving the current simulated research behavior verbatim.
+ * Registry constants are engine-owned source-of-truth. Return defensive copies
+ * here so a future React consumer cannot mutate the model registry simply by
+ * sorting, editing or storing a presentation snapshot in local component state.
+ * The values remain identical; only object identity is isolated at the
+ * application boundary.
  */
 export function getMLLabRegistryReadModel() {
+  const comparison = getChampionChallengerComparison();
+
   return {
-    championOvernightModel: CHAMPION_OVERNIGHT_MODEL,
-    challengerOvernightModel: CHALLENGER_OVERNIGHT_MODEL,
-    championComparison: getChampionChallengerComparison(),
-    walkForwardRecords: WALK_FORWARD_RECORDS,
-    activeDriftMetrics: ACTIVE_DRIFT_METRICS,
-    retrainingHistory: RETRAINING_HISTORY,
-    initialActualTradeResiduals: INITIAL_ACTUAL_TRADE_RESIDUALS,
+    championOvernightModel: cloneRegistryModel(CHAMPION_OVERNIGHT_MODEL),
+    challengerOvernightModel: cloneRegistryModel(CHALLENGER_OVERNIGHT_MODEL),
+    championComparison: {
+      ...comparison,
+      champion: cloneRegistryModel(comparison.champion),
+      challenger: cloneRegistryModel(comparison.challenger),
+      recommendationRationale: [...comparison.recommendationRationale],
+      metricComparisons: comparison.metricComparisons.map(metric => ({ ...metric })),
+    },
+    walkForwardRecords: WALK_FORWARD_RECORDS.map(record => ({ ...record })),
+    activeDriftMetrics: ACTIVE_DRIFT_METRICS.map(metric => ({ ...metric })),
+    retrainingHistory: RETRAINING_HISTORY.map(entry => ({ ...entry })),
+    initialActualTradeResiduals: INITIAL_ACTUAL_TRADE_RESIDUALS.map(residual => ({ ...residual })),
   };
 }
 
