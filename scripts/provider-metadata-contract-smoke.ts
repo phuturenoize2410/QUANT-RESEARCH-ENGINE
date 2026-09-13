@@ -1,5 +1,7 @@
 import { strict as assert } from 'node:assert';
 import type { ProviderMetadata } from '../src/engine/dataProviders';
+import { MockMarketDataProvider } from '../src/engine/dataProviders';
+import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
 import {
   evaluateProviderReadiness,
   validateProviderMetadata,
@@ -68,6 +70,17 @@ expectMetadataIssue(
 expectMetadataIssue(
   {
     ...baseMetadata,
+    id: 'realtime-without-intraday-capability',
+    mode: 'REALTIME',
+    supportsRealtime: true,
+    supportsIntraday: false,
+  },
+  'real-time support requires intraday support',
+);
+
+expectMetadataIssue(
+  {
+    ...baseMetadata,
     id: 'mock-mode-non-mock-source',
     mode: 'MOCK',
   },
@@ -108,6 +121,53 @@ assert.deepEqual(
   validateProviderMetadata(validMockMetadata),
   [],
   'mock adapters should remain valid when source and delivery mode agree',
+);
+
+async function expectHealthBoundaryFailure(
+  mutate: (metadata: ProviderMetadata) => void,
+  expectedFragment: string,
+): Promise<void> {
+  const provider = new MockMarketDataProvider();
+  const metadata = provider.metadata as ProviderMetadata;
+  mutate(metadata);
+  const snapshot = await getProviderHealthSnapshot(
+    provider,
+    {
+      status: 'HEALTHY',
+      checkedAt: '2026-09-13T02:00:00.000Z',
+    },
+    Date.parse('2026-09-13T02:00:00.000Z'),
+  );
+
+  assert.equal(
+    snapshot.health.status,
+    'UNAVAILABLE',
+    'contradictory provider capabilities must fail closed at the shared health/status boundary',
+  );
+  assert.ok(
+    snapshot.health.message?.includes(expectedFragment),
+    `expected health boundary metadata context containing "${expectedFragment}", got: ${snapshot.health.message}`,
+  );
+}
+
+await expectHealthBoundaryFailure(
+  metadata => {
+    metadata.source = 'FREE_API';
+    metadata.mode = 'EOD';
+    metadata.supportsIntraday = true;
+    metadata.supportsRealtime = false;
+  },
+  'mode/supportsIntraday',
+);
+
+await expectHealthBoundaryFailure(
+  metadata => {
+    metadata.source = 'FREE_API';
+    metadata.mode = 'REALTIME';
+    metadata.supportsIntraday = false;
+    metadata.supportsRealtime = true;
+  },
+  'supportsRealtime/supportsIntraday',
 );
 
 console.log('Provider metadata contract smoke checks passed.');
