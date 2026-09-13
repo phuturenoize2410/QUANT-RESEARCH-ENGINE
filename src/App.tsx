@@ -18,9 +18,9 @@ import {
   createPrototypeResearchApplicationService,
   ExecutionCostSettingKey,
   ManualMorningPositionInput,
+  ResearchApplicationSnapshot,
   StrategyLabSortMetric,
 } from './engine/researchApplication';
-import { ResearchPipelineSnapshot } from './engine/researchPipeline';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
 export default function App() {
@@ -42,7 +42,7 @@ export default function App() {
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [positions, setPositions] = useState<MorningPosition[]>(() => morningJournalSeed.positions);
   const [notification, setNotification] = useState<string | null>(null);
-  const [researchSnapshot, setResearchSnapshot] = useState<ResearchPipelineSnapshot | null>(null);
+  const [researchSnapshot, setResearchSnapshot] = useState<ResearchApplicationSnapshot | null>(null);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
 
   useEffect(() => {
