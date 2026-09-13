@@ -4,6 +4,7 @@ import { join, relative, resolve } from 'node:path';
 const repoRoot = resolve(process.cwd());
 const srcRoot = join(repoRoot, 'src');
 const uiRoots = [join(srcRoot, 'App.tsx'), join(srcRoot, 'components')];
+const applicationFacade = join(srcRoot, 'application', 'researchApplication.ts');
 
 function collectTypeScriptFiles(path: string): string[] {
   const stat = statSync(path);
@@ -42,10 +43,17 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   }
 }
 
+const facadeSource = readFileSync(applicationFacade, 'utf8');
+if (/export\s+\*\s+from\s+['"][^'"]*engine\/researchApplication['"]/i.test(facadeSource)) {
+  violations.push(
+    `${relative(repoRoot, applicationFacade)} wildcard re-exports engine/researchApplication; the presentation facade must explicitly whitelist its public application contract so new engine symbols cannot leak into UI dependencies.`,
+  );
+}
+
 if (violations.length > 0) {
   throw new Error(`UI application-boundary violations:\n- ${violations.join('\n- ')}`);
 }
 
 console.log(
-  'UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules and must consume canonical outputs through the application facade.',
+  'UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules, and the application facade exposes an explicit allow-listed contract.',
 );

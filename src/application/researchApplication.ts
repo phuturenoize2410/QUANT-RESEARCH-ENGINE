@@ -1,9 +1,23 @@
 /**
  * Stable application-layer facade for React and other presentation surfaces.
  *
- * The implementation remains in the engine package while architecture debt is
- * retired incrementally, but presentation code must depend on this facade rather
- * than importing quant-core orchestration directly. This gives future provider
- * adapters and application DTOs a stable boundary without changing UI behavior.
+ * Keep this surface explicit: presentation code may depend on application use
+ * cases and DTOs, but new engine exports must not become UI dependencies merely
+ * because they were added to the implementation module.
  */
-export * from '../engine/researchApplication';
+export {
+  ResearchApplicationService,
+  createPrototypeResearchApplicationService,
+} from '../engine/researchApplication';
+
+export type {
+  DecisionCandidateEvaluation,
+  ExecutionCostSettingKey,
+  ManualMorningPositionInput,
+  MorningJournalSeedSnapshot,
+  QuantLabConditionDefinition,
+  QuantLabConditionalEvaluation,
+  ResearchApplicationSnapshot,
+  StrategyLabCatalogSnapshot,
+  StrategyLabSortMetric,
+} from '../engine/researchApplication';
