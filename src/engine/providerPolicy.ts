@@ -206,10 +206,12 @@ export async function getProviderReadinessMatrix(
   nowMs: number = Date.now(),
   targetMarket?: MarketId,
 ): Promise<Record<ResearchUseCase, ProviderReadiness>> {
-  const health = healthSnapshot
-    ? normalizeProviderHealth(healthSnapshot, nowMs)
-    : await captureProviderHealth(provider, nowMs);
-  return buildReadinessMatrix(provider.metadata, health, targetMarket);
+  // Always cross the same canonical provider-status boundary used by the full
+  // status snapshot. This prevents callers of the matrix-only API from bypassing
+  // runtime metadata normalization/fail-closed validation as new free or paid
+  // provider adapters are introduced.
+  const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
+  return buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket);
 }
 
 /**
