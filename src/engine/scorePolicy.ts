@@ -15,14 +15,24 @@ export const ESTABLISHED_SCORE_BOUNDS: Readonly<ScoreBounds> = Object.freeze({ m
 /** Walk-forward robustness intentionally keeps a stricter floor for degraded out-of-sample results. */
 export const RESEARCH_ROBUSTNESS_SCORE_BOUNDS: Readonly<ScoreBounds> = Object.freeze({ min: 10, max: 100 });
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Score contracts may eventually arrive from strategy configuration or external
- * research metadata. Normalize malformed bounds at the policy boundary so NaN
- * or Infinity can never propagate into strategy ranking, risk decisions, or UI.
+ * research metadata. Normalize malformed bounds at the policy boundary so NaN,
+ * Infinity, strings, arrays, or nullish runtime payloads can never propagate into
+ * strategy ranking, risk decisions, or UI.
  */
-export function normalizeScoreBounds(bounds: ScoreBounds = NORMALIZED_SCORE_BOUNDS): ScoreBounds {
-  const candidateMin = Number.isFinite(bounds.min) ? bounds.min : NORMALIZED_SCORE_BOUNDS.min;
-  const candidateMax = Number.isFinite(bounds.max) ? bounds.max : NORMALIZED_SCORE_BOUNDS.max;
+export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): ScoreBounds {
+  const candidate = isRecord(bounds) ? bounds : NORMALIZED_SCORE_BOUNDS;
+  const candidateMin = typeof candidate.min === 'number' && Number.isFinite(candidate.min)
+    ? candidate.min
+    : NORMALIZED_SCORE_BOUNDS.min;
+  const candidateMax = typeof candidate.max === 'number' && Number.isFinite(candidate.max)
+    ? candidate.max
+    : NORMALIZED_SCORE_BOUNDS.max;
 
   return {
     min: Math.min(candidateMin, candidateMax),
