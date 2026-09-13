@@ -136,6 +136,17 @@ export class DefaultResearchPipeline implements ResearchPipeline {
   }
 
   async refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
+    // Prototype seeding is part of the mock adapter's refresh lifecycle. Complete
+    // it before capturing canonical health/readiness so the returned snapshot
+    // describes the provider state that actually supplied the universe below.
+    // Non-mock providers remain untouched and are still gated before ingestion.
+    if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
+      const seeded = this.seedUniverse(settings);
+      if (this.provider instanceof MockMarketDataProvider) {
+        this.provider.setUniverse(seeded);
+      }
+    }
+
     const providerStatus = await getProviderStatusSnapshot(
       this.provider,
       undefined,
@@ -146,13 +157,6 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     // The provider-policy layer owns all market/capability/health decisions.
     // Orchestration only enforces the canonical decision before ingestion.
     assertProviderReady(providerStatus, 'EOD_RESEARCH');
-
-    if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
-      const seeded = this.seedUniverse(settings);
-      if (this.provider instanceof MockMarketDataProvider) {
-        this.provider.setUniverse(seeded);
-      }
-    }
 
     const universe = await this.provider.getUniverse();
 

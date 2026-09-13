@@ -76,6 +76,26 @@ assert.equal(
 );
 
 const snapshot = await service.refresh(DEFAULT_STRATEGY_SETTINGS);
+assert.equal(
+  snapshot.providerHealth.status,
+  'HEALTHY',
+  'prototype snapshot health must describe the seeded provider state that supplied its universe',
+);
+assert.ok(
+  snapshot.providerHealth.lastSuccessfulSyncAt,
+  'prototype snapshot should expose the successful mock-universe refresh timestamp',
+);
+assert.equal(
+  snapshot.providerReadiness.EOD_RESEARCH.allowed,
+  true,
+  'seeded prototype provider should remain eligible for explicitly simulated EOD research',
+);
+assert.equal(
+  snapshot.providerReadiness.EOD_RESEARCH.warnings.some(warning => /degraded/i.test(warning)),
+  false,
+  'post-refresh readiness must not carry a stale degraded warning from the pre-seed provider state',
+);
+
 const decisionEvaluation = service.evaluateDecisionCandidate(
   stock,
   snapshot.featureContext,
