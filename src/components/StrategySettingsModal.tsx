@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, RotateCcw, Sliders, Shield, AlertTriangle, Coins, Check } from 'lucide-react';
 import { StrategySettings } from '../types';
-import { ExecutionCostSettingKey } from '../engine/researchApplication';
+import { ExecutionCostSettingKey } from '../application/researchApplication';
 
 interface StrategySettingsModalProps {
   isOpen: boolean;
