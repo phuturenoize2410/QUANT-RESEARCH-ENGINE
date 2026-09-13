@@ -31,17 +31,10 @@ function isDirectDecisionPolicyImport(specifier: string): boolean {
 
 /**
  * Exact temporary debt register for presentation files that pre-date the
- * application facade. These entries are intentionally file+specifier specific:
- * they prevent the guard from becoming a broad bypass while allowing migration
- * to proceed incrementally without breaking the current UI.
- *
- * Every exception must be exercised. Once a component is migrated to
- * src/application/researchApplication, its stale entry makes this smoke fail so
- * the debt register cannot silently accumulate obsolete exemptions.
+ * application facade. Keep the register even when empty so any future temporary
+ * exception remains file+specifier specific and must be retired once migrated.
  */
-const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
-  ['src/components/MorningExitDashboardView.tsx', new Set(['../engine/execution'])],
-]);
+const legacyUiBoundaryExceptions = new Map<string, Set<string>>();
 
 const violations: string[] = [];
 const exercisedLegacyExceptions = new Set<string>();
