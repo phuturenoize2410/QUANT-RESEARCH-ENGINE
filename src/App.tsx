@@ -20,7 +20,7 @@ import {
   ManualMorningPositionInput,
   ResearchApplicationSnapshot,
   StrategyLabSortMetric,
-} from './engine/researchApplication';
+} from './application/researchApplication';
 import { StrategySettings, StockData, MorningPosition } from './types';
 
 export default function App() {
