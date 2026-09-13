@@ -74,6 +74,26 @@ assert.equal(
   DEFAULT_STRATEGY_SETTINGS.buyFeePct,
   'invalid execution-cost input must fail back to the canonical default',
 );
+const negativeExecutionSettings = service.applyExecutionCostInput(
+  executionSettings,
+  'sellFeePct',
+  '-1',
+);
+assert.equal(
+  negativeExecutionSettings.sellFeePct,
+  DEFAULT_STRATEGY_SETTINGS.sellFeePct,
+  'negative execution-cost input must fail back through canonical execution policy',
+);
+const oversizedExecutionSettings = service.applyExecutionCostInput(
+  executionSettings,
+  'slippagePct',
+  '150',
+);
+assert.equal(
+  oversizedExecutionSettings.slippagePct,
+  DEFAULT_STRATEGY_SETTINGS.slippagePct,
+  'execution-cost input above the canonical percentage domain must fail back to policy default',
+);
 
 const snapshot = await service.refresh(DEFAULT_STRATEGY_SETTINGS);
 assert.equal(
