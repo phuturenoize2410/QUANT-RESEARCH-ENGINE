@@ -13,7 +13,7 @@
     "validate:provider": "tsx scripts/provider-health-smoke.ts && tsx scripts/provider-health-contract-smoke.ts && tsx scripts/provider-health-snapshot-smoke.ts && tsx scripts/provider-health-timestamp-smoke.ts && tsx scripts/provider-adapter-smoke.ts && tsx scripts/provider-gate-smoke.ts && tsx scripts/provider-metadata-contract-smoke.ts && tsx scripts/instrument-identity-smoke.ts",
     "validate:execution": "tsx scripts/execution-policy-smoke.ts",
     "validate:scores": "tsx scripts/score-policy-smoke.ts",
-    "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts && tsx scripts/ui-risk-execution-boundary-smoke.ts",
+    "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts && tsx scripts/application-facade-smoke.ts && tsx scripts/ui-risk-execution-boundary-smoke.ts",
     "validate:opportunities": "tsx scripts/opportunity-map-smoke.ts",
     "check": "npm run lint && npm run validate:data && npm run validate:provider && npm run validate:execution && npm run validate:scores && npm run validate:application && npm run validate:opportunities && npm run build"
   },
@@ -37,6 +37,6 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.21.2"
   }
 }
