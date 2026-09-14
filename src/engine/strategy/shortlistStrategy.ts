@@ -4,6 +4,19 @@ import { clampScore, OVERNIGHT_EDGE_SCORE_BOUNDS } from '../scorePolicy';
 export const DEFAULT_SHORTLIST_EDGE_THRESHOLD = 50;
 export const DEFAULT_SHORTLIST_LIMIT = 10;
 
+/**
+ * Strategy-owned shortlist input. The strategy layer should evaluate only the
+ * fields it owns rather than depending on the provider-shaped StockData model.
+ * `stock` is retained solely as the result payload during this compatibility
+ * stage so downstream UI behavior remains unchanged.
+ */
+export interface ShortlistStrategyCandidate {
+  ticker: string;
+  stock: StockData;
+  prefilterPassed: boolean;
+  overnightEdgeScore: number;
+}
+
 export interface ShortlistStrategyPolicy {
   edgeThreshold: number;
   limit: number;
@@ -41,27 +54,29 @@ function normalizeShortlistLimit(limit: number): number {
 }
 
 /**
- * Feature/strategy boundary contract. Provider and feature-stage payloads are
- * runtime data, so TypeScript alone cannot guarantee that strategy-owned fields
- * remain usable. Fail closed before filtering/ranking rather than letting NaN,
- * strings, or out-of-range scores silently change shortlist ordering.
+ * Feature/strategy boundary contract. Runtime data must fail closed before
+ * filtering/ranking rather than letting malformed booleans or scores silently
+ * alter shortlist behavior.
  */
-function assertShortlistStrategyInputs(universe: readonly StockData[]): void {
+function assertShortlistStrategyInputs(
+  candidates: readonly ShortlistStrategyCandidate[],
+): void {
   const invalidTickers: string[] = [];
 
-  universe.forEach((stock, index) => {
-    const ticker = typeof stock?.ticker === 'string' && stock.ticker.length > 0
-      ? stock.ticker
+  candidates.forEach((candidate, index) => {
+    const ticker = typeof candidate?.ticker === 'string' && candidate.ticker.length > 0
+      ? candidate.ticker
       : `index:${index}`;
-    const prefilterValid = typeof stock?.prefilterPassed === 'boolean';
-    const score = stock?.overnightEdgeScore;
+    const stockTickerMatches = candidate?.stock?.ticker === candidate?.ticker;
+    const prefilterValid = typeof candidate?.prefilterPassed === 'boolean';
+    const score = candidate?.overnightEdgeScore;
     const scoreValid =
       typeof score === 'number' &&
       Number.isFinite(score) &&
       score >= OVERNIGHT_EDGE_SCORE_BOUNDS.min &&
       score <= OVERNIGHT_EDGE_SCORE_BOUNDS.max;
 
-    if (!prefilterValid || !scoreValid) {
+    if (!stockTickerMatches || !prefilterValid || !scoreValid) {
       invalidTickers.push(ticker);
     }
   });
@@ -72,38 +87,32 @@ function assertShortlistStrategyInputs(universe: readonly StockData[]): void {
 }
 
 /**
- * Canonical strategy-selection boundary for the 15:45 shortlist.
- *
- * The strategy engine owns eligibility, ranking and list-size rules. Returning
- * the applied policy alongside candidates prevents orchestration/UI consumers
- * from reconstructing strategy assumptions from magic numbers.
- *
- * Policy inputs are normalized here as well: score thresholds obey the same
- * overnight-score bounds as the feature/analytics layer, while malformed list
- * sizes fall back to the canonical default instead of leaking NaN semantics to
- * Array.slice().
+ * Canonical shortlist evaluator. Eligibility, ranking, score-policy bounds and
+ * list-size rules now operate on a narrow strategy DTO instead of StockData.
  */
-export function runShortlistStrategy(
-  universe: StockData[],
+export function runShortlistStrategyCandidates(
+  candidates: ShortlistStrategyCandidate[],
   shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
 ): ShortlistStrategyResult {
-  assertShortlistStrategyInputs(universe);
+  assertShortlistStrategyInputs(candidates);
 
   const normalizedThreshold = clampScore(
     shortlistEdgeThreshold,
     OVERNIGHT_EDGE_SCORE_BOUNDS,
   );
   const normalizedLimit = normalizeShortlistLimit(shortlistLimit);
-  const eligible = universe
+  const eligible = candidates
     .filter(
-      stock => stock.prefilterPassed && stock.overnightEdgeScore >= normalizedThreshold,
+      candidate =>
+        candidate.prefilterPassed &&
+        candidate.overnightEdgeScore >= normalizedThreshold,
     )
     .sort((a, b) => b.overnightEdgeScore - a.overnightEdgeScore);
 
   return {
-    candidates: eligible.slice(0, normalizedLimit),
-    evaluatedUniverseCount: universe.length,
+    candidates: eligible.slice(0, normalizedLimit).map(candidate => candidate.stock),
+    evaluatedUniverseCount: candidates.length,
     eligibleCountBeforeLimit: eligible.length,
     policy: {
       edgeThreshold: normalizedThreshold,
@@ -115,8 +124,31 @@ export function runShortlistStrategy(
 }
 
 /**
+ * Compatibility wrapper for callers that still hold legacy StockData. New
+ * orchestration should construct a strategy DTO only after Feature Engine output
+ * has been validated, then call runShortlistStrategyCandidates().
+ */
+export function runShortlistStrategy(
+  universe: StockData[],
+  shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+  shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
+): ShortlistStrategyResult {
+  return runShortlistStrategyCandidates(
+    universe.map(stock => ({
+      ticker: stock.ticker,
+      stock,
+      prefilterPassed: stock.prefilterPassed,
+      overnightEdgeScore: stock.overnightEdgeScore,
+    })),
+    shortlistEdgeThreshold,
+    shortlistLimit,
+  );
+}
+
+/**
  * Compatibility selector retained for existing callers. New orchestration
- * should prefer runShortlistStrategy() so policy metadata travels downstream.
+ * should prefer the feature-gated strategy boundary so policy metadata and
+ * Feature Engine authority travel downstream together.
  */
 export function selectShortlistCandidates(
   universe: StockData[],
