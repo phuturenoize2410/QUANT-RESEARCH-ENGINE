@@ -18,12 +18,57 @@ export interface ShortlistStrategyResult {
   policy: ShortlistStrategyPolicy;
 }
 
+export class ShortlistStrategyInputError extends Error {
+  readonly invalidTickers: readonly string[];
+
+  constructor(invalidTickers: readonly string[]) {
+    super(
+      'Shortlist strategy rejected malformed derived inputs for ticker(s): ' +
+      `${invalidTickers.join(', ')}. Expected boolean prefilterPassed and finite ` +
+      'overnightEdgeScore within canonical score bounds.',
+    );
+    this.name = 'ShortlistStrategyInputError';
+    this.invalidTickers = Object.freeze([...invalidTickers]);
+  }
+}
+
 function normalizeShortlistLimit(limit: number): number {
   if (!Number.isFinite(limit)) {
     return DEFAULT_SHORTLIST_LIMIT;
   }
 
   return Math.max(0, Math.floor(limit));
+}
+
+/**
+ * Feature/strategy boundary contract. Provider and feature-stage payloads are
+ * runtime data, so TypeScript alone cannot guarantee that strategy-owned fields
+ * remain usable. Fail closed before filtering/ranking rather than letting NaN,
+ * strings, or out-of-range scores silently change shortlist ordering.
+ */
+function assertShortlistStrategyInputs(universe: readonly StockData[]): void {
+  const invalidTickers: string[] = [];
+
+  universe.forEach((stock, index) => {
+    const ticker = typeof stock?.ticker === 'string' && stock.ticker.length > 0
+      ? stock.ticker
+      : `index:${index}`;
+    const prefilterValid = typeof stock?.prefilterPassed === 'boolean';
+    const score = stock?.overnightEdgeScore;
+    const scoreValid =
+      typeof score === 'number' &&
+      Number.isFinite(score) &&
+      score >= OVERNIGHT_EDGE_SCORE_BOUNDS.min &&
+      score <= OVERNIGHT_EDGE_SCORE_BOUNDS.max;
+
+    if (!prefilterValid || !scoreValid) {
+      invalidTickers.push(ticker);
+    }
+  });
+
+  if (invalidTickers.length > 0) {
+    throw new ShortlistStrategyInputError(invalidTickers);
+  }
 }
 
 /**
@@ -43,6 +88,8 @@ export function runShortlistStrategy(
   shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
 ): ShortlistStrategyResult {
+  assertShortlistStrategyInputs(universe);
+
   const normalizedThreshold = clampScore(
     shortlistEdgeThreshold,
     OVERNIGHT_EDGE_SCORE_BOUNDS,
