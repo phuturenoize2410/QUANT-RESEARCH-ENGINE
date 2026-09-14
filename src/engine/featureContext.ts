@@ -58,6 +58,29 @@ const DEFAULT_FUNDAMENTALS: FundamentalFeatureSnapshot = {
   peRatio: 8.5,
 };
 
+const FUNDAMENTAL_NUMERIC_FIELDS = [
+  'revenueGrowthYoy',
+  'netMarginPct',
+  'roePct',
+  'pbvRatio',
+  'peRatio',
+] as const;
+
+export class FeatureContextCoverageError extends Error {
+  readonly ticker: string;
+  readonly invalidFields: readonly string[];
+
+  constructor(ticker: string, invalidFields: readonly string[]) {
+    super(
+      `Feature context rejected ${ticker}: missing or invalid contextual field(s): ` +
+      `${invalidFields.join(', ')}.`,
+    );
+    this.name = 'FeatureContextCoverageError';
+    this.ticker = ticker;
+    this.invalidFields = Object.freeze([...invalidFields]);
+  }
+}
+
 /**
  * Transitional accessor for legacy consumers. Keeping alias resolution at the
  * feature-context boundary prevents benchmark-specific naming from spreading
@@ -133,9 +156,32 @@ export function createPrototypeFeatureContext(
   };
 }
 
+/**
+ * Fundamental context is allowed to use prototype defaults only in explicit MOCK
+ * mode. Real/free/paid provider paths must provide ticker-level coverage instead of
+ * silently inheriting simulated assumptions that could contaminate a backtest.
+ */
 export function getFundamentalSnapshot(
   context: FeatureContext,
   ticker: string,
 ): FundamentalFeatureSnapshot {
-  return context.fundamentalsByTicker[ticker] ?? DEFAULT_FUNDAMENTALS;
+  const snapshot = context.fundamentalsByTicker[ticker];
+
+  if (!snapshot) {
+    if (context.mode === 'MOCK') return DEFAULT_FUNDAMENTALS;
+    throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker']);
+  }
+
+  const invalidFields = FUNDAMENTAL_NUMERIC_FIELDS.filter(
+    field => typeof snapshot[field] !== 'number' || !Number.isFinite(snapshot[field]),
+  );
+
+  if (invalidFields.length > 0) {
+    throw new FeatureContextCoverageError(
+      ticker,
+      invalidFields.map(field => `fundamentalsByTicker.${ticker}.${field}`),
+    );
+  }
+
+  return snapshot;
 }
