@@ -80,6 +80,48 @@ export type FeatureContextFactory = (
   market: MarketAdapter,
 ) => Promise<FeatureContext> | FeatureContext;
 
+const MARKET_DATA_PROVIDER_METHODS = [
+  'getUniverse',
+  'getQuote',
+  'getDailyBars',
+  'getCurrentRegime',
+] as const;
+
+export class MarketDataProviderContractError extends Error {
+  readonly providerName: string;
+  readonly missingMethods: readonly string[];
+
+  constructor(providerName: string, missingMethods: readonly string[]) {
+    super(
+      `Provider ${providerName} does not satisfy the MarketDataProvider runtime contract: ` +
+      `missing callable method(s): ${missingMethods.join(', ')}.`,
+    );
+    this.name = 'MarketDataProviderContractError';
+    this.providerName = providerName;
+    this.missingMethods = Object.freeze([...missingMethods]);
+  }
+}
+
+/**
+ * TypeScript interfaces disappear at runtime. External adapters therefore need
+ * one explicit contract check before ingestion so a provider that passes health
+ * and metadata policy cannot crash the pipeline later because a market-data
+ * method is absent or non-callable.
+ */
+export function assertMarketDataProviderRuntimeContract(
+  provider: MarketDataProvider,
+  providerName: string,
+): void {
+  const candidate = provider as unknown as Record<string, unknown>;
+  const missingMethods = MARKET_DATA_PROVIDER_METHODS.filter(
+    method => typeof candidate[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new MarketDataProviderContractError(providerName, missingMethods);
+  }
+}
+
 function isCacheAwareProvider(
   provider: MarketDataProvider,
 ): provider is CacheAwareMarketDataProvider {
@@ -155,6 +197,15 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     // The provider-policy layer owns all market/capability/health decisions.
     // Orchestration only enforces the canonical decision before ingestion.
     assertProviderReady(providerStatus, 'EOD_RESEARCH');
+
+    // HealthCheckedProvider is intentionally narrower than MarketDataProvider.
+    // Once policy readiness succeeds, verify the full adapter contract before any
+    // ingestion call so external/free/paid adapters fail deterministically at the
+    // boundary instead of surfacing a raw "is not a function" runtime exception.
+    assertMarketDataProviderRuntimeContract(
+      this.provider,
+      providerStatus.metadata.name,
+    );
 
     // From this point onward, orchestration consumes only canonicalized provider
     // identity/mode. Raw adapter metadata must not steer feature provenance or the
