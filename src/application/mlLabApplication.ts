@@ -90,4 +90,34 @@ export function getMLLabRegistryReadModel() {
 
 export type MLLabReadModel = ReturnType<typeof evaluateMLLabReadModel>;
 export type MLLabRegistryReadModel = ReturnType<typeof getMLLabRegistryReadModel>;
+export type MLLabChampionComparison = MLLabRegistryReadModel['championComparison'];
+
+/**
+ * Apply the simulated challenger-promotion transition outside React.
+ *
+ * This is deliberately a pure presentation/application transition: it does not
+ * mutate the engine-owned model registry and it does not claim that a real
+ * production model was deployed. Keeping the transition here prevents UI code
+ * from becoming the owner of model-governance business rules while the ML Lab
+ * is still explicitly operating on simulated/mock research data.
+ */
+export function promoteMLLabChallenger(
+  comparison: MLLabChampionComparison,
+): MLLabChampionComparison {
+  return {
+    ...comparison,
+    recommendation: 'KEEP CHAMPION',
+    champion: cloneRegistryModel({
+      ...comparison.challenger,
+      status: 'CHAMPION',
+    }),
+    challenger: cloneRegistryModel(comparison.challenger),
+    recommendationRationale: [
+      'Promoted Challenger (LightGBM-v4) to Champion status.',
+      'Production models updated with tighter calibration and superior expected value.',
+    ],
+    metricComparisons: comparison.metricComparisons.map(metric => ({ ...metric })),
+  };
+}
+
 export type { ActualTradeResidual };
