@@ -28,6 +28,7 @@ import {
 import { assertProviderReady } from './providerGate';
 import { IDX_MARKET_ADAPTER } from './market/idxMarketAdapter';
 import { MarketAdapter, MarketId } from './market/marketAdapter';
+import { normalizeSymbol } from './market/instrumentIdentity';
 import {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   DEFAULT_SHORTLIST_LIMIT,
@@ -180,7 +181,14 @@ export function assertProviderUniverseRuntimeContract(
       return;
     }
 
-    const canonicalTicker = ticker.trim().toUpperCase();
+    const canonicalTicker = normalizeSymbol(ticker);
+    if (ticker !== canonicalTicker) {
+      invalidEntries.push(
+        `index ${index}: ticker ${JSON.stringify(ticker)} must be canonical ${canonicalTicker}`,
+      );
+      return;
+    }
+
     if (seenTickers.has(canonicalTicker)) {
       invalidEntries.push(`index ${index}: duplicate ticker ${canonicalTicker}`);
       return;
