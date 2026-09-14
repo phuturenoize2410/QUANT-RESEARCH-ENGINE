@@ -136,15 +136,13 @@ export class DefaultResearchPipeline implements ResearchPipeline {
   }
 
   async refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
-    // Prototype seeding is part of the mock adapter's refresh lifecycle. Complete
-    // it before capturing canonical health/readiness so the returned snapshot
-    // describes the provider state that actually supplied the universe below.
-    // Non-mock providers remain untouched and are still gated before ingestion.
-    if (this.provider.metadata.mode === 'MOCK' && this.seedUniverse) {
+    // Prototype seeding is an implementation detail of the known mock adapter,
+    // not a decision derived from untrusted provider metadata. This keeps malformed
+    // third-party metadata from influencing orchestration before provider policy has
+    // produced a canonical status snapshot.
+    if (this.provider instanceof MockMarketDataProvider && this.seedUniverse) {
       const seeded = this.seedUniverse(settings);
-      if (this.provider instanceof MockMarketDataProvider) {
-        this.provider.setUniverse(seeded);
-      }
+      this.provider.setUniverse(seeded);
     }
 
     const providerStatus = await getProviderStatusSnapshot(
@@ -158,11 +156,16 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     // Orchestration only enforces the canonical decision before ingestion.
     assertProviderReady(providerStatus, 'EOD_RESEARCH');
 
+    // From this point onward, orchestration consumes only canonicalized provider
+    // identity/mode. Raw adapter metadata must not steer feature provenance or the
+    // real-vs-simulated safety rules after the policy boundary has been crossed.
+    const providerMode = providerStatus.metadata.mode;
+    const providerName = providerStatus.metadata.name;
     const universe = await this.provider.getUniverse();
 
-    if (this.provider.metadata.mode !== 'MOCK' && !this.featureContextFactory) {
+    if (providerMode !== 'MOCK' && !this.featureContextFactory) {
       throw new Error(
-        `Provider ${this.provider.metadata.name} requires a point-in-time FeatureContextFactory. ` +
+        `Provider ${providerName} requires a point-in-time FeatureContextFactory. ` +
         'Refusing to combine real market data with simulated contextual features.',
       );
     }
@@ -171,9 +174,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       ? await this.featureContextFactory(universe, this.provider, this.market)
       : createPrototypeFeatureContext(universe);
 
-    if (this.provider.metadata.mode !== 'MOCK' && featureContext.isSimulated) {
+    if (providerMode !== 'MOCK' && featureContext.isSimulated) {
       throw new Error(
-        `Provider ${this.provider.metadata.name} returned a simulated feature context. ` +
+        `Provider ${providerName} returned a simulated feature context. ` +
         'Research snapshot rejected to prevent synthetic assumptions contaminating real-data backtests.',
       );
     }
@@ -193,14 +196,14 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       ]),
     );
 
-    if (this.provider.metadata.mode !== 'MOCK') {
+    if (providerMode !== 'MOCK') {
       const unsafeTickers = Object.values(featureProvenanceByTicker)
         .filter(snapshot => !snapshot.productionSafe)
         .map(snapshot => snapshot.ticker);
 
       if (unsafeTickers.length > 0) {
         throw new Error(
-          `Feature provenance validation failed for provider ${this.provider.metadata.name}: ` +
+          `Feature provenance validation failed for provider ${providerName}: ` +
           `${unsafeTickers.length} ticker(s) contain simulated or unclassified feature lineage. ` +
           'Research snapshot rejected before strategy/backtest execution.',
         );
