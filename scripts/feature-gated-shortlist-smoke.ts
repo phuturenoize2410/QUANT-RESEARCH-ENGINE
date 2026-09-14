@@ -26,6 +26,7 @@ assert.throws(
     assert.ok(error instanceof ShortlistFeatureBoundaryError);
     assert.deepEqual(error.missingTickers, [missingTicker]);
     assert.deepEqual(error.mismatchedTickers, []);
+    assert.deepEqual(error.unexpectedTickers, []);
     return true;
   },
 );
@@ -44,6 +45,22 @@ assert.throws(
     assert.ok(error instanceof ShortlistFeatureBoundaryError);
     assert.deepEqual(error.missingTickers, []);
     assert.deepEqual(error.mismatchedTickers, [`${mismatchedTicker}->WRONG`]);
+    assert.deepEqual(error.unexpectedTickers, []);
+    return true;
+  },
+);
+
+const unexpectedFeatures = {
+  ...featuresByTicker,
+  STALE: { ticker: 'STALE' } as TickerFeatureVector,
+};
+assert.throws(
+  () => runFeatureGatedShortlistStrategy(universe, unexpectedFeatures),
+  (error: unknown) => {
+    assert.ok(error instanceof ShortlistFeatureBoundaryError);
+    assert.deepEqual(error.missingTickers, []);
+    assert.deepEqual(error.mismatchedTickers, []);
+    assert.deepEqual(error.unexpectedTickers, ['STALE']);
     return true;
   },
 );
