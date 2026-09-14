@@ -210,6 +210,41 @@ for (const [payload, expectedType] of [
       );
       assert.equal(error.providerName, 'Future Free IDX Provider');
       assert.equal(error.receivedType, expectedType);
+      assert.deepEqual(error.invalidEntries, []);
+      return true;
+    },
+  );
+}
+
+for (const [payload, expectedEntryDiagnostic] of [
+  [[null], 'index 0: expected stock object'],
+  [[{}], 'index 0: ticker must be a non-empty string'],
+  [[{ ticker: '   ' }], 'index 0: ticker must be a non-empty string'],
+  [
+    [{ ticker: 'BBCA' }, { ticker: ' bbca ' }],
+    'index 1: duplicate ticker BBCA',
+  ],
+] as const) {
+  const pipeline = new DefaultResearchPipeline(
+    createPolicyReadyProvider(payload),
+    undefined,
+    () => {
+      throw new Error(
+        'feature context creation must not run when universe stock identities are malformed',
+      );
+    },
+  );
+
+  await assert.rejects(
+    () => pipeline.refresh(DEFAULT_STRATEGY_SETTINGS),
+    error => {
+      assert.ok(
+        error instanceof ProviderUniverseContractError,
+        'malformed or duplicate ticker identities must fail before feature construction',
+      );
+      assert.equal(error.providerName, 'Future Free IDX Provider');
+      assert.equal(error.receivedType, 'array with invalid stock identities');
+      assert.deepEqual(error.invalidEntries, [expectedEntryDiagnostic]);
       return true;
     },
   );
