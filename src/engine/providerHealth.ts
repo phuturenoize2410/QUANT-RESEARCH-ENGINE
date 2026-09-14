@@ -462,11 +462,34 @@ export async function getProviderHealthSnapshot(
   nowMs: number = Date.now(),
 ): Promise<ProviderHealthSnapshot> {
   const observationClock = normalizeObservationClock(nowMs);
-  const capturedMetadata = snapshotProviderMetadata(provider.metadata);
+  const isProviderObject = Boolean(provider) && typeof provider === 'object' && !Array.isArray(provider);
+  const runtimeProvider = (isProviderObject ? provider : {}) as Partial<HealthCheckedProvider> & {
+    metadata?: unknown;
+    getHealth?: unknown;
+  };
+  const hasHealthCheck = typeof runtimeProvider.getHealth === 'function';
+  const capturedMetadata = snapshotProviderMetadata(runtimeProvider.metadata as ProviderMetadata);
   const hasInjectedHealthSnapshot = healthSnapshot !== undefined;
+
   let health = hasInjectedHealthSnapshot
     ? normalizeProviderHealth(healthSnapshot as ProviderHealth, nowMs)
-    : await captureProviderHealth(provider, nowMs);
+    : hasHealthCheck
+      ? await captureProviderHealth(provider, nowMs)
+      : normalizeProviderHealth(
+          {
+            status: 'UNAVAILABLE',
+            checkedAt: new Date(observationClock.nowMs).toISOString(),
+            message: 'Provider contract is malformed; expected an object with getHealth().',
+          },
+          nowMs,
+        );
+
+  if (!isProviderObject || !hasHealthCheck) {
+    health = failHealthClosed(
+      health,
+      'Invalid provider root contract; failing closed as UNAVAILABLE.',
+    );
+  }
 
   if (capturedMetadata.issues.length > 0) {
     health = failHealthClosed(
