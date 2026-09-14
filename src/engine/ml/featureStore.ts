@@ -32,6 +32,39 @@ function assertPipelineContextIsSafe(context: FeatureContext): void {
   }
 }
 
+export class FeatureInputContractError extends Error {
+  readonly ticker: string;
+  readonly invalidFields: readonly string[];
+
+  constructor(ticker: string, invalidFields: readonly string[]) {
+    super(
+      `Feature input contract rejected ${ticker}: invalid market observation field(s): ` +
+      `${invalidFields.join(', ')}.`,
+    );
+    this.name = 'FeatureInputContractError';
+    this.ticker = ticker;
+    this.invalidFields = Object.freeze([...invalidFields]);
+  }
+}
+
+function assertFeatureMarketObservations(stock: StockData): void {
+  const invalidFields: string[] = [];
+  const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+
+  if (!finite(stock.price) || stock.price <= 0) invalidFields.push('price');
+  if (!finite(stock.changePct)) invalidFields.push('changePct');
+  if (!finite(stock.volume) || stock.volume < 0) invalidFields.push('volume');
+  if (!finite(stock.turnover) || stock.turnover < 0) invalidFields.push('turnover');
+  if (!Array.isArray(stock.historicalBars)) invalidFields.push('historicalBars');
+  if (stock.technical === null || typeof stock.technical !== 'object') invalidFields.push('technical');
+  if (stock.bandarmology === null || typeof stock.bandarmology !== 'object') invalidFields.push('bandarmology');
+  if (stock.historicalStats === null || typeof stock.historicalStats !== 'object') invalidFields.push('historicalStats');
+
+  if (invalidFields.length > 0) {
+    throw new FeatureInputContractError(stock.ticker, invalidFields);
+  }
+}
+
 export class FeatureStore {
   private static cache: Map<string, TickerFeatureVector> = new Map();
   private static pipelineContext: FeatureContext | null = null;
@@ -76,6 +109,8 @@ export class FeatureStore {
     context?: FeatureContext,
     asOfTimestamp?: string,
   ): TickerFeatureVector {
+    assertFeatureMarketObservations(stock);
+
     const boundContext = context ?? this.pipelineContext;
     const resolvedTimestamp = asOfTimestamp ?? boundContext?.asOfTimestamp ?? '15:45 WIB';
     const resolvedContext = boundContext ?? createPrototypeFeatureContext([stock], resolvedTimestamp);
