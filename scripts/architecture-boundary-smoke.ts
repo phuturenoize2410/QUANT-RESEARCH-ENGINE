@@ -76,12 +76,27 @@ function importSpecifiers(source: string): string[] {
     .map(match => match[1]);
 }
 
+/**
+ * React is the terminal presentation layer. It may consume presentation-safe
+ * application facades and shared passive DTO types, but it must not execute or
+ * configure upstream quant-core layers directly. Keeping these boundaries here
+ * prevents future UI work from collapsing the canonical
+ * DataProvider -> Feature -> Strategy -> Risk/Execution -> UI flow.
+ */
 const uiForbiddenBoundaries = [
   '/engine/dataProviders',
   '/engine/providerPolicy',
   '/engine/providerGate',
   '/engine/providerCache',
   '/engine/providerHealth',
+  '/engine/featureContext',
+  '/engine/featureProvenance',
+  '/engine/analytics',
+  '/engine/execution',
+  '/engine/scorePolicy',
+  '/engine/strategies/',
+  '/engine/strategy/',
+  '/engine/researchApplication',
   '/engine/ml/',
   '/engine/quantLabEngine',
   '/data/mockStocks',
@@ -278,5 +293,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Architecture-boundary smoke passed: UI cannot bypass provider/application boundaries or add new direct decision/research-engine imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
+  `Architecture-boundary smoke passed: UI cannot bypass provider/feature/strategy/risk-execution/application boundaries or add new direct quant-core imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`,
 );
