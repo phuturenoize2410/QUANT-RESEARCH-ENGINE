@@ -127,6 +127,22 @@ export function normalizeProviderHealth(
 ): ProviderHealth {
   const observationClock = normalizeObservationClock(nowMs);
   const effectiveNowMs = observationClock.nowMs;
+  const isHealthObject = Boolean(health) && typeof health === 'object' && !Array.isArray(health);
+
+  // External adapters can violate their TypeScript contract at runtime (bad JSON,
+  // schema drift, proxy errors). Reject malformed roots before field access so a
+  // null/array/primitive response cannot throw or leak into downstream layers.
+  if (!isHealthObject) {
+    const malformed: ProviderHealth = {
+      status: 'UNAVAILABLE',
+      checkedAt: new Date(observationClock.nowMs).toISOString(),
+      message: 'Provider health payload is malformed; expected an object.',
+    };
+    return observationClock.valid
+      ? malformed
+      : failHealthClosed(malformed, 'Provider observation clock is invalid.');
+  }
+
   const runtimeHealth = health as ProviderHealth & {
     status?: unknown;
     checkedAt?: unknown;
