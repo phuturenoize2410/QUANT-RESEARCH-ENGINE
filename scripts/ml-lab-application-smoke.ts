@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   buildMLLabApplicationReadModel,
   getMLLabRegistryReadModel,
+  getMLLabSimulatedRetrainingResult,
   promoteMLLabChallenger,
   resolveMLLabSelection,
 } from '../src/application/mlLabApplication';
@@ -84,4 +85,15 @@ const emptyApplicationReadModel = buildMLLabApplicationReadModel('BBCA', []);
 assert.equal(emptyApplicationReadModel.selection.status, 'EMPTY_UNIVERSE');
 assert.equal(emptyApplicationReadModel.evaluation, null);
 
-console.log('ML Lab application smoke passed: registry snapshots, simulated promotion, selection fallback, and empty-universe handling stay isolated behind the application boundary.');
+const retrainingResult = getMLLabSimulatedRetrainingResult();
+assert.deepEqual(retrainingResult, {
+  mode: 'SIMULATED',
+  dataSource: 'MOCK_IDX',
+  outcome: 'CHALLENGER_PASSED_OOS',
+  candidateModel: 'LightGBM-v4',
+  message: 'Walk-forward evaluation complete! Challenger LightGBM-v4 passed out-of-sample criteria.',
+});
+assert.notEqual(retrainingResult.mode, 'LIVE');
+assert.notEqual(retrainingResult.dataSource, 'REAL_IDX');
+
+console.log('ML Lab application smoke passed: registry snapshots, simulated promotion/retraining provenance, selection fallback, and empty-universe handling stay isolated behind the application boundary.');
