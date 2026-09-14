@@ -1,5 +1,8 @@
-import { normalizeProviderHealth } from '../src/engine/providerHealth';
-import type { ProviderHealth } from '../src/engine/dataProviders';
+import {
+  getProviderHealthSnapshot,
+  normalizeProviderHealth,
+} from '../src/engine/providerHealth';
+import type { HealthCheckedProvider, ProviderHealth } from '../src/engine/dataProviders';
 
 const nowMs = Date.parse('2026-09-09T06:30:00.000Z');
 
@@ -107,4 +110,59 @@ if (unavailableInvalidTimestamp.status !== 'UNAVAILABLE') {
   throw new Error('canonicalization must preserve terminal UNAVAILABLE status.');
 }
 
-console.log('Provider health timestamp smoke passed: external timestamps are canonicalized, untrustworthy health-capture times fail closed, and sync chronology remains explicitly diagnosed before downstream consumption.');
+const invalidObservationClock = normalizeProviderHealth(
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-09T06:30:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-09T06:29:30.000Z',
+  },
+  Number.NaN,
+);
+
+if (invalidObservationClock.status !== 'UNAVAILABLE') {
+  throw new Error('invalid observation clocks must fail provider health closed as unavailable.');
+}
+if (!invalidObservationClock.message?.includes('observation clock is invalid')) {
+  throw new Error('invalid observation clocks must expose an explicit diagnostic.');
+}
+
+const provider: HealthCheckedProvider = {
+  metadata: {
+    id: 'clock-test',
+    name: 'Clock Test Provider',
+    source: 'FREE_API',
+    mode: 'EOD',
+    isPaid: false,
+    supportedMarkets: ['IDX'],
+    supportsHistorical: true,
+    supportsIntraday: false,
+    supportsRealtime: false,
+  },
+  async getHealth() {
+    return {
+      status: 'HEALTHY',
+      checkedAt: '2026-09-09T06:30:00.000Z',
+    };
+  },
+};
+
+const invalidClockSnapshot = await getProviderHealthSnapshot(
+  provider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-09T06:30:00.000Z',
+  },
+  Number.POSITIVE_INFINITY,
+);
+
+if (invalidClockSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('provider snapshots must fail closed when the observation clock is not serializable.');
+}
+if (!invalidClockSnapshot.health.message?.includes('observation clock is invalid')) {
+  throw new Error('provider snapshots must retain the invalid-clock diagnostic.');
+}
+if (invalidClockSnapshot.capturedAt !== '1970-01-01T00:00:00.000Z') {
+  throw new Error(`invalid observation clocks must serialize to the deterministic sentinel, got ${invalidClockSnapshot.capturedAt}.`);
+}
+
+console.log('Provider health timestamp smoke passed: external timestamps and observation clocks are canonicalized, invalid clocks fail closed without throwing, and sync chronology remains explicitly diagnosed before downstream consumption.');
