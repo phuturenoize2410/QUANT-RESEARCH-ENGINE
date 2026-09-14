@@ -125,15 +125,26 @@ export function assertMarketDataProviderRuntimeContract(
 export class ProviderUniverseContractError extends Error {
   readonly providerName: string;
   readonly receivedType: string;
+  readonly invalidEntries: readonly string[];
 
-  constructor(providerName: string, receivedType: string) {
+  constructor(
+    providerName: string,
+    receivedType: string,
+    invalidEntries: readonly string[] = [],
+  ) {
+    const entryDetail =
+      invalidEntries.length > 0
+        ? ` Invalid entries: ${invalidEntries.join('; ')}.`
+        : '';
     super(
       `Provider ${providerName} returned an invalid universe payload: ` +
-      `expected an array, received ${receivedType}.`,
+      `expected an array of uniquely identified stocks, received ${receivedType}.` +
+      entryDetail,
     );
     this.name = 'ProviderUniverseContractError';
     this.providerName = providerName;
     this.receivedType = receivedType;
+    this.invalidEntries = Object.freeze([...invalidEntries]);
   }
 }
 
@@ -151,6 +162,38 @@ export function assertProviderUniverseRuntimeContract(
     throw new ProviderUniverseContractError(
       providerName,
       describeRuntimeType(universe),
+    );
+  }
+
+  const invalidEntries: string[] = [];
+  const seenTickers = new Set<string>();
+
+  universe.forEach((entry, index) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      invalidEntries.push(`index ${index}: expected stock object`);
+      return;
+    }
+
+    const ticker = (entry as Record<string, unknown>).ticker;
+    if (typeof ticker !== 'string' || ticker.trim().length === 0) {
+      invalidEntries.push(`index ${index}: ticker must be a non-empty string`);
+      return;
+    }
+
+    const canonicalTicker = ticker.trim().toUpperCase();
+    if (seenTickers.has(canonicalTicker)) {
+      invalidEntries.push(`index ${index}: duplicate ticker ${canonicalTicker}`);
+      return;
+    }
+
+    seenTickers.add(canonicalTicker);
+  });
+
+  if (invalidEntries.length > 0) {
+    throw new ProviderUniverseContractError(
+      providerName,
+      'array with invalid stock identities',
+      invalidEntries,
     );
   }
 }
