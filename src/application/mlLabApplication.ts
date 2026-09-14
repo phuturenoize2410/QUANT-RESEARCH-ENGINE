@@ -27,6 +27,25 @@ import {
 import { MLModelDefinition } from '../engine/ml/types';
 
 /**
+ * Canonical presentation provenance for the current ML Lab implementation.
+ *
+ * Keep simulation/mock-data semantics outside React so future provider-backed
+ * integration cannot silently inherit UI labels that imply live or real-time
+ * execution. The eventual Google Finance/free/paid provider path should replace
+ * this contract explicitly only after a real provider and research pipeline are
+ * connected and validated.
+ */
+export function getMLLabProvenance() {
+  return {
+    mode: 'SIMULATED' as const,
+    dataSource: 'MOCK_IDX' as const,
+    market: 'IDX' as const,
+    provider: 'MOCK' as const,
+    isRealTime: false as const,
+  };
+}
+
+/**
  * Presentation-facing read model for the ML Lab.
  *
  * Keep model execution and feature/leakage inspection behind this application
@@ -90,12 +109,14 @@ export function buildMLLabApplicationReadModel(selectedTicker: string, universe:
 
   if (!selection.currentStock) {
     return {
+      provenance: getMLLabProvenance(),
       selection,
       evaluation: null,
     };
   }
 
   return {
+    provenance: getMLLabProvenance(),
     selection,
     evaluation: evaluateMLLabReadModel(selection.currentStock, universe),
   };
@@ -144,6 +165,7 @@ export type MLLabReadModel = ReturnType<typeof evaluateMLLabReadModel>;
 export type MLLabApplicationReadModel = ReturnType<typeof buildMLLabApplicationReadModel>;
 export type MLLabRegistryReadModel = ReturnType<typeof getMLLabRegistryReadModel>;
 export type MLLabChampionComparison = MLLabRegistryReadModel['championComparison'];
+export type MLLabProvenance = ReturnType<typeof getMLLabProvenance>;
 
 /**
  * Apply the simulated challenger-promotion transition outside React.
@@ -183,9 +205,14 @@ export function promoteMLLabChallenger(
  * semantics or weakening the MOCK/SIMULATED provenance labels.
  */
 export function getMLLabSimulatedRetrainingResult() {
+  const provenance = getMLLabProvenance();
+
   return {
-    mode: 'SIMULATED' as const,
-    dataSource: 'MOCK_IDX' as const,
+    mode: provenance.mode,
+    dataSource: provenance.dataSource,
+    market: provenance.market,
+    provider: provenance.provider,
+    isRealTime: provenance.isRealTime,
     outcome: 'CHALLENGER_PASSED_OOS' as const,
     candidateModel: 'LightGBM-v4',
     message: 'Walk-forward evaluation complete! Challenger LightGBM-v4 passed out-of-sample criteria.',
