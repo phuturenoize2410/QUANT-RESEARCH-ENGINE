@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import {
+  buildMLLabApplicationReadModel,
   getMLLabRegistryReadModel,
   promoteMLLabChallenger,
+  resolveMLLabSelection,
 } from '../src/application/mlLabApplication';
+import { buildUniverse } from '../src/data/mockStocks';
 
 const first = getMLLabRegistryReadModel();
 const second = getMLLabRegistryReadModel();
@@ -55,4 +58,30 @@ assert.equal(
 );
 assert.equal(afterPromotionMutation.championComparison.challenger.status, 'CHALLENGER');
 
-console.log('ML Lab application smoke passed: registry snapshots and simulated promotion transitions stay isolated from engine-owned registry state.');
+const mockUniverse = buildUniverse();
+const exactSelection = resolveMLLabSelection('BBCA', mockUniverse);
+assert.equal(exactSelection.status, 'READY');
+assert.equal(exactSelection.selectedTicker, 'BBCA');
+assert.equal(exactSelection.currentStock?.ticker, 'BBCA');
+
+const fallbackSelection = resolveMLLabSelection('NOT-A-REAL-TICKER', mockUniverse);
+assert.equal(fallbackSelection.status, 'FALLBACK_TICKER');
+assert.equal(fallbackSelection.selectedTicker, mockUniverse[0]?.ticker);
+assert.equal(fallbackSelection.currentStock, mockUniverse[0]);
+
+const emptySelection = resolveMLLabSelection('BBCA', []);
+assert.equal(emptySelection.status, 'EMPTY_UNIVERSE');
+assert.equal(emptySelection.selectedTicker, null);
+assert.equal(emptySelection.currentStock, null);
+
+const applicationReadModel = buildMLLabApplicationReadModel('BBCA', mockUniverse);
+assert.equal(applicationReadModel.selection.status, 'READY');
+assert.equal(applicationReadModel.selection.currentStock?.ticker, 'BBCA');
+assert.ok(applicationReadModel.evaluation);
+assert.equal(applicationReadModel.evaluation?.leakageAudit.status, 'PASS');
+
+const emptyApplicationReadModel = buildMLLabApplicationReadModel('BBCA', []);
+assert.equal(emptyApplicationReadModel.selection.status, 'EMPTY_UNIVERSE');
+assert.equal(emptyApplicationReadModel.evaluation, null);
+
+console.log('ML Lab application smoke passed: registry snapshots, simulated promotion, selection fallback, and empty-universe handling stay isolated behind the application boundary.');
