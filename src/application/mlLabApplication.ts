@@ -49,6 +49,58 @@ export function evaluateMLLabReadModel(currentStock: StockData, universe: StockD
   };
 }
 
+/**
+ * Resolve the presentation selection before any ML model executes.
+ *
+ * Existing UI behavior falls back to the first stock when a requested ticker is
+ * missing. Keep that behavior, but make it explicit at the application seam so
+ * React no longer needs to own ticker-selection business rules. An empty
+ * universe fails closed instead of passing `undefined` into ML engines.
+ */
+export function resolveMLLabSelection(selectedTicker: string, universe: StockData[]) {
+  if (universe.length === 0) {
+    return {
+      status: 'EMPTY_UNIVERSE' as const,
+      requestedTicker: selectedTicker,
+      selectedTicker: null,
+      currentStock: null,
+    };
+  }
+
+  const requestedStock = universe.find(stock => stock.ticker === selectedTicker);
+  const currentStock = requestedStock ?? universe[0];
+
+  return {
+    status: requestedStock ? ('READY' as const) : ('FALLBACK_TICKER' as const),
+    requestedTicker: selectedTicker,
+    selectedTicker: currentStock.ticker,
+    currentStock,
+  };
+}
+
+/**
+ * Canonical ML Lab application read path.
+ *
+ * Selection and model orchestration are intentionally composed here rather than
+ * in React. This keeps the eventual UI migration on a single application
+ * contract while preserving today's first-ticker fallback semantics.
+ */
+export function buildMLLabApplicationReadModel(selectedTicker: string, universe: StockData[]) {
+  const selection = resolveMLLabSelection(selectedTicker, universe);
+
+  if (!selection.currentStock) {
+    return {
+      selection,
+      evaluation: null,
+    };
+  }
+
+  return {
+    selection,
+    evaluation: evaluateMLLabReadModel(selection.currentStock, universe),
+  };
+}
+
 function cloneRegistryModel(model: MLModelDefinition): MLModelDefinition {
   return {
     ...model,
@@ -89,6 +141,7 @@ export function getMLLabRegistryReadModel() {
 }
 
 export type MLLabReadModel = ReturnType<typeof evaluateMLLabReadModel>;
+export type MLLabApplicationReadModel = ReturnType<typeof buildMLLabApplicationReadModel>;
 export type MLLabRegistryReadModel = ReturnType<typeof getMLLabRegistryReadModel>;
 export type MLLabChampionComparison = MLLabRegistryReadModel['championComparison'];
 
