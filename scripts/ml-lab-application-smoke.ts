@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict';
 import {
   buildMLLabApplicationReadModel,
+  getMLLabProvenance,
   getMLLabRegistryReadModel,
   getMLLabSimulatedRetrainingResult,
   promoteMLLabChallenger,
   resolveMLLabSelection,
 } from '../src/application/mlLabApplication';
 import { buildUniverse } from '../src/data/mockStocks';
+
+const provenance = getMLLabProvenance();
+assert.deepEqual(provenance, {
+  mode: 'SIMULATED',
+  dataSource: 'MOCK_IDX',
+  market: 'IDX',
+  provider: 'MOCK',
+  isRealTime: false,
+});
+assert.notEqual(provenance.mode, 'LIVE');
+assert.notEqual(provenance.dataSource, 'REAL_IDX');
+assert.equal(provenance.isRealTime, false);
 
 const first = getMLLabRegistryReadModel();
 const second = getMLLabRegistryReadModel();
@@ -76,12 +89,14 @@ assert.equal(emptySelection.selectedTicker, null);
 assert.equal(emptySelection.currentStock, null);
 
 const applicationReadModel = buildMLLabApplicationReadModel('BBCA', mockUniverse);
+assert.deepEqual(applicationReadModel.provenance, provenance);
 assert.equal(applicationReadModel.selection.status, 'READY');
 assert.equal(applicationReadModel.selection.currentStock?.ticker, 'BBCA');
 assert.ok(applicationReadModel.evaluation);
 assert.equal(applicationReadModel.evaluation?.leakageAudit.status, 'PASS');
 
 const emptyApplicationReadModel = buildMLLabApplicationReadModel('BBCA', []);
+assert.deepEqual(emptyApplicationReadModel.provenance, provenance);
 assert.equal(emptyApplicationReadModel.selection.status, 'EMPTY_UNIVERSE');
 assert.equal(emptyApplicationReadModel.evaluation, null);
 
@@ -89,11 +104,19 @@ const retrainingResult = getMLLabSimulatedRetrainingResult();
 assert.deepEqual(retrainingResult, {
   mode: 'SIMULATED',
   dataSource: 'MOCK_IDX',
+  market: 'IDX',
+  provider: 'MOCK',
+  isRealTime: false,
   outcome: 'CHALLENGER_PASSED_OOS',
   candidateModel: 'LightGBM-v4',
   message: 'Walk-forward evaluation complete! Challenger LightGBM-v4 passed out-of-sample criteria.',
 });
+assert.equal(retrainingResult.mode, provenance.mode);
+assert.equal(retrainingResult.dataSource, provenance.dataSource);
+assert.equal(retrainingResult.market, provenance.market);
+assert.equal(retrainingResult.provider, provenance.provider);
+assert.equal(retrainingResult.isRealTime, provenance.isRealTime);
 assert.notEqual(retrainingResult.mode, 'LIVE');
 assert.notEqual(retrainingResult.dataSource, 'REAL_IDX');
 
-console.log('ML Lab application smoke passed: registry snapshots, simulated promotion/retraining provenance, selection fallback, and empty-universe handling stay isolated behind the application boundary.');
+console.log('ML Lab application smoke passed: provenance, registry snapshots, simulated promotion/retraining, selection fallback, and empty-universe handling stay isolated behind the application boundary.');
