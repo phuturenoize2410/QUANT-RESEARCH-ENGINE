@@ -128,16 +128,7 @@ const incompleteProvider = {
   },
 } as unknown as MarketDataProvider;
 
-const incompleteProviderPipeline = new DefaultResearchPipeline(
-  incompleteProvider,
-  undefined,
-  () => ({
-    asOf: new Date().toISOString(),
-    isSimulated: false,
-    source: 'PROVIDER',
-    byTicker: {},
-  }),
-);
+const incompleteProviderPipeline = new DefaultResearchPipeline(incompleteProvider);
 
 await assert.rejects(
   () => incompleteProviderPipeline.refresh(DEFAULT_STRATEGY_SETTINGS),
