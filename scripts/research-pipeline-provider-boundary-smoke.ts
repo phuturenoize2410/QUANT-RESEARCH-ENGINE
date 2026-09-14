@@ -5,6 +5,7 @@ import { ProviderReadinessError } from '../src/engine/providerGate';
 import {
   DefaultResearchPipeline,
   MarketDataProviderContractError,
+  ProviderUniverseContractError,
 } from '../src/engine/researchPipeline';
 
 let seedCalls = 0;
@@ -147,5 +148,71 @@ assert.equal(
   1,
   'runtime market-data contract validation should run only after canonical health/readiness has accepted the adapter',
 );
+
+function createPolicyReadyProvider(universePayload: unknown): MarketDataProvider {
+  return {
+    metadata: {
+      id: 'future-free-provider',
+      name: 'Future Free IDX Provider',
+      source: 'FREE_API',
+      mode: 'EOD',
+      isPaid: false,
+      supportedMarkets: ['IDX'],
+      supportsHistorical: true,
+      supportsIntraday: false,
+      supportsRealtime: false,
+    },
+    async getHealth() {
+      const now = new Date().toISOString();
+      return {
+        status: 'HEALTHY',
+        checkedAt: now,
+        lastSuccessfulSyncAt: now,
+        staleAfterSeconds: 3600,
+      };
+    },
+    async getUniverse() {
+      return universePayload as never;
+    },
+    async getQuote() {
+      throw new Error('not used');
+    },
+    async getDailyBars() {
+      return [];
+    },
+    getCurrentRegime() {
+      return 'BULLISH_TREND';
+    },
+  };
+}
+
+for (const [payload, expectedType] of [
+  [null, 'null'],
+  [{}, 'object'],
+  ['not-an-array', 'string'],
+] as const) {
+  const pipeline = new DefaultResearchPipeline(
+    createPolicyReadyProvider(payload),
+    undefined,
+    () => {
+      throw new Error(
+        'feature context creation must not run for malformed universe payloads',
+      );
+    },
+  );
+
+  await assert.rejects(
+    () => pipeline.refresh(DEFAULT_STRATEGY_SETTINGS),
+    error => {
+      assert.ok(
+        error instanceof ProviderUniverseContractError,
+        'malformed universe roots must fail at the provider ingestion boundary',
+      );
+      assert.equal(error.providerName, 'Future Free IDX Provider');
+      assert.equal(error.receivedType, expectedType);
+      return true;
+    },
+  );
+}
 
 console.log('research pipeline provider-boundary smoke passed');

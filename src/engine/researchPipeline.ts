@@ -122,6 +122,39 @@ export function assertMarketDataProviderRuntimeContract(
   }
 }
 
+export class ProviderUniverseContractError extends Error {
+  readonly providerName: string;
+  readonly receivedType: string;
+
+  constructor(providerName: string, receivedType: string) {
+    super(
+      `Provider ${providerName} returned an invalid universe payload: ` +
+      `expected an array, received ${receivedType}.`,
+    );
+    this.name = 'ProviderUniverseContractError';
+    this.providerName = providerName;
+    this.receivedType = receivedType;
+  }
+}
+
+function describeRuntimeType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+export function assertProviderUniverseRuntimeContract(
+  universe: unknown,
+  providerName: string,
+): asserts universe is StockData[] {
+  if (!Array.isArray(universe)) {
+    throw new ProviderUniverseContractError(
+      providerName,
+      describeRuntimeType(universe),
+    );
+  }
+}
+
 function isCacheAwareProvider(
   provider: MarketDataProvider,
 ): provider is CacheAwareMarketDataProvider {
@@ -212,7 +245,9 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     // real-vs-simulated safety rules after the policy boundary has been crossed.
     const providerMode = providerStatus.metadata.mode;
     const providerName = providerStatus.metadata.name;
-    const universe = await this.provider.getUniverse();
+    const universePayload: unknown = await this.provider.getUniverse();
+    assertProviderUniverseRuntimeContract(universePayload, providerName);
+    const universe = universePayload;
 
     if (providerMode !== 'MOCK' && !this.featureContextFactory) {
       throw new Error(
