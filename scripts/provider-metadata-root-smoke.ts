@@ -1,6 +1,7 @@
 import type {
   HealthCheckedProvider,
   ProviderHealth,
+  ProviderMetadata,
 } from '../src/engine/dataProviders';
 import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
 
@@ -50,4 +51,43 @@ for (const metadata of [null, [], 'not-metadata']) {
   }
 }
 
-console.log('Provider metadata root smoke passed: null, array and primitive adapter metadata fail closed into immutable zero-capability snapshots before downstream research layers can consume them.');
+const malformedFields = {
+  id: 'runtime-bad-fields',
+  name: 'Runtime Bad Fields',
+  source: 'UNTRUSTED_VENDOR',
+  mode: 'STREAMING',
+  isPaid: 'yes',
+  supportedMarkets: [' idx '],
+  supportsHistorical: 'yes',
+  supportsIntraday: 1,
+  supportsRealtime: 'true',
+} as unknown as ProviderMetadata;
+
+const malformedFieldSnapshot = await getProviderHealthSnapshot(
+  malformedProvider(malformedFields),
+  healthy,
+  nowMs,
+);
+
+if (malformedFieldSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('malformed provider metadata fields must fail closed as UNAVAILABLE.');
+}
+if (
+  malformedFieldSnapshot.metadata.source !== 'MOCK_ENGINE' ||
+  malformedFieldSnapshot.metadata.mode !== 'MOCK' ||
+  malformedFieldSnapshot.metadata.isPaid !== false
+) {
+  throw new Error('malformed provider identity/delivery fields must not leak raw runtime values into canonical snapshots.');
+}
+if (
+  malformedFieldSnapshot.metadata.supportsHistorical !== false ||
+  malformedFieldSnapshot.metadata.supportsIntraday !== false ||
+  malformedFieldSnapshot.metadata.supportsRealtime !== false
+) {
+  throw new Error('malformed provider capability fields must collapse to zero capability before downstream consumption.');
+}
+if (malformedFieldSnapshot.metadata.supportedMarkets[0] !== 'IDX') {
+  throw new Error('well-formed market identifiers should still be canonicalized even when sibling metadata fields fail closed.');
+}
+
+console.log('Provider metadata root smoke passed: malformed roots and fields fail closed into immutable canonical zero-capability snapshots before downstream research layers can consume them.');

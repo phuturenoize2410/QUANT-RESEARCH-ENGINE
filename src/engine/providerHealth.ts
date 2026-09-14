@@ -34,9 +34,6 @@ function normalizeObservationClock(value: unknown): { nowMs: number; valid: bool
     return { nowMs: value, valid: true };
   }
 
-  // Keep malformed injected/runtime clocks deterministic and serializable while
-  // failing health closed. Epoch is a sentinel only; it must never be interpreted
-  // as a valid provider observation time because `valid` remains false.
   return { nowMs: 0, valid: false };
 }
 
@@ -78,33 +75,15 @@ function appendMessage(base: string | undefined, detail: string): string {
   return base ? `${base} ${detail}` : detail;
 }
 
-function degradeHealth(
-  health: ProviderHealth,
-  detail: string,
-): ProviderHealth {
+function degradeHealth(health: ProviderHealth, detail: string): ProviderHealth {
   if (health.status === 'UNAVAILABLE' || health.status === 'STALE') {
-    return {
-      ...health,
-      message: appendMessage(health.message, detail),
-    };
+    return { ...health, message: appendMessage(health.message, detail) };
   }
-
-  return {
-    ...health,
-    status: 'DEGRADED',
-    message: appendMessage(health.message, detail),
-  };
+  return { ...health, status: 'DEGRADED', message: appendMessage(health.message, detail) };
 }
 
-function failHealthClosed(
-  health: ProviderHealth,
-  detail: string,
-): ProviderHealth {
-  return {
-    ...health,
-    status: 'UNAVAILABLE',
-    message: appendMessage(health.message, detail),
-  };
+function failHealthClosed(health: ProviderHealth, detail: string): ProviderHealth {
+  return { ...health, status: 'UNAVAILABLE', message: appendMessage(health.message, detail) };
 }
 
 function providerErrorMessage(error: unknown): string {
@@ -113,14 +92,6 @@ function providerErrorMessage(error: unknown): string {
   return 'Unknown provider health-check failure.';
 }
 
-/**
- * Converts provider-reported health into one canonical health snapshot.
- *
- * Health normalization belongs to the provider boundary, not research-use-case
- * policy. Keeping it here means market-data, broker-flow and future alternative
- * providers share freshness/timestamp semantics without depending on strategy or
- * execution readiness decisions.
- */
 export function normalizeProviderHealth(
   health: ProviderHealth,
   nowMs: number = Date.now(),
@@ -129,9 +100,6 @@ export function normalizeProviderHealth(
   const effectiveNowMs = observationClock.nowMs;
   const isHealthObject = Boolean(health) && typeof health === 'object' && !Array.isArray(health);
 
-  // External adapters can violate their TypeScript contract at runtime (bad JSON,
-  // schema drift, proxy errors). Reject malformed roots before field access so a
-  // null/array/primitive response cannot throw or leak into downstream layers.
   if (!isHealthObject) {
     const malformed: ProviderHealth = {
       status: 'UNAVAILABLE',
@@ -167,9 +135,6 @@ export function normalizeProviderHealth(
     message: canonicalMessage,
   };
 
-  // Provider payloads cross a runtime boundary. TypeScript cannot guarantee that
-  // JSON/free-feed/paid-adapter responses actually honour the declared union, so
-  // unknown status values must fail closed before Feature/Strategy/UI sees them.
   if (!hasValidStatus) {
     normalized = {
       ...normalized,
@@ -183,87 +148,54 @@ export function normalizeProviderHealth(
   if (runtimeHealth.message !== undefined && canonicalMessage === undefined) {
     normalized = degradeHealth(normalized, 'Invalid provider health message ignored.');
   }
-
   if (runtimeHealth.latencyMs !== undefined && normalized.latencyMs === undefined) {
     normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
   }
-
   if (runtimeHealth.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
     normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
   }
-
-  // The injected/runtime observation clock is part of the trust boundary too.
-  // Invalid clocks previously reached Date#toISOString and could throw before a
-  // canonical health envelope was produced. Fail closed deterministically instead.
   if (!observationClock.valid) {
     return failHealthClosed(normalized, 'Provider observation clock is invalid.');
   }
-
-  // checkedAt anchors the health snapshot itself. If this timestamp cannot be
-  // trusted, downstream research cannot know whether the reported status is
-  // current, so fail closed rather than treating it as a non-blocking warning.
   if (checkedAtMs === undefined) {
     normalized = failHealthClosed(normalized, 'Provider health check timestamp is invalid.');
   } else if (checkedAtMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
     normalized = failHealthClosed(normalized, 'Provider health check timestamp is unexpectedly in the future.');
   }
-
   if (normalized.status === 'UNAVAILABLE') return normalized;
 
   const staleAfterSeconds = normalized.staleAfterSeconds;
-
   if (runtimeHealth.lastSuccessfulSyncAt !== undefined && lastSuccessfulSyncMs === undefined) {
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
   }
-
   if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
   }
-
   if (
     checkedAtMs !== undefined &&
     lastSuccessfulSyncMs !== undefined &&
     lastSuccessfulSyncMs > checkedAtMs + MAX_CLOCK_SKEW_MS
   ) {
-    normalized = degradeHealth(
-      normalized,
-      'Last successful sync timestamp is later than the provider health check timestamp.',
-    );
+    normalized = degradeHealth(normalized, 'Last successful sync timestamp is later than the provider health check timestamp.');
   }
-
   if (staleAfterSeconds !== undefined && lastSuccessfulSyncMs === undefined) {
-    normalized = degradeHealth(
-      normalized,
-      'Freshness threshold is declared but last successful sync time is unavailable.',
-    );
+    normalized = degradeHealth(normalized, 'Freshness threshold is declared but last successful sync time is unavailable.');
   }
-
   if (
     lastSuccessfulSyncMs !== undefined &&
     staleAfterSeconds !== undefined &&
     effectiveNowMs - lastSuccessfulSyncMs > staleAfterSeconds * 1000
   ) {
-    return {
-      ...normalized,
-      status: 'STALE',
-      message: appendMessage(normalized.message, 'Freshness threshold exceeded.'),
-    };
+    return { ...normalized, status: 'STALE', message: appendMessage(normalized.message, 'Freshness threshold exceeded.') };
   }
-
   return normalized;
 }
 
-/**
- * Capture provider health behind a failure-safe external-system boundary.
- * A failed probe becomes canonical UNAVAILABLE state before feature, strategy,
- * risk/execution or UI layers can interpret provider failures independently.
- */
 export async function captureProviderHealth(
   provider: HealthCheckedProvider,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealth> {
   const observationClock = normalizeObservationClock(nowMs);
-
   try {
     return normalizeProviderHealth(await provider.getHealth(), nowMs);
   } catch (error) {
@@ -308,35 +240,30 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
   };
   const issues: string[] = [];
 
-  if (!isMetadataObject) {
-    issues.push('metadata');
-  }
+  if (!isMetadataObject) issues.push('metadata');
 
   const id = canonicalMetadataText(runtimeMetadata.id);
   const name = canonicalMetadataText(runtimeMetadata.name);
   const notes = runtimeMetadata.notes === undefined
     ? undefined
     : canonicalMetadataText(runtimeMetadata.notes);
-
-  if (!id) issues.push('id');
-  if (!name) issues.push('name');
-  if (!isMarketDataSource(runtimeMetadata.source)) issues.push('source');
-  if (!isProviderMode(runtimeMetadata.mode)) issues.push('mode');
-  if (typeof runtimeMetadata.isPaid !== 'boolean') issues.push('isPaid');
-  if (typeof runtimeMetadata.supportsHistorical !== 'boolean') issues.push('supportsHistorical');
-  if (typeof runtimeMetadata.supportsIntraday !== 'boolean') issues.push('supportsIntraday');
-  if (typeof runtimeMetadata.supportsRealtime !== 'boolean') issues.push('supportsRealtime');
-  if (runtimeMetadata.notes !== undefined && notes === undefined) issues.push('notes');
-
   const hasValidSource = isMarketDataSource(runtimeMetadata.source);
   const hasValidMode = isProviderMode(runtimeMetadata.mode);
+  const hasValidPaidFlag = typeof runtimeMetadata.isPaid === 'boolean';
+  const hasValidHistoricalCapability = typeof runtimeMetadata.supportsHistorical === 'boolean';
   const hasValidIntradayCapability = typeof runtimeMetadata.supportsIntraday === 'boolean';
   const hasValidRealtimeCapability = typeof runtimeMetadata.supportsRealtime === 'boolean';
 
-  // Capability semantics are part of the provider contract, not a UI concern.
-  // Fail closed when an adapter advertises combinations that cannot be true at
-  // the same time. This keeps future Google Finance/free API/paid feed adapters
-  // honest before Feature/Strategy layers make readiness decisions from metadata.
+  if (!id) issues.push('id');
+  if (!name) issues.push('name');
+  if (!hasValidSource) issues.push('source');
+  if (!hasValidMode) issues.push('mode');
+  if (!hasValidPaidFlag) issues.push('isPaid');
+  if (!hasValidHistoricalCapability) issues.push('supportsHistorical');
+  if (!hasValidIntradayCapability) issues.push('supportsIntraday');
+  if (!hasValidRealtimeCapability) issues.push('supportsRealtime');
+  if (runtimeMetadata.notes !== undefined && notes === undefined) issues.push('notes');
+
   if (
     hasValidMode &&
     hasValidRealtimeCapability &&
@@ -384,17 +311,26 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
     issues.push('supportedMarkets');
   }
 
-  // A malformed root must still yield a conservative, serializable snapshot.
-  // The sentinel metadata intentionally advertises no usable capability and is
-  // always paired with UNAVAILABLE health via the issues above; downstream code
-  // therefore never needs to special-case null/array adapter metadata.
+  const hasMalformedContract = issues.length > 0;
   const safeMetadata: ProviderMetadata = isMetadataObject
     ? {
         ...metadata,
         id: id ?? '',
         name: name ?? '',
+        source: hasValidSource ? runtimeMetadata.source : 'MOCK_ENGINE',
+        mode: hasValidMode ? runtimeMetadata.mode : 'MOCK',
+        isPaid: hasValidPaidFlag ? runtimeMetadata.isPaid : false,
         notes,
         supportedMarkets: Object.freeze([...supportedMarkets]),
+        supportsHistorical: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsHistorical,
+        supportsIntraday: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsIntraday,
+        supportsRealtime: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsRealtime,
       } as ProviderMetadata
     : {
         id: '',
@@ -418,26 +354,12 @@ function snapshotProviderHealth(health: ProviderHealth): ProviderHealth {
   return Object.freeze({ ...health });
 }
 
-/**
- * Vendor-neutral health/status envelope shared by every external data adapter.
- *
- * This intentionally stops before market-data readiness. Market-data providers
- * additionally need research-use-case capability policy, while broker-flow or
- * future alternative-data providers still need the same canonical metadata,
- * health normalization and capture timestamp semantics.
- */
 export interface ProviderHealthSnapshot {
   metadata: ProviderMetadata;
   health: ProviderHealth;
   capturedAt: string;
 }
 
-/**
- * Capture one canonical health snapshot for any provider crossing an external
- * system boundary. Callers may inject an already captured health payload when
- * coordinating multiple status decisions at the same instant; the payload is
- * still normalized by engine-owned health semantics.
- */
 export async function getProviderHealthSnapshot(
   provider: HealthCheckedProvider,
   healthSnapshot?: ProviderHealth,
