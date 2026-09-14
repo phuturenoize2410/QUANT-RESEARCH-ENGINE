@@ -75,4 +75,34 @@ assert.throws(
   'malformed provider fundamentals must not reach feature calculation',
 );
 
+for (const malformedRoot of [null, [], 'invalid-root', 42]) {
+  const context = makeContext('EOD', {}) as unknown as Record<string, unknown>;
+  context.fundamentalsByTicker = malformedRoot;
+
+  assert.throws(
+    () => getFundamentalSnapshot(context as unknown as FeatureContext, 'BBCA'),
+    (error: unknown) => {
+      assert.ok(error instanceof FeatureContextCoverageError);
+      assert.deepEqual(error.invalidFields, ['fundamentalsByTicker(root)']);
+      return true;
+    },
+    'malformed fundamentals root must fail through the feature-context contract',
+  );
+}
+
+for (const malformedSnapshot of [null, [], 'invalid-snapshot', 42]) {
+  const context = makeContext('EOD', {}) as unknown as Record<string, unknown>;
+  context.fundamentalsByTicker = { BBCA: malformedSnapshot };
+
+  assert.throws(
+    () => getFundamentalSnapshot(context as unknown as FeatureContext, 'BBCA'),
+    (error: unknown) => {
+      assert.ok(error instanceof FeatureContextCoverageError);
+      assert.deepEqual(error.invalidFields, ['fundamentalsByTicker.BBCA(root)']);
+      return true;
+    },
+    'malformed ticker fundamental snapshot must fail through the feature-context contract',
+  );
+}
+
 console.log('feature context contract smoke passed');

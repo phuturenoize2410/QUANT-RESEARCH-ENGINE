@@ -81,6 +81,10 @@ export class FeatureContextCoverageError extends Error {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Transitional accessor for legacy consumers. Keeping alias resolution at the
  * feature-context boundary prevents benchmark-specific naming from spreading
@@ -160,16 +164,32 @@ export function createPrototypeFeatureContext(
  * Fundamental context is allowed to use prototype defaults only in explicit MOCK
  * mode. Real/free/paid provider paths must provide ticker-level coverage instead of
  * silently inheriting simulated assumptions that could contaminate a backtest.
+ *
+ * FeatureContextFactory implementations are external/runtime boundaries despite
+ * their TypeScript types. Validate the fundamentals root and ticker snapshot here
+ * so malformed adapters fail with a deterministic contract error rather than a raw
+ * property-access TypeError inside the Feature Engine.
  */
 export function getFundamentalSnapshot(
   context: FeatureContext,
   ticker: string,
 ): FundamentalFeatureSnapshot {
-  const snapshot = context.fundamentalsByTicker[ticker];
+  const fundamentalsRoot = (context as unknown as { fundamentalsByTicker?: unknown })
+    .fundamentalsByTicker;
 
-  if (!snapshot) {
+  if (!isRecord(fundamentalsRoot)) {
+    throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker(root)']);
+  }
+
+  const snapshot: unknown = fundamentalsRoot[ticker];
+
+  if (snapshot === undefined) {
     if (context.mode === 'MOCK') return DEFAULT_FUNDAMENTALS;
     throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker']);
+  }
+
+  if (!isRecord(snapshot)) {
+    throw new FeatureContextCoverageError(ticker, [`fundamentalsByTicker.${ticker}(root)`]);
   }
 
   const invalidFields = FUNDAMENTAL_NUMERIC_FIELDS.filter(
@@ -183,5 +203,5 @@ export function getFundamentalSnapshot(
     );
   }
 
-  return snapshot;
+  return snapshot as unknown as FundamentalFeatureSnapshot;
 }
