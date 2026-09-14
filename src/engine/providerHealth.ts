@@ -445,8 +445,9 @@ export async function getProviderHealthSnapshot(
 ): Promise<ProviderHealthSnapshot> {
   const observationClock = normalizeObservationClock(nowMs);
   const capturedMetadata = snapshotProviderMetadata(provider.metadata);
-  let health = healthSnapshot
-    ? normalizeProviderHealth(healthSnapshot, nowMs)
+  const hasInjectedHealthSnapshot = healthSnapshot !== undefined;
+  let health = hasInjectedHealthSnapshot
+    ? normalizeProviderHealth(healthSnapshot as ProviderHealth, nowMs)
     : await captureProviderHealth(provider, nowMs);
 
   if (capturedMetadata.issues.length > 0) {
