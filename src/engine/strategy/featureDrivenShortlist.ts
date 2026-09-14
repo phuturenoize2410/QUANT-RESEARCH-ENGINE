@@ -3,7 +3,8 @@ import { TickerFeatureVector } from '../ml/types';
 import {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   DEFAULT_SHORTLIST_LIMIT,
-  runShortlistStrategy,
+  runShortlistStrategyCandidates,
+  ShortlistStrategyCandidate,
   ShortlistStrategyResult,
 } from './shortlistStrategy';
 
@@ -37,18 +38,15 @@ export class ShortlistFeatureBoundaryError extends Error {
 /**
  * Transitional Feature Engine -> Strategy Engine boundary.
  *
- * Shortlist eligibility/ranking still uses the legacy derived fields carried by
- * StockData so prototype behavior remains unchanged. However, orchestration may
- * no longer execute shortlist strategy unless Feature Engine output has exact
- * one-to-one universe coverage and preserves canonical ticker identity.
+ * Feature output must have exact one-to-one universe coverage before strategy
+ * evaluation. After that gate, legacy derived shortlist fields are copied into a
+ * narrow strategy-owned DTO so the strategy layer no longer evaluates the full
+ * provider-shaped StockData object directly.
  *
- * Rejecting unexpected feature keys prevents stale/cross-snapshot feature maps
- * from being silently accepted when provider universe composition changes.
- *
- * This is intentionally a compatibility bridge, not the final strategy input
- * model. Future increments can migrate prefilter/edge inputs into a dedicated
- * feature-derived strategy DTO without allowing the pipeline to bypass Feature
- * Engine in the meantime.
+ * The source of prefilterPassed/overnightEdgeScore is intentionally unchanged in
+ * this increment to preserve prototype behavior. A later slice can migrate those
+ * values to authoritative feature-derived calculations without re-coupling the
+ * Strategy Engine to provider data.
  */
 export function runFeatureGatedShortlistStrategy(
   universe: StockData[],
@@ -87,8 +85,15 @@ export function runFeatureGatedShortlistStrategy(
     );
   }
 
-  return runShortlistStrategy(
-    universe,
+  const strategyCandidates: ShortlistStrategyCandidate[] = universe.map(stock => ({
+    ticker: stock.ticker,
+    stock,
+    prefilterPassed: stock.prefilterPassed,
+    overnightEdgeScore: stock.overnightEdgeScore,
+  }));
+
+  return runShortlistStrategyCandidates(
+    strategyCandidates,
     shortlistEdgeThreshold,
     shortlistLimit,
   );
