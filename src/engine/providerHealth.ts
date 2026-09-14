@@ -277,7 +277,8 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
   metadata: ProviderMetadata;
   issues: string[];
 } {
-  const runtimeMetadata = metadata as ProviderMetadata & {
+  const isMetadataObject = Boolean(metadata) && typeof metadata === 'object' && !Array.isArray(metadata);
+  const runtimeMetadata = (isMetadataObject ? metadata : {}) as ProviderMetadata & {
     id?: unknown;
     name?: unknown;
     source?: unknown;
@@ -290,6 +291,11 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
     notes?: unknown;
   };
   const issues: string[] = [];
+
+  if (!isMetadataObject) {
+    issues.push('metadata');
+  }
+
   const id = canonicalMetadataText(runtimeMetadata.id);
   const name = canonicalMetadataText(runtimeMetadata.name);
   const notes = runtimeMetadata.notes === undefined
@@ -362,14 +368,32 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): {
     issues.push('supportedMarkets');
   }
 
+  // A malformed root must still yield a conservative, serializable snapshot.
+  // The sentinel metadata intentionally advertises no usable capability and is
+  // always paired with UNAVAILABLE health via the issues above; downstream code
+  // therefore never needs to special-case null/array adapter metadata.
+  const safeMetadata: ProviderMetadata = isMetadataObject
+    ? {
+        ...metadata,
+        id: id ?? '',
+        name: name ?? '',
+        notes,
+        supportedMarkets: Object.freeze([...supportedMarkets]),
+      } as ProviderMetadata
+    : {
+        id: '',
+        name: '',
+        source: 'MOCK_ENGINE',
+        mode: 'MOCK',
+        isPaid: false,
+        supportedMarkets: Object.freeze([]),
+        supportsHistorical: false,
+        supportsIntraday: false,
+        supportsRealtime: false,
+      };
+
   return {
-    metadata: Object.freeze({
-      ...metadata,
-      id: id ?? '',
-      name: name ?? '',
-      notes,
-      supportedMarkets: Object.freeze([...supportedMarkets]),
-    }) as ProviderMetadata,
+    metadata: Object.freeze(safeMetadata),
     issues,
   };
 }
