@@ -173,4 +173,24 @@ export function promoteMLLabChallenger(
   };
 }
 
+/**
+ * Canonical result for the current simulated retraining audit.
+ *
+ * The ML Lab does not perform real training yet, so keep that fact explicit in
+ * the application contract rather than letting React manufacture a success
+ * message that could later be mistaken for a production retraining event. A
+ * future real training service can replace this boundary without changing the UI
+ * semantics or weakening the MOCK/SIMULATED provenance labels.
+ */
+export function getMLLabSimulatedRetrainingResult() {
+  return {
+    mode: 'SIMULATED' as const,
+    dataSource: 'MOCK_IDX' as const,
+    outcome: 'CHALLENGER_PASSED_OOS' as const,
+    candidateModel: 'LightGBM-v4',
+    message: 'Walk-forward evaluation complete! Challenger LightGBM-v4 passed out-of-sample criteria.',
+  };
+}
+
+export type MLLabSimulatedRetrainingResult = ReturnType<typeof getMLLabSimulatedRetrainingResult>;
 export type { ActualTradeResidual };
