@@ -220,8 +220,10 @@ for (const [payload, expectedEntryDiagnostic] of [
   [[null], 'index 0: expected stock object'],
   [[{}], 'index 0: ticker must be a non-empty string'],
   [[{ ticker: '   ' }], 'index 0: ticker must be a non-empty string'],
+  [[{ ticker: ' bbca ' }], 'index 0: ticker " bbca " must be canonical BBCA'],
+  [[{ ticker: 'bbca' }], 'index 0: ticker "bbca" must be canonical BBCA'],
   [
-    [{ ticker: 'BBCA' }, { ticker: ' bbca ' }],
+    [{ ticker: 'BBCA' }, { ticker: 'BBCA' }],
     'index 1: duplicate ticker BBCA',
   ],
 ] as const) {
@@ -240,7 +242,7 @@ for (const [payload, expectedEntryDiagnostic] of [
     error => {
       assert.ok(
         error instanceof ProviderUniverseContractError,
-        'malformed or duplicate ticker identities must fail before feature construction',
+        'malformed, noncanonical or duplicate ticker identities must fail before feature construction',
       );
       assert.equal(error.providerName, 'Future Free IDX Provider');
       assert.equal(error.receivedType, 'array with invalid stock identities');
