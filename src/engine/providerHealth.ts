@@ -8,6 +8,7 @@ import {
 } from './dataProviders';
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_DATE_MS = 8.64e15;
 const PROVIDER_HEALTH_STATUSES: readonly ProviderHealthStatus[] = [
   'HEALTHY',
   'DEGRADED',
@@ -22,6 +23,22 @@ const MARKET_DATA_SOURCES: readonly MarketDataSource[] = [
   'BROKER_API',
 ];
 const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'DELAYED', 'EOD', 'REALTIME'];
+
+function normalizeObservationClock(value: unknown): { nowMs: number; valid: boolean } {
+  if (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= -MAX_DATE_MS &&
+    value <= MAX_DATE_MS
+  ) {
+    return { nowMs: value, valid: true };
+  }
+
+  // Keep malformed injected/runtime clocks deterministic and serializable while
+  // failing health closed. Epoch is a sentinel only; it must never be interpreted
+  // as a valid provider observation time because `valid` remains false.
+  return { nowMs: 0, valid: false };
+}
 
 function parseTimestamp(value: unknown): number | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined;
@@ -108,6 +125,8 @@ export function normalizeProviderHealth(
   health: ProviderHealth,
   nowMs: number = Date.now(),
 ): ProviderHealth {
+  const observationClock = normalizeObservationClock(nowMs);
+  const effectiveNowMs = observationClock.nowMs;
   const runtimeHealth = health as ProviderHealth & {
     status?: unknown;
     checkedAt?: unknown;
@@ -157,12 +176,19 @@ export function normalizeProviderHealth(
     normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
   }
 
+  // The injected/runtime observation clock is part of the trust boundary too.
+  // Invalid clocks previously reached Date#toISOString and could throw before a
+  // canonical health envelope was produced. Fail closed deterministically instead.
+  if (!observationClock.valid) {
+    return failHealthClosed(normalized, 'Provider observation clock is invalid.');
+  }
+
   // checkedAt anchors the health snapshot itself. If this timestamp cannot be
   // trusted, downstream research cannot know whether the reported status is
   // current, so fail closed rather than treating it as a non-blocking warning.
   if (checkedAtMs === undefined) {
     normalized = failHealthClosed(normalized, 'Provider health check timestamp is invalid.');
-  } else if (checkedAtMs > nowMs + MAX_CLOCK_SKEW_MS) {
+  } else if (checkedAtMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
     normalized = failHealthClosed(normalized, 'Provider health check timestamp is unexpectedly in the future.');
   }
 
@@ -174,7 +200,7 @@ export function normalizeProviderHealth(
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
   }
 
-  if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > nowMs + MAX_CLOCK_SKEW_MS) {
+  if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
     normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
   }
 
@@ -199,7 +225,7 @@ export function normalizeProviderHealth(
   if (
     lastSuccessfulSyncMs !== undefined &&
     staleAfterSeconds !== undefined &&
-    nowMs - lastSuccessfulSyncMs > staleAfterSeconds * 1000
+    effectiveNowMs - lastSuccessfulSyncMs > staleAfterSeconds * 1000
   ) {
     return {
       ...normalized,
@@ -220,13 +246,18 @@ export async function captureProviderHealth(
   provider: HealthCheckedProvider,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealth> {
+  const observationClock = normalizeObservationClock(nowMs);
+
   try {
     return normalizeProviderHealth(await provider.getHealth(), nowMs);
   } catch (error) {
+    const baseMessage = `Provider health check failed: ${providerErrorMessage(error)}`;
     return {
       status: 'UNAVAILABLE',
-      checkedAt: new Date(nowMs).toISOString(),
-      message: `Provider health check failed: ${providerErrorMessage(error)}`,
+      checkedAt: new Date(observationClock.nowMs).toISOString(),
+      message: observationClock.valid
+        ? baseMessage
+        : appendMessage(baseMessage, 'Provider observation clock is invalid.'),
     };
   }
 }
@@ -372,6 +403,7 @@ export async function getProviderHealthSnapshot(
   healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealthSnapshot> {
+  const observationClock = normalizeObservationClock(nowMs);
   const capturedMetadata = snapshotProviderMetadata(provider.metadata);
   let health = healthSnapshot
     ? normalizeProviderHealth(healthSnapshot, nowMs)
@@ -387,6 +419,6 @@ export async function getProviderHealthSnapshot(
   return Object.freeze({
     metadata: capturedMetadata.metadata,
     health: snapshotProviderHealth(health),
-    capturedAt: new Date(nowMs).toISOString(),
+    capturedAt: new Date(observationClock.nowMs).toISOString(),
   });
 }
