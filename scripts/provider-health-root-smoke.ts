@@ -5,6 +5,7 @@ import type {
 } from '../src/engine/dataProviders';
 import {
   captureProviderHealth,
+  getProviderHealthSnapshot,
   normalizeProviderHealth,
 } from '../src/engine/providerHealth';
 
@@ -59,6 +60,33 @@ for (const malformed of [null, [], 'not-health', 42]) {
   }
 }
 
+let injectedSnapshotProbeCalls = 0;
+const providerWithObservableProbe: HealthCheckedProvider = {
+  metadata,
+  async getHealth() {
+    injectedSnapshotProbeCalls += 1;
+    return {
+      status: 'HEALTHY',
+      checkedAt: new Date(nowMs).toISOString(),
+    };
+  },
+};
+
+const injectedNullSnapshot = await getProviderHealthSnapshot(
+  providerWithObservableProbe,
+  null as unknown as ProviderHealth,
+  nowMs,
+);
+if (injectedNullSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('an explicitly injected null health snapshot must fail closed as UNAVAILABLE.');
+}
+if (!injectedNullSnapshot.health.message?.includes('malformed')) {
+  throw new Error('an injected null health snapshot must retain malformed-payload diagnostics.');
+}
+if (injectedSnapshotProbeCalls !== 0) {
+  throw new Error('an explicitly injected health snapshot must never be replaced by a fresh provider probe.');
+}
+
 const invalidClock = normalizeProviderHealth(
   null as unknown as ProviderHealth,
   Number.NaN,
@@ -73,4 +101,4 @@ if (invalidClock.checkedAt !== '1970-01-01T00:00:00.000Z') {
   throw new Error('invalid observation clocks must keep the deterministic epoch sentinel.');
 }
 
-console.log('Provider health root smoke passed: null, array and primitive health responses fail closed without throwing before Feature/Strategy/Risk/UI layers can consume them.');
+console.log('Provider health root smoke passed: malformed and explicitly injected null health responses fail closed without hidden reprobes before Feature/Strategy/Risk/UI layers can consume them.');
