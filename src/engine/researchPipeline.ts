@@ -36,6 +36,7 @@ import {
   selectShortlistCandidates,
   ShortlistStrategyResult,
 } from './strategy/shortlistStrategy';
+import { runFeatureGatedShortlistStrategy } from './strategy/featureDrivenShortlist';
 
 export {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
@@ -43,6 +44,7 @@ export {
   runShortlistStrategy,
   selectShortlistCandidates,
 } from './strategy/shortlistStrategy';
+export { runFeatureGatedShortlistStrategy } from './strategy/featureDrivenShortlist';
 
 export interface ResearchPipelineSummary {
   universeCount: number;
@@ -347,7 +349,14 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    const shortlistStrategy = runShortlistStrategy(universe);
+    // Strategy execution is now explicitly gated by complete Feature Engine
+    // output. Legacy StockData-derived shortlist fields remain authoritative only
+    // as a compatibility bridge until they are migrated into a dedicated
+    // feature-derived strategy input DTO.
+    const shortlistStrategy = runFeatureGatedShortlistStrategy(
+      universe,
+      featuresByTicker,
+    );
 
     return {
       universe,
