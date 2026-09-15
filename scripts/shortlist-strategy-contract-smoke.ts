@@ -35,6 +35,38 @@ assert.throws(
   },
 );
 
+for (const invalidTicker of ['', '   ']) {
+  const malformedIdentityCandidates = strategyCandidates.map(candidate => ({ ...candidate }));
+  malformedIdentityCandidates[0].ticker = invalidTicker;
+  malformedIdentityCandidates[0].stock = {
+    ...malformedIdentityCandidates[0].stock,
+    ticker: invalidTicker,
+  };
+  assert.throws(
+    () => runShortlistStrategyCandidates(malformedIdentityCandidates),
+    (error: unknown) => {
+      assert.ok(error instanceof ShortlistStrategyInputError);
+      assert.deepEqual(error.invalidTickers, ['index:0']);
+      return true;
+    },
+  );
+}
+
+const duplicateIdentityCandidates = strategyCandidates.map(candidate => ({ ...candidate }));
+duplicateIdentityCandidates[1].ticker = duplicateIdentityCandidates[0].ticker;
+duplicateIdentityCandidates[1].stock = {
+  ...duplicateIdentityCandidates[1].stock,
+  ticker: duplicateIdentityCandidates[0].ticker,
+};
+assert.throws(
+  () => runShortlistStrategyCandidates(duplicateIdentityCandidates),
+  (error: unknown) => {
+    assert.ok(error instanceof ShortlistStrategyInputError);
+    assert.deepEqual(error.invalidTickers, [duplicateIdentityCandidates[0].ticker]);
+    return true;
+  },
+);
+
 function expectRejected(
   mutate: (stock: Record<string, unknown>) => void,
   expectedTicker: string,
