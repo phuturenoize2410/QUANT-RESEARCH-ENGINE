@@ -14,12 +14,14 @@ export class ShortlistFeatureBoundaryError extends Error {
   readonly mismatchedTickers: readonly string[];
   readonly unexpectedTickers: readonly string[];
   readonly invalidTimestampTickers: readonly string[];
+  readonly inconsistentTimestampTickers: readonly string[];
 
   constructor(
     missingTickers: readonly string[],
     mismatchedTickers: readonly string[],
     unexpectedTickers: readonly string[] = [],
     invalidTimestampTickers: readonly string[] = [],
+    inconsistentTimestampTickers: readonly string[] = [],
   ) {
     const details = [
       missingTickers.length > 0 ? `missing features: ${missingTickers.join(', ')}` : '',
@@ -28,10 +30,13 @@ export class ShortlistFeatureBoundaryError extends Error {
       invalidTimestampTickers.length > 0
         ? `invalid feature timestamps: ${invalidTimestampTickers.join(', ')}`
         : '',
+      inconsistentTimestampTickers.length > 0
+        ? `cross-snapshot feature timestamps: ${inconsistentTimestampTickers.join(', ')}`
+        : '',
     ].filter(Boolean).join('; ');
 
     super(
-      'Shortlist strategy requires an exact, timestamped Feature Engine output set before evaluation' +
+      'Shortlist strategy requires an exact, timestamped, single-snapshot Feature Engine output set before evaluation' +
       (details ? ` (${details}).` : '.'),
     );
     this.name = 'ShortlistFeatureBoundaryError';
@@ -39,6 +44,7 @@ export class ShortlistFeatureBoundaryError extends Error {
     this.mismatchedTickers = Object.freeze([...mismatchedTickers]);
     this.unexpectedTickers = Object.freeze([...unexpectedTickers]);
     this.invalidTimestampTickers = Object.freeze([...invalidTimestampTickers]);
+    this.inconsistentTimestampTickers = Object.freeze([...inconsistentTimestampTickers]);
   }
 }
 
@@ -55,19 +61,22 @@ export class ShortlistInputAuthorityError extends Error {
   }
 }
 
-function hasValidFeatureTimestamp(vector: TickerFeatureVector): boolean {
-  return typeof vector.timestamp === 'string' &&
-    vector.timestamp.trim().length > 0 &&
-    Number.isFinite(Date.parse(vector.timestamp));
+function parseFeatureTimestamp(vector: TickerFeatureVector): number | null {
+  if (typeof vector.timestamp !== 'string' || vector.timestamp.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Date.parse(vector.timestamp);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 /**
  * Transitional Feature Engine -> Strategy Engine boundary.
  *
- * Feature output must have exact one-to-one universe coverage and a parseable
- * observation timestamp before strategy evaluation. After that gate, legacy
- * derived shortlist fields are copied into a narrow strategy-owned DTO so the
- * strategy layer no longer evaluates the full provider-shaped StockData object
+ * Feature output must have exact one-to-one universe coverage and belong to one
+ * parseable point-in-time snapshot before strategy evaluation. After that gate,
+ * legacy derived shortlist fields are copied into a narrow strategy-owned DTO so
+ * the strategy layer no longer evaluates the full provider-shaped StockData object
  * directly.
  *
  * The legacy projection is deliberately MOCK-only. Real/delayed/EOD provider
@@ -84,10 +93,12 @@ export function runFeatureGatedShortlistStrategy(
   const missingTickers: string[] = [];
   const mismatchedTickers: string[] = [];
   const invalidTimestampTickers: string[] = [];
+  const inconsistentTimestampTickers: string[] = [];
   const universeTickers = new Set(universe.map(stock => stock.ticker));
   const unexpectedTickers = Object.keys(featuresByTicker)
     .filter(ticker => !universeTickers.has(ticker))
     .sort();
+  let snapshotTimestamp: number | null = null;
 
   for (const stock of universe) {
     const vector = featuresByTicker[stock.ticker];
@@ -100,8 +111,16 @@ export function runFeatureGatedShortlistStrategy(
       mismatchedTickers.push(`${stock.ticker}->${vector.ticker}`);
     }
 
-    if (!hasValidFeatureTimestamp(vector)) {
+    const parsedTimestamp = parseFeatureTimestamp(vector);
+    if (parsedTimestamp === null) {
       invalidTimestampTickers.push(stock.ticker);
+      continue;
+    }
+
+    if (snapshotTimestamp === null) {
+      snapshotTimestamp = parsedTimestamp;
+    } else if (parsedTimestamp !== snapshotTimestamp) {
+      inconsistentTimestampTickers.push(stock.ticker);
     }
   }
 
@@ -109,13 +128,15 @@ export function runFeatureGatedShortlistStrategy(
     missingTickers.length > 0 ||
     mismatchedTickers.length > 0 ||
     unexpectedTickers.length > 0 ||
-    invalidTimestampTickers.length > 0
+    invalidTimestampTickers.length > 0 ||
+    inconsistentTimestampTickers.length > 0
   ) {
     throw new ShortlistFeatureBoundaryError(
       missingTickers,
       mismatchedTickers,
       unexpectedTickers,
       invalidTimestampTickers,
+      inconsistentTimestampTickers,
     );
   }
 
