@@ -1,4 +1,5 @@
 import { StockData } from '../../types';
+import { ProviderMode } from '../dataProviders';
 import { TickerFeatureVector } from '../ml/types';
 import {
   DEFAULT_SHORTLIST_EDGE_THRESHOLD,
@@ -35,6 +36,19 @@ export class ShortlistFeatureBoundaryError extends Error {
   }
 }
 
+export class ShortlistInputAuthorityError extends Error {
+  readonly providerMode: ProviderMode;
+
+  constructor(providerMode: ProviderMode) {
+    super(
+      `Shortlist strategy cannot use legacy StockData-derived inputs in ${providerMode} mode. ` +
+      'Migrate prefilterPassed and overnightEdgeScore to an authoritative Feature Engine projection before enabling non-mock strategy execution.',
+    );
+    this.name = 'ShortlistInputAuthorityError';
+    this.providerMode = providerMode;
+  }
+}
+
 /**
  * Transitional Feature Engine -> Strategy Engine boundary.
  *
@@ -43,16 +57,16 @@ export class ShortlistFeatureBoundaryError extends Error {
  * narrow strategy-owned DTO so the strategy layer no longer evaluates the full
  * provider-shaped StockData object directly.
  *
- * The source of prefilterPassed/overnightEdgeScore is intentionally unchanged in
- * this increment to preserve prototype behavior. A later slice can migrate those
- * values to authoritative feature-derived calculations without re-coupling the
- * Strategy Engine to provider data.
+ * The legacy projection is deliberately MOCK-only. Real/delayed/EOD provider
+ * integration must source shortlist inputs from authoritative Feature Engine
+ * output rather than silently trusting provider-shaped compatibility fields.
  */
 export function runFeatureGatedShortlistStrategy(
   universe: StockData[],
   featuresByTicker: Readonly<Record<string, TickerFeatureVector>>,
   shortlistEdgeThreshold: number = DEFAULT_SHORTLIST_EDGE_THRESHOLD,
   shortlistLimit: number = DEFAULT_SHORTLIST_LIMIT,
+  providerMode: ProviderMode = 'MOCK',
 ): ShortlistStrategyResult {
   const missingTickers: string[] = [];
   const mismatchedTickers: string[] = [];
@@ -83,6 +97,10 @@ export function runFeatureGatedShortlistStrategy(
       mismatchedTickers,
       unexpectedTickers,
     );
+  }
+
+  if (providerMode !== 'MOCK') {
+    throw new ShortlistInputAuthorityError(providerMode);
   }
 
   const strategyCandidates: ShortlistStrategyCandidate[] = universe.map(stock => ({
