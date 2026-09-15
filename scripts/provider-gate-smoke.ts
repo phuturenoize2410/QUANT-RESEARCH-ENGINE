@@ -33,7 +33,15 @@ const baseStatus: ProviderStatusSnapshot = {
   capturedAt: '2026-09-12T09:00:00.000Z',
 };
 
-assert.equal(getProviderReadiness(baseStatus, 'EOD_RESEARCH').allowed, true);
+const gatedReadiness = getProviderReadiness(baseStatus, 'EOD_RESEARCH');
+assert.equal(gatedReadiness.allowed, true);
+assert.notEqual(gatedReadiness, baseStatus.readiness.EOD_RESEARCH, 'gate must return a defensive snapshot');
+assert.equal(Object.isFrozen(gatedReadiness), true, 'gated readiness must be immutable');
+assert.equal(Object.isFrozen(gatedReadiness.reasons), true, 'gated reasons must be immutable');
+assert.equal(Object.isFrozen(gatedReadiness.warnings), true, 'gated warnings must be immutable');
+baseStatus.readiness.EOD_RESEARCH.warnings.push('late mutation');
+assert.deepEqual(gatedReadiness.warnings, ['mock'], 'post-gate source mutation must not alter enforced diagnostics');
+baseStatus.readiness.EOD_RESEARCH.warnings.pop();
 
 for (const malformed of [
   { useCase: 'EOD_RESEARCH', allowed: 'yes', reasons: [], warnings: [] },
@@ -56,6 +64,7 @@ for (const malformed of [
 
   const readiness = getProviderReadiness(status, 'EOD_RESEARCH');
   assert.equal(readiness.allowed, false, 'malformed readiness must fail closed');
+  assert.equal(Object.isFrozen(readiness), true, 'fail-closed readiness must also be immutable');
   assert.match(readiness.reasons[0], /missing or malformed/i);
   assert.throws(
     () => assertProviderReady(status, 'EOD_RESEARCH'),
@@ -63,4 +72,4 @@ for (const malformed of [
   );
 }
 
-console.log('Provider gate smoke passed: valid readiness survives; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
+console.log('Provider gate smoke passed: valid decisions are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
