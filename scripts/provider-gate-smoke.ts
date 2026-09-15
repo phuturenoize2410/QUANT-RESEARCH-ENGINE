@@ -47,6 +47,13 @@ baseStatus.readiness.EOD_RESEARCH.warnings.pop();
 const rejectedStatus: ProviderStatusSnapshot = {
   ...baseStatus,
   metadata: { ...baseStatus.metadata, supportedMarkets: [...baseStatus.metadata.supportedMarkets] },
+  health: { ...baseStatus.health },
+  readiness: Object.fromEntries(
+    Object.entries(baseStatus.readiness).map(([key, value]) => [
+      key,
+      { ...value, reasons: [...value.reasons], warnings: [...value.warnings] },
+    ]),
+  ) as ProviderStatusSnapshot['readiness'],
 };
 let rejectedError: ProviderReadinessError | undefined;
 try {
@@ -56,11 +63,21 @@ try {
   rejectedError = error;
 }
 assert.ok(rejectedError);
+assert.notEqual(rejectedError.status, rejectedStatus, 'error must snapshot complete provider status evidence');
+assert.equal(Object.isFrozen(rejectedError.status), true, 'rejected provider status must be immutable');
 assert.notEqual(rejectedError.provider, rejectedStatus.metadata, 'error must snapshot provider metadata');
 assert.equal(Object.isFrozen(rejectedError.provider), true, 'rejected provider metadata must be immutable');
 assert.equal(Object.isFrozen(rejectedError.provider.supportedMarkets), true, 'rejected provider markets must be immutable');
+assert.equal(Object.isFrozen(rejectedError.status.health), true, 'rejected provider health must be immutable');
+assert.equal(Object.isFrozen(rejectedError.status.readiness), true, 'rejected readiness matrix must be immutable');
+assert.equal(Object.isFrozen(rejectedError.status.readiness.EOD_RESEARCH), true, 'all rejected readiness decisions must be immutable');
+
 rejectedStatus.metadata.name = 'Mutated Provider';
+rejectedStatus.health.message = 'mutated health';
+rejectedStatus.readiness.EOD_RESEARCH.warnings.push('mutated warning');
 assert.equal(rejectedError.provider.name, 'Test Provider', 'post-gate metadata mutation must not alter rejected provider identity');
+assert.equal(rejectedError.status.health.message, 'test', 'post-gate health mutation must not alter rejected evidence');
+assert.deepEqual(rejectedError.status.readiness.EOD_RESEARCH.warnings, ['mock'], 'post-gate readiness mutation must not alter rejected evidence');
 
 for (const malformed of [
   { useCase: 'EOD_RESEARCH', allowed: 'yes', reasons: [], warnings: [] },
@@ -91,4 +108,4 @@ for (const malformed of [
   );
 }
 
-console.log('Provider gate smoke passed: readiness and rejected provider identity are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
+console.log('Provider gate smoke passed: readiness and complete rejected provider status evidence are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
