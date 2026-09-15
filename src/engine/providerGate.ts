@@ -5,7 +5,14 @@ import {
   ResearchUseCase,
 } from './providerPolicy';
 
-const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => ({
+const snapshotReadiness = (readiness: ProviderReadiness): ProviderReadiness => Object.freeze({
+  useCase: readiness.useCase,
+  allowed: readiness.allowed,
+  reasons: Object.freeze([...readiness.reasons]) as unknown as string[],
+  warnings: Object.freeze([...readiness.warnings]) as unknown as string[],
+});
+
+const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => snapshotReadiness({
   useCase,
   allowed: false,
   reasons: [`Provider readiness snapshot is missing or malformed for ${useCase}.`],
@@ -50,13 +57,18 @@ export function isProviderReadiness(value: unknown, useCase: ResearchUseCase): v
  * adapters, caches and persisted status payloads are external boundaries at
  * runtime. Missing, malformed or older snapshots fail closed instead of allowing
  * truthy non-boolean values or incomplete diagnostics to bypass provider policy.
+ * Valid decisions are defensively snapshotted so callers cannot mutate a status
+ * object after the enforcement boundary and silently change the decision or its
+ * diagnostics for downstream UI/telemetry consumers.
  */
 export function getProviderReadiness(
   status: ProviderStatusSnapshot,
   useCase: ResearchUseCase,
 ): ProviderReadiness {
   const readiness = status.readiness?.[useCase] as unknown;
-  return isProviderReadiness(readiness, useCase) ? readiness : missingReadiness(useCase);
+  return isProviderReadiness(readiness, useCase)
+    ? snapshotReadiness(readiness)
+    : missingReadiness(useCase);
 }
 
 export class ProviderReadinessError extends Error {
@@ -80,9 +92,10 @@ export class ProviderReadinessError extends Error {
     );
 
     this.name = 'ProviderReadinessError';
-    // Preserve the canonical policy snapshot that caused the rejection. Future
-    // UI/telemetry consumers can inspect health, capture time, target market,
-    // readiness reasons and warnings without re-running or duplicating policy.
+    // Preserve the canonical policy decision that caused the rejection. Future
+    // UI/telemetry consumers can inspect the immutable readiness decision without
+    // re-running or duplicating policy even if an external status object is later
+    // mutated by an adapter/cache boundary.
     this.status = status;
     this.provider = status.metadata;
     this.useCase = useCase;
@@ -99,7 +112,7 @@ export class ProviderReadinessError extends Error {
  * and carrying the original ProviderStatusSnapshot gives downstream status
  * surfaces a stable, vendor-neutral failure contract without re-evaluating policy.
  * Missing or malformed runtime readiness decisions fail closed through the same
- * typed error.
+ * typed error. The returned decision is an immutable defensive snapshot.
  */
 export function assertProviderReady(
   status: ProviderStatusSnapshot,
