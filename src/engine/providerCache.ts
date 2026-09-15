@@ -193,9 +193,13 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     const normalizedTicker = requireTicker(ticker, this.metadata.id);
     const validatedLimit = requireLimit(limit, this.metadata.id);
     const cachedEntry = this.dailyBars.get(normalizedTicker);
-    const cached = this.read(cachedEntry, () => this.dailyBars.delete(normalizedTicker));
+    const cached = this.read(
+      cachedEntry,
+      () => this.dailyBars.delete(normalizedTicker),
+      bars => bars.length >= validatedLimit,
+    );
 
-    if (cached && cached.length >= validatedLimit) {
+    if (cached) {
       return cached.slice(-validatedLimit).map(bar => ({ ...bar }));
     }
 
@@ -268,7 +272,11 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     }
   }
 
-  private read<T>(entry?: CacheEntry<T>, evict?: () => void): T | undefined {
+  private read<T>(
+    entry?: CacheEntry<T>,
+    evict?: () => void,
+    satisfiesRequest: (value: T) => boolean = () => true,
+  ): T | undefined {
     if (!entry) {
       this.stats.misses += 1;
       return undefined;
@@ -276,6 +284,10 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     if (entry.expiresAtMs <= Date.now()) {
       evict?.();
       this.stats.evictions += 1;
+      this.stats.misses += 1;
+      return undefined;
+    }
+    if (!satisfiesRequest(entry.value)) {
       this.stats.misses += 1;
       return undefined;
     }
