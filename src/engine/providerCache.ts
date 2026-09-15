@@ -99,6 +99,10 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata 
   });
 }
 
+function snapshotProviderHealth(health: ProviderHealth): ProviderHealth {
+  return Object.freeze({ ...health });
+}
+
 function isFiniteBar(bar: DailyBar): boolean {
   return [bar.open, bar.high, bar.low, bar.close, bar.volume, bar.turnover]
     .every(Number.isFinite);
@@ -166,7 +170,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   }
 
   async getHealth(): Promise<ProviderHealth> {
-    return this.delegate.getHealth();
+    return snapshotProviderHealth(await this.delegate.getHealth());
   }
 
   getCurrentRegime(): MarketRegime {
