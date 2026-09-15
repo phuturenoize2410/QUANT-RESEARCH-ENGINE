@@ -8,8 +8,12 @@ import {
 } from '../src/engine/strategy/featureDrivenShortlist';
 
 const universe = buildUniverse();
+const featureTimestamp = '2026-09-15T01:00:00.000Z';
 const featuresByTicker = Object.fromEntries(
-  universe.map(stock => [stock.ticker, { ticker: stock.ticker } as TickerFeatureVector]),
+  universe.map(stock => [
+    stock.ticker,
+    { ticker: stock.ticker, timestamp: featureTimestamp } as TickerFeatureVector,
+  ]),
 );
 
 const baseline = runFeatureGatedShortlistStrategy(universe, featuresByTicker);
@@ -36,6 +40,7 @@ assert.throws(
     assert.deepEqual(error.missingTickers, [missingTicker]);
     assert.deepEqual(error.mismatchedTickers, []);
     assert.deepEqual(error.unexpectedTickers, []);
+    assert.deepEqual(error.invalidTimestampTickers, []);
     return true;
   },
 );
@@ -52,13 +57,14 @@ assert.throws(
     assert.deepEqual(error.missingTickers, []);
     assert.deepEqual(error.mismatchedTickers, [`${mismatchedTicker}->WRONG`]);
     assert.deepEqual(error.unexpectedTickers, []);
+    assert.deepEqual(error.invalidTimestampTickers, []);
     return true;
   },
 );
 
 const unexpectedFeatures = {
   ...featuresByTicker,
-  STALE: { ticker: 'STALE' } as TickerFeatureVector,
+  STALE: { ticker: 'STALE', timestamp: featureTimestamp } as TickerFeatureVector,
 };
 assert.throws(
   () => runFeatureGatedShortlistStrategy(universe, unexpectedFeatures),
@@ -67,8 +73,31 @@ assert.throws(
     assert.deepEqual(error.missingTickers, []);
     assert.deepEqual(error.mismatchedTickers, []);
     assert.deepEqual(error.unexpectedTickers, ['STALE']);
+    assert.deepEqual(error.invalidTimestampTickers, []);
     return true;
   },
 );
+
+const invalidTimestampTicker = universe[2].ticker;
+for (const timestamp of ['', 'not-a-date']) {
+  const invalidTimestampFeatures = {
+    ...featuresByTicker,
+    [invalidTimestampTicker]: {
+      ...featuresByTicker[invalidTimestampTicker],
+      timestamp,
+    },
+  };
+  assert.throws(
+    () => runFeatureGatedShortlistStrategy(universe, invalidTimestampFeatures),
+    (error: unknown) => {
+      assert.ok(error instanceof ShortlistFeatureBoundaryError);
+      assert.deepEqual(error.missingTickers, []);
+      assert.deepEqual(error.mismatchedTickers, []);
+      assert.deepEqual(error.unexpectedTickers, []);
+      assert.deepEqual(error.invalidTimestampTickers, [invalidTimestampTicker]);
+      return true;
+    },
+  );
+}
 
 console.log('feature-gated shortlist strategy smoke passed');
