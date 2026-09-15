@@ -40,6 +40,10 @@ for (const malformed of [
   { useCase: 'LIVE_EXECUTION', allowed: true, reasons: [], warnings: [] },
   { useCase: 'EOD_RESEARCH', allowed: true, reasons: 'none', warnings: [] },
   { useCase: 'EOD_RESEARCH', allowed: true, reasons: [], warnings: [42] },
+  { useCase: 'EOD_RESEARCH', allowed: true, reasons: ['blocking reason'], warnings: [] },
+  { useCase: 'EOD_RESEARCH', allowed: false, reasons: [], warnings: [] },
+  { useCase: 'EOD_RESEARCH', allowed: false, reasons: ['   '], warnings: [] },
+  { useCase: 'EOD_RESEARCH', allowed: true, reasons: [], warnings: ['   '] },
   null,
 ]) {
   const status = {
@@ -59,4 +63,4 @@ for (const malformed of [
   );
 }
 
-console.log('Provider gate smoke passed: valid readiness survives; malformed runtime decisions fail closed before data ingestion.');
+console.log('Provider gate smoke passed: valid readiness survives; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
