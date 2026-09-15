@@ -105,12 +105,6 @@ export class MarketDataProviderContractError extends Error {
   }
 }
 
-/**
- * TypeScript interfaces disappear at runtime. External adapters therefore need
- * one explicit contract check before ingestion so a provider that passes health
- * and metadata policy cannot crash the pipeline later because a market-data
- * method is absent or non-callable.
- */
 export function assertMarketDataProviderRuntimeContract(
   provider: MarketDataProvider,
   providerName: string,
@@ -135,14 +129,10 @@ export class ProviderUniverseContractError extends Error {
     receivedType: string,
     invalidEntries: readonly string[] = [],
   ) {
-    const entryDetail =
-      invalidEntries.length > 0
-        ? ` Invalid entries: ${invalidEntries.join('; ')}.`
-        : '';
+    const entryDetail = invalidEntries.length > 0 ? ` Invalid entries: ${invalidEntries.join('; ')}.` : '';
     super(
       `Provider ${providerName} returned an invalid universe payload: ` +
-      `expected an array of uniquely identified stocks, received ${receivedType}.` +
-      entryDetail,
+      `expected an array of uniquely identified stocks, received ${receivedType}.` + entryDetail,
     );
     this.name = 'ProviderUniverseContractError';
     this.providerName = providerName;
@@ -162,10 +152,7 @@ export function assertProviderUniverseRuntimeContract(
   providerName: string,
 ): asserts universe is StockData[] {
   if (!Array.isArray(universe)) {
-    throw new ProviderUniverseContractError(
-      providerName,
-      describeRuntimeType(universe),
-    );
+    throw new ProviderUniverseContractError(providerName, describeRuntimeType(universe));
   }
 
   const invalidEntries: string[] = [];
@@ -176,41 +163,29 @@ export function assertProviderUniverseRuntimeContract(
       invalidEntries.push(`index ${index}: expected stock object`);
       return;
     }
-
     const ticker = (entry as Record<string, unknown>).ticker;
     if (typeof ticker !== 'string' || ticker.trim().length === 0) {
       invalidEntries.push(`index ${index}: ticker must be a non-empty string`);
       return;
     }
-
     const canonicalTicker = normalizeSymbol(ticker);
     if (ticker !== canonicalTicker) {
-      invalidEntries.push(
-        `index ${index}: ticker ${JSON.stringify(ticker)} must be canonical ${canonicalTicker}`,
-      );
+      invalidEntries.push(`index ${index}: ticker ${JSON.stringify(ticker)} must be canonical ${canonicalTicker}`);
       return;
     }
-
     if (seenTickers.has(canonicalTicker)) {
       invalidEntries.push(`index ${index}: duplicate ticker ${canonicalTicker}`);
       return;
     }
-
     seenTickers.add(canonicalTicker);
   });
 
   if (invalidEntries.length > 0) {
-    throw new ProviderUniverseContractError(
-      providerName,
-      'array with invalid stock identities',
-      invalidEntries,
-    );
+    throw new ProviderUniverseContractError(providerName, 'array with invalid stock identities', invalidEntries);
   }
 }
 
-function isCacheAwareProvider(
-  provider: MarketDataProvider,
-): provider is CacheAwareMarketDataProvider {
+function isCacheAwareProvider(provider: MarketDataProvider): provider is CacheAwareMarketDataProvider {
   const candidate = provider as Partial<CacheAwareMarketDataProvider>;
   return typeof candidate.getCacheSnapshot === 'function';
 }
@@ -229,24 +204,7 @@ export function buildResearchPipelineSummary(
   };
 }
 
-/**
- * Provider-driven orchestration boundary:
- * DataProvider -> Feature Context -> Feature Engine -> Strategy/Risk/Execution -> UI.
- *
- * The pipeline is explicitly bound to a market adapter. Provider suitability is
- * checked against that market before universe data is admitted into the research
- * flow, so future IDX/US providers cannot silently feed the wrong market into a
- * shared quant core.
- *
- * Strategy selection is delegated to the strategy engine so this orchestrator
- * coordinates stages without owning eligibility/ranking rules itself. Applied
- * strategy policy travels with the snapshot so downstream consumers do not need
- * to reconstruct thresholds, limits or ranking assumptions.
- *
- * The feature-context factory is deliberately injectable. A future Google Finance,
- * free API, broker or fundamental adapter can populate point-in-time contextual
- * inputs without changing FeatureStore or any UI consumer.
- */
+/** Provider-driven orchestration boundary: DataProvider -> Feature Engine -> Strategy -> Risk/Execution -> UI. */
 export class DefaultResearchPipeline implements ResearchPipeline {
   constructor(
     private readonly provider: MarketDataProvider,
@@ -255,47 +213,20 @@ export class DefaultResearchPipeline implements ResearchPipeline {
     private readonly market: MarketAdapter = IDX_MARKET_ADAPTER,
   ) {}
 
-  getProvider(): MarketDataProvider {
-    return this.provider;
-  }
-
-  getMarket(): MarketAdapter {
-    return this.market;
-  }
+  getProvider(): MarketDataProvider { return this.provider; }
+  getMarket(): MarketAdapter { return this.market; }
 
   async refresh(settings: StrategySettings): Promise<ResearchPipelineSnapshot> {
-    // Prototype seeding is an implementation detail of the known mock adapter,
-    // not a decision derived from untrusted provider metadata. This keeps malformed
-    // third-party metadata from influencing orchestration before provider policy has
-    // produced a canonical status snapshot.
     if (this.provider instanceof MockMarketDataProvider && this.seedUniverse) {
-      const seeded = this.seedUniverse(settings);
-      this.provider.setUniverse(seeded);
+      this.provider.setUniverse(this.seedUniverse(settings));
     }
 
     const providerStatus = await getProviderStatusSnapshot(
-      this.provider,
-      undefined,
-      Date.now(),
-      this.market.identity.marketId,
+      this.provider, undefined, Date.now(), this.market.identity.marketId,
     );
-
-    // The provider-policy layer owns all market/capability/health decisions.
-    // Orchestration only enforces the canonical decision before ingestion.
     assertProviderReady(providerStatus, 'EOD_RESEARCH');
+    assertMarketDataProviderRuntimeContract(this.provider, providerStatus.metadata.name);
 
-    // HealthCheckedProvider is intentionally narrower than MarketDataProvider.
-    // Once policy readiness succeeds, verify the full adapter contract before any
-    // ingestion call so external/free/paid adapters fail deterministically at the
-    // boundary instead of surfacing a raw "is not a function" runtime exception.
-    assertMarketDataProviderRuntimeContract(
-      this.provider,
-      providerStatus.metadata.name,
-    );
-
-    // From this point onward, orchestration consumes only canonicalized provider
-    // identity/mode. Raw adapter metadata must not steer feature provenance or the
-    // real-vs-simulated safety rules after the policy boundary has been crossed.
     const providerMode = providerStatus.metadata.mode;
     const providerName = providerStatus.metadata.name;
     const universePayload: unknown = await this.provider.getUniverse();
@@ -320,14 +251,10 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       );
     }
 
-    // Binding is the feature-store safety boundary: it validates lineage and
-    // invalidates any vectors cached under the previous point-in-time snapshot.
     FeatureStore.bindPipelineContext(featureContext);
-
     const featuresByTicker = Object.fromEntries(
       universe.map(stock => [stock.ticker, FeatureStore.get(stock, featureContext)]),
     );
-
     const featureProvenanceByTicker = Object.fromEntries(
       Object.entries(featuresByTicker).map(([ticker, vector]) => [
         ticker,
@@ -339,7 +266,6 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       const unsafeTickers = Object.values(featureProvenanceByTicker)
         .filter(snapshot => !snapshot.productionSafe)
         .map(snapshot => snapshot.ticker);
-
       if (unsafeTickers.length > 0) {
         throw new Error(
           `Feature provenance validation failed for provider ${providerName}: ` +
@@ -349,13 +275,17 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       }
     }
 
-    // Strategy execution is now explicitly gated by complete Feature Engine
-    // output. Legacy StockData-derived shortlist fields remain authoritative only
-    // as a compatibility bridge until they are migrated into a dedicated
-    // feature-derived strategy input DTO.
+    // The compatibility projection still reads legacy StockData-derived shortlist
+    // fields. Bind it to canonical provider mode so only explicitly MOCK research
+    // can use that bridge; real/delayed/EOD data must wait for authoritative
+    // Feature Engine-owned strategy inputs rather than silently trusting provider
+    // enrichment fields.
     const shortlistStrategy = runFeatureGatedShortlistStrategy(
       universe,
       featuresByTicker,
+      DEFAULT_SHORTLIST_EDGE_THRESHOLD,
+      DEFAULT_SHORTLIST_LIMIT,
+      providerMode,
     );
 
     return {
@@ -369,9 +299,7 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       provider: providerStatus.metadata,
       providerHealth: providerStatus.health,
       providerReadiness: providerStatus.readiness,
-      providerCache: isCacheAwareProvider(this.provider)
-        ? this.provider.getCacheSnapshot()
-        : undefined,
+      providerCache: isCacheAwareProvider(this.provider) ? this.provider.getCacheSnapshot() : undefined,
       summary: buildResearchPipelineSummary(universe, shortlistStrategy),
       generatedAt: providerStatus.capturedAt,
     };
