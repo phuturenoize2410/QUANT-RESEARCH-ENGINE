@@ -92,6 +92,13 @@ function requireCachePolicy(
   return resolved;
 }
 
+function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata {
+  return Object.freeze({
+    ...metadata,
+    supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
+  });
+}
+
 function isFiniteBar(bar: DailyBar): boolean {
   return [bar.open, bar.high, bar.low, bar.close, bar.volume, bar.turnover]
     .every(Number.isFinite);
@@ -154,7 +161,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     private readonly delegate: MarketDataProvider,
     policy: Partial<ProviderCachePolicy> = {},
   ) {
-    this.metadata = delegate.metadata;
+    this.metadata = snapshotProviderMetadata(delegate.metadata);
     this.policy = requireCachePolicy(this.metadata.id, policy);
   }
 
