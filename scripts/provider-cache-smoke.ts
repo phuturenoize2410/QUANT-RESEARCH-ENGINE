@@ -54,6 +54,11 @@ if (!Object.isFrozen(provider.metadata) || !Object.isFrozen(provider.metadata.su
   throw new Error('cached provider metadata snapshot must be immutable.');
 }
 
+const health = await provider.getHealth();
+if (!Object.isFrozen(health)) {
+  throw new Error('cached provider health snapshot must be immutable at the wrapper boundary.');
+}
+
 const first = await provider.getUniverse();
 first[0].historicalBars[0].close = 777;
 first[0].bandarmology.topBuyers[0].brokerCode = 'MUTATED';
@@ -100,4 +105,4 @@ if (snapshot.quoteEntries !== 0 || snapshot.dailyBarEntries !== 0) {
   throw new Error('invalid provider requests must fail before polluting cache identity/state.');
 }
 
-console.log('Provider-cache smoke passed: metadata/cache ownership is isolated and cache policy/request boundaries fail closed.');
+console.log('Provider-cache smoke passed: metadata/health/cache ownership is isolated and cache policy/request boundaries fail closed.');
