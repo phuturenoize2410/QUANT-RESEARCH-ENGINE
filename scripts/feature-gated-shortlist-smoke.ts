@@ -42,6 +42,7 @@ assert.throws(
     assert.deepEqual(error.unexpectedTickers, []);
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
+    assert.deepEqual(error.duplicateUniverseTickers, []);
     return true;
   },
 );
@@ -60,6 +61,7 @@ assert.throws(
     assert.deepEqual(error.unexpectedTickers, []);
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
+    assert.deepEqual(error.duplicateUniverseTickers, []);
     return true;
   },
 );
@@ -77,6 +79,7 @@ assert.throws(
     assert.deepEqual(error.unexpectedTickers, ['STALE']);
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
+    assert.deepEqual(error.duplicateUniverseTickers, []);
     return true;
   },
 );
@@ -99,6 +102,7 @@ for (const timestamp of ['', 'not-a-date']) {
       assert.deepEqual(error.unexpectedTickers, []);
       assert.deepEqual(error.invalidTimestampTickers, [invalidTimestampTicker]);
       assert.deepEqual(error.inconsistentTimestampTickers, []);
+      assert.deepEqual(error.duplicateUniverseTickers, []);
       return true;
     },
   );
@@ -121,6 +125,7 @@ assert.throws(
     assert.deepEqual(error.unexpectedTickers, []);
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, [crossSnapshotTicker]);
+    assert.deepEqual(error.duplicateUniverseTickers, []);
     return true;
   },
 );
@@ -135,5 +140,21 @@ const equivalentInstantFeatures = {
 };
 const equivalentInstantResult = runFeatureGatedShortlistStrategy(universe, equivalentInstantFeatures);
 assert.equal(equivalentInstantResult.evaluatedUniverseCount, universe.length);
+
+const duplicateTicker = universe[0].ticker;
+const duplicateUniverse = [...universe, { ...universe[0] }];
+assert.throws(
+  () => runFeatureGatedShortlistStrategy(duplicateUniverse, featuresByTicker),
+  (error: unknown) => {
+    assert.ok(error instanceof ShortlistFeatureBoundaryError);
+    assert.deepEqual(error.missingTickers, []);
+    assert.deepEqual(error.mismatchedTickers, []);
+    assert.deepEqual(error.unexpectedTickers, []);
+    assert.deepEqual(error.invalidTimestampTickers, []);
+    assert.deepEqual(error.inconsistentTimestampTickers, []);
+    assert.deepEqual(error.duplicateUniverseTickers, [duplicateTicker]);
+    return true;
+  },
+);
 
 console.log('feature-gated shortlist strategy smoke passed');
