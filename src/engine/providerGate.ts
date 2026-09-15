@@ -1,9 +1,16 @@
-import { ProviderMetadata } from './dataProviders';
+import { ProviderHealth, ProviderMetadata } from './dataProviders';
 import {
   ProviderReadiness,
   ProviderStatusSnapshot,
   ResearchUseCase,
 } from './providerPolicy';
+
+const RESEARCH_USE_CASES: readonly ResearchUseCase[] = [
+  'HISTORICAL_BACKTEST',
+  'EOD_RESEARCH',
+  'PRECLOSE_SCREENING',
+  'LIVE_EXECUTION',
+];
 
 const snapshotReadiness = (readiness: ProviderReadiness): ProviderReadiness => Object.freeze({
   useCase: readiness.useCase,
@@ -16,6 +23,8 @@ const snapshotProviderMetadata = (metadata: ProviderMetadata): ProviderMetadata 
   ...metadata,
   supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
 });
+
+const snapshotProviderHealth = (health: ProviderHealth): ProviderHealth => Object.freeze({ ...health });
 
 const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => snapshotReadiness({
   useCase,
@@ -76,6 +85,22 @@ export function getProviderReadiness(
     : missingReadiness(useCase);
 }
 
+/** Capture the complete provider-status evidence at the rejection boundary. */
+const snapshotProviderStatus = (status: ProviderStatusSnapshot): ProviderStatusSnapshot => {
+  const readiness = Object.fromEntries(
+    RESEARCH_USE_CASES.map(useCase => [useCase, getProviderReadiness(status, useCase)]),
+  ) as Record<ResearchUseCase, ProviderReadiness>;
+
+  return Object.freeze({
+    metadata: snapshotProviderMetadata(status.metadata),
+    health: snapshotProviderHealth(status.health),
+    readiness: Object.freeze(readiness),
+    targetMarket: status.targetMarket,
+    marketCompatible: status.marketCompatible,
+    capturedAt: status.capturedAt,
+  });
+};
+
 export class ProviderReadinessError extends Error {
   readonly status: ProviderStatusSnapshot;
   readonly provider: ProviderMetadata;
@@ -83,10 +108,11 @@ export class ProviderReadinessError extends Error {
   readonly readiness: ProviderReadiness;
 
   constructor(status: ProviderStatusSnapshot, useCase: ResearchUseCase) {
-    const readiness = getProviderReadiness(status, useCase);
-    const provider = snapshotProviderMetadata(status.metadata);
-    const marketContext = status.targetMarket
-      ? ` for target market ${status.targetMarket}`
+    const statusSnapshot = snapshotProviderStatus(status);
+    const readiness = statusSnapshot.readiness[useCase];
+    const provider = statusSnapshot.metadata;
+    const marketContext = statusSnapshot.targetMarket
+      ? ` for target market ${statusSnapshot.targetMarket}`
       : '';
     const reasons = readiness.reasons.length > 0
       ? ` ${readiness.reasons.join(' ')}`
@@ -98,11 +124,11 @@ export class ProviderReadinessError extends Error {
     );
 
     this.name = 'ProviderReadinessError';
-    // Preserve canonical snapshots of the policy decision and provider identity
-    // that caused rejection. External adapters/caches may still mutate the source
-    // status object, but downstream UI/telemetry must not observe provider identity
-    // drifting away from the readiness decision captured at this boundary.
-    this.status = status;
+    // Preserve the complete canonical evidence that caused rejection. External
+    // adapters/caches may mutate their source status object after the gate, but
+    // downstream UI/telemetry must observe one stable point-in-time snapshot of
+    // provider identity, health and policy decisions.
+    this.status = statusSnapshot;
     this.provider = provider;
     this.useCase = useCase;
     this.readiness = readiness;
