@@ -113,4 +113,19 @@ if (snapshot.stats.hits !== capturedHits) {
   throw new Error('provider cache evidence must remain point-in-time after later cache activity.');
 }
 
-console.log('Provider-cache smoke passed: metadata/health/cache ownership and immutable cache evidence are isolated; policy/request boundaries fail closed.');
+const immediateExpiryProvider = new CachedMarketDataProvider(
+  new MockMarketDataProvider([sentinel]),
+  { quoteTtlMs: 0, dailyBarsTtlMs: 0, universeTtlMs: 0 },
+);
+await immediateExpiryProvider.getQuote('CACHE');
+await immediateExpiryProvider.getDailyBars('CACHE', 1);
+await immediateExpiryProvider.getUniverse();
+const expiredSnapshot = immediateExpiryProvider.getCacheSnapshot();
+if (expiredSnapshot.quoteEntries !== 0 || expiredSnapshot.dailyBarEntries !== 0 || expiredSnapshot.universeCached) {
+  throw new Error('provider cache evidence must exclude entries whose TTL has already expired.');
+}
+if (expiredSnapshot.oldestEntryAt !== undefined || expiredSnapshot.newestEntryAt !== undefined) {
+  throw new Error('provider cache evidence timestamps must describe only live cache entries.');
+}
+
+console.log('Provider-cache smoke passed: metadata/health/cache ownership and immutable live-cache evidence are isolated; policy/request boundaries fail closed.');
