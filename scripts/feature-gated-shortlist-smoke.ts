@@ -43,6 +43,7 @@ assert.throws(
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
     assert.deepEqual(error.duplicateUniverseTickers, []);
+    assert.deepEqual(error.invalidUniverseTickers, []);
     return true;
   },
 );
@@ -62,6 +63,7 @@ assert.throws(
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
     assert.deepEqual(error.duplicateUniverseTickers, []);
+    assert.deepEqual(error.invalidUniverseTickers, []);
     return true;
   },
 );
@@ -80,6 +82,7 @@ assert.throws(
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
     assert.deepEqual(error.duplicateUniverseTickers, []);
+    assert.deepEqual(error.invalidUniverseTickers, []);
     return true;
   },
 );
@@ -103,6 +106,7 @@ for (const timestamp of ['', 'not-a-date']) {
       assert.deepEqual(error.invalidTimestampTickers, [invalidTimestampTicker]);
       assert.deepEqual(error.inconsistentTimestampTickers, []);
       assert.deepEqual(error.duplicateUniverseTickers, []);
+      assert.deepEqual(error.invalidUniverseTickers, []);
       return true;
     },
   );
@@ -126,6 +130,7 @@ assert.throws(
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, [crossSnapshotTicker]);
     assert.deepEqual(error.duplicateUniverseTickers, []);
+    assert.deepEqual(error.invalidUniverseTickers, []);
     return true;
   },
 );
@@ -153,8 +158,24 @@ assert.throws(
     assert.deepEqual(error.invalidTimestampTickers, []);
     assert.deepEqual(error.inconsistentTimestampTickers, []);
     assert.deepEqual(error.duplicateUniverseTickers, [duplicateTicker]);
+    assert.deepEqual(error.invalidUniverseTickers, []);
     return true;
   },
 );
+
+for (const invalidTicker of ['', '   ']) {
+  const invalidUniverseIndex = 0;
+  const invalidUniverse = universe.map((stock, index) =>
+    index === invalidUniverseIndex ? { ...stock, ticker: invalidTicker } : stock,
+  );
+  assert.throws(
+    () => runFeatureGatedShortlistStrategy(invalidUniverse, featuresByTicker),
+    (error: unknown) => {
+      assert.ok(error instanceof ShortlistFeatureBoundaryError);
+      assert.deepEqual(error.invalidUniverseTickers, [`index:${invalidUniverseIndex}`]);
+      return true;
+    },
+  );
+}
 
 console.log('feature-gated shortlist strategy smoke passed');
