@@ -41,7 +41,7 @@ for (const [field, value] of [
 const provider = new CachedMarketDataProvider(delegate);
 const cachedProviderId = provider.metadata.id;
 const cachedSupportedMarkets = [...provider.metadata.supportedMarkets];
-const delegateMetadata = delegate.metadata as { id: string; supportedMarkets: string[] };
+const delegateMetadata = delegate.metadata as unknown as { id: string; supportedMarkets: string[] };
 delegateMetadata.id = 'MUTATED_PROVIDER';
 delegateMetadata.supportedMarkets.push('US');
 if (provider.metadata.id !== cachedProviderId) {
