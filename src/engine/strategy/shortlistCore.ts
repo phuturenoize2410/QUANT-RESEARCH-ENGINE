@@ -34,8 +34,8 @@ export class ShortlistStrategyInputError extends Error {
   constructor(invalidTickers: readonly string[]) {
     super(
       'Shortlist strategy rejected malformed derived inputs for ticker(s): ' +
-      `${invalidTickers.join(', ')}. Expected boolean prefilterPassed and finite ` +
-      'overnightEdgeScore within canonical score bounds.',
+      `${invalidTickers.join(', ')}. Expected unique non-empty ticker identities, boolean ` +
+      'prefilterPassed and finite overnightEdgeScore within canonical score bounds.',
     );
     this.name = 'ShortlistStrategyInputError';
     this.invalidTickers = Object.freeze([...invalidTickers]);
@@ -54,11 +54,16 @@ function assertShortlistCoreInputs<TPayload>(
   candidates: readonly ShortlistCoreCandidate<TPayload>[],
 ): void {
   const invalidTickers: string[] = [];
+  const seenTickers = new Set<string>();
 
   candidates.forEach((candidate, index) => {
-    const ticker = typeof candidate?.ticker === 'string' && candidate.ticker.length > 0
+    const ticker = typeof candidate?.ticker === 'string' && candidate.ticker.trim().length > 0
       ? candidate.ticker
       : `index:${index}`;
+    const tickerDuplicate = ticker !== `index:${index}` && seenTickers.has(ticker);
+    if (ticker !== `index:${index}`) {
+      seenTickers.add(ticker);
+    }
     const prefilterValid = typeof candidate?.prefilterPassed === 'boolean';
     const score = candidate?.overnightEdgeScore;
     const scoreValid =
@@ -67,7 +72,7 @@ function assertShortlistCoreInputs<TPayload>(
       score >= OVERNIGHT_EDGE_SCORE_BOUNDS.min &&
       score <= OVERNIGHT_EDGE_SCORE_BOUNDS.max;
 
-    if (!prefilterValid || !scoreValid || ticker === `index:${index}`) {
+    if (!prefilterValid || !scoreValid || ticker === `index:${index}` || tickerDuplicate) {
       invalidTickers.push(ticker);
     }
   });
