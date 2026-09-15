@@ -12,6 +12,11 @@ const snapshotReadiness = (readiness: ProviderReadiness): ProviderReadiness => O
   warnings: Object.freeze([...readiness.warnings]) as unknown as string[],
 });
 
+const snapshotProviderMetadata = (metadata: ProviderMetadata): ProviderMetadata => Object.freeze({
+  ...metadata,
+  supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
+});
+
 const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => snapshotReadiness({
   useCase,
   allowed: false,
@@ -79,6 +84,7 @@ export class ProviderReadinessError extends Error {
 
   constructor(status: ProviderStatusSnapshot, useCase: ResearchUseCase) {
     const readiness = getProviderReadiness(status, useCase);
+    const provider = snapshotProviderMetadata(status.metadata);
     const marketContext = status.targetMarket
       ? ` for target market ${status.targetMarket}`
       : '';
@@ -87,17 +93,17 @@ export class ProviderReadinessError extends Error {
       : '';
 
     super(
-      `Provider ${status.metadata.name} is not ready for ${useCase}${marketContext}.` +
+      `Provider ${provider.name} is not ready for ${useCase}${marketContext}.` +
       `${reasons} Pipeline rejected before data ingestion.`,
     );
 
     this.name = 'ProviderReadinessError';
-    // Preserve the canonical policy decision that caused the rejection. Future
-    // UI/telemetry consumers can inspect the immutable readiness decision without
-    // re-running or duplicating policy even if an external status object is later
-    // mutated by an adapter/cache boundary.
+    // Preserve canonical snapshots of the policy decision and provider identity
+    // that caused rejection. External adapters/caches may still mutate the source
+    // status object, but downstream UI/telemetry must not observe provider identity
+    // drifting away from the readiness decision captured at this boundary.
     this.status = status;
-    this.provider = status.metadata;
+    this.provider = provider;
     this.useCase = useCase;
     this.readiness = readiness;
   }
@@ -109,7 +115,7 @@ export class ProviderReadinessError extends Error {
  * ProviderPolicy owns the suitability decision; orchestration, strategy and UI
  * consumers should enforce that decision through this gate instead of rebuilding
  * market, freshness or capability rules locally. Keeping the thrown error typed
- * and carrying the original ProviderStatusSnapshot gives downstream status
+ * and carrying canonical readiness/provider snapshots gives downstream status
  * surfaces a stable, vendor-neutral failure contract without re-evaluating policy.
  * Missing or malformed runtime readiness decisions fail closed through the same
  * typed error. The returned decision is an immutable defensive snapshot.
