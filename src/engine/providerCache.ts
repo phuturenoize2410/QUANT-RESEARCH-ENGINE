@@ -42,12 +42,8 @@ interface CacheEntry<T> {
 }
 
 const DEFAULT_CACHE_POLICY: ProviderCachePolicy = {
-  // Quote cache is deliberately short. Live/delayed providers can override this
-  // according to their licensing, latency and market-data characteristics.
   quoteTtlMs: 15_000,
-  // Historical bars change slowly and should not consume scarce free API quota.
   dailyBarsTtlMs: 6 * 60 * 60 * 1_000,
-  // Universe/reference data is relatively stable intraday.
   universeTtlMs: 5 * 60 * 1_000,
 };
 
@@ -60,11 +56,13 @@ function isFiniteBar(bar: DailyBar): boolean {
     .every(Number.isFinite);
 }
 
-/**
- * Normalizes provider bars before they enter the research engine. This gives
- * Google Finance/free API/future paid adapters one canonical contract and
- * prevents provider-specific ordering/duplicate behavior leaking downstream.
- */
+function cloneStockData(stock: StockData): StockData {
+  // Universe records contain nested bars, technical/broker-flow structures and
+  // factor arrays. A shallow copy would let UI/feature consumers mutate the
+  // provider cache through those nested references.
+  return structuredClone(stock);
+}
+
 export function normalizeDailyBars(bars: DailyBar[]): DailyBar[] {
   const byDate = new Map<string, DailyBar>();
 
@@ -93,10 +91,11 @@ export function normalizeUniverse(universe: StockData[]): StockData[] {
     const ticker = normalizeTicker(stock.ticker);
     if (!ticker) return;
 
+    const detached = cloneStockData(stock);
     byTicker.set(ticker, {
-      ...stock,
+      ...detached,
       ticker,
-      historicalBars: normalizeDailyBars(stock.historicalBars ?? []),
+      historicalBars: normalizeDailyBars(detached.historicalBars ?? []),
     });
   });
 
@@ -104,12 +103,6 @@ export function normalizeUniverse(universe: StockData[]): StockData[] {
     .sort((a, b) => a.ticker.localeCompare(b.ticker));
 }
 
-/**
- * Decorator that shields the research engine from provider request limits and
- * provider-specific raw ordering/duplication. The first implementation is
- * intentionally in-memory; the same contract can later be backed by IndexedDB,
- * SQLite/Postgres or object storage without changing strategies or UI code.
- */
 export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   readonly metadata: ProviderMetadata;
 
@@ -148,9 +141,6 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
     const normalizedTicker = normalizeTicker(ticker);
-    // Cache a canonical history independent of the caller's requested slice.
-    // Request at least the desired limit from the provider, replacing a shorter
-    // cached history when a later caller needs more observations.
     const cachedEntry = this.dailyBars.get(normalizedTicker);
     const cached = this.read(cachedEntry);
 
@@ -169,12 +159,12 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
 
   async getUniverse(): Promise<StockData[]> {
     const cached = this.read(this.universe);
-    if (cached) return cached.map(stock => ({ ...stock }));
+    if (cached) return cached.map(cloneStockData);
 
     const normalized = normalizeUniverse(await this.delegate.getUniverse());
     this.universe = this.createEntry(normalized, this.policy.universeTtlMs);
     this.stats.writes += 1;
-    return normalized.map(stock => ({ ...stock }));
+    return normalized.map(cloneStockData);
   }
 
   clearCache(): void {
