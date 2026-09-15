@@ -120,6 +120,10 @@ const immediateExpiryProvider = new CachedMarketDataProvider(
 await immediateExpiryProvider.getQuote('CACHE');
 await immediateExpiryProvider.getDailyBars('CACHE', 1);
 await immediateExpiryProvider.getUniverse();
+// A second read must evict each expired entry before delegating and writing its replacement.
+await immediateExpiryProvider.getQuote('CACHE');
+await immediateExpiryProvider.getDailyBars('CACHE', 1);
+await immediateExpiryProvider.getUniverse();
 const expiredSnapshot = immediateExpiryProvider.getCacheSnapshot();
 if (expiredSnapshot.quoteEntries !== 0 || expiredSnapshot.dailyBarEntries !== 0 || expiredSnapshot.universeCached) {
   throw new Error('provider cache evidence must exclude entries whose TTL has already expired.');
@@ -127,5 +131,8 @@ if (expiredSnapshot.quoteEntries !== 0 || expiredSnapshot.dailyBarEntries !== 0 
 if (expiredSnapshot.oldestEntryAt !== undefined || expiredSnapshot.newestEntryAt !== undefined) {
   throw new Error('provider cache evidence timestamps must describe only live cache entries.');
 }
+if (expiredSnapshot.stats.evictions !== 6) {
+  throw new Error(`expired provider entries must be evicted on read and observation boundaries; received ${expiredSnapshot.stats.evictions}.`);
+}
 
-console.log('Provider-cache smoke passed: metadata/health/cache ownership and immutable live-cache evidence are isolated; policy/request boundaries fail closed.');
+console.log('Provider-cache smoke passed: metadata/health/cache ownership, read-time expiry eviction, and immutable live-cache evidence are isolated; policy/request boundaries fail closed.');
