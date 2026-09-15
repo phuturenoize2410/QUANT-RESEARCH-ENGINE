@@ -15,6 +15,7 @@ export class ShortlistFeatureBoundaryError extends Error {
   readonly unexpectedTickers: readonly string[];
   readonly invalidTimestampTickers: readonly string[];
   readonly inconsistentTimestampTickers: readonly string[];
+  readonly duplicateUniverseTickers: readonly string[];
 
   constructor(
     missingTickers: readonly string[],
@@ -22,6 +23,7 @@ export class ShortlistFeatureBoundaryError extends Error {
     unexpectedTickers: readonly string[] = [],
     invalidTimestampTickers: readonly string[] = [],
     inconsistentTimestampTickers: readonly string[] = [],
+    duplicateUniverseTickers: readonly string[] = [],
   ) {
     const details = [
       missingTickers.length > 0 ? `missing features: ${missingTickers.join(', ')}` : '',
@@ -33,10 +35,13 @@ export class ShortlistFeatureBoundaryError extends Error {
       inconsistentTimestampTickers.length > 0
         ? `cross-snapshot feature timestamps: ${inconsistentTimestampTickers.join(', ')}`
         : '',
+      duplicateUniverseTickers.length > 0
+        ? `duplicate universe tickers: ${duplicateUniverseTickers.join(', ')}`
+        : '',
     ].filter(Boolean).join('; ');
 
     super(
-      'Shortlist strategy requires an exact, timestamped, single-snapshot Feature Engine output set before evaluation' +
+      'Shortlist strategy requires an exact, uniquely identified, timestamped, single-snapshot Feature Engine output set before evaluation' +
       (details ? ` (${details}).` : '.'),
     );
     this.name = 'ShortlistFeatureBoundaryError';
@@ -45,6 +50,7 @@ export class ShortlistFeatureBoundaryError extends Error {
     this.unexpectedTickers = Object.freeze([...unexpectedTickers]);
     this.invalidTimestampTickers = Object.freeze([...invalidTimestampTickers]);
     this.inconsistentTimestampTickers = Object.freeze([...inconsistentTimestampTickers]);
+    this.duplicateUniverseTickers = Object.freeze([...duplicateUniverseTickers]);
   }
 }
 
@@ -70,13 +76,29 @@ function parseFeatureTimestamp(vector: TickerFeatureVector): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function findDuplicateUniverseTickers(universe: readonly StockData[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  for (const stock of universe) {
+    if (seen.has(stock.ticker)) {
+      duplicates.add(stock.ticker);
+    } else {
+      seen.add(stock.ticker);
+    }
+  }
+
+  return [...duplicates].sort();
+}
+
 /**
  * Transitional Feature Engine -> Strategy Engine boundary.
  *
- * Feature output must have exact one-to-one universe coverage and belong to one
- * parseable point-in-time snapshot before strategy evaluation. After that gate,
- * legacy derived shortlist fields are copied into a narrow strategy-owned DTO so
- * the strategy layer no longer evaluates the full provider-shaped StockData object
+ * Feature output must have exact one-to-one universe coverage, the universe must
+ * contain unique ticker identities, and all vectors must belong to one parseable
+ * point-in-time snapshot before strategy evaluation. After that gate, legacy
+ * derived shortlist fields are copied into a narrow strategy-owned DTO so the
+ * strategy layer no longer evaluates the full provider-shaped StockData object
  * directly.
  *
  * The legacy projection is deliberately MOCK-only. Real/delayed/EOD provider
@@ -94,6 +116,7 @@ export function runFeatureGatedShortlistStrategy(
   const mismatchedTickers: string[] = [];
   const invalidTimestampTickers: string[] = [];
   const inconsistentTimestampTickers: string[] = [];
+  const duplicateUniverseTickers = findDuplicateUniverseTickers(universe);
   const universeTickers = new Set(universe.map(stock => stock.ticker));
   const unexpectedTickers = Object.keys(featuresByTicker)
     .filter(ticker => !universeTickers.has(ticker))
@@ -129,7 +152,8 @@ export function runFeatureGatedShortlistStrategy(
     mismatchedTickers.length > 0 ||
     unexpectedTickers.length > 0 ||
     invalidTimestampTickers.length > 0 ||
-    inconsistentTimestampTickers.length > 0
+    inconsistentTimestampTickers.length > 0 ||
+    duplicateUniverseTickers.length > 0
   ) {
     throw new ShortlistFeatureBoundaryError(
       missingTickers,
@@ -137,6 +161,7 @@ export function runFeatureGatedShortlistStrategy(
       unexpectedTickers,
       invalidTimestampTickers,
       inconsistentTimestampTickers,
+      duplicateUniverseTickers,
     );
   }
 
