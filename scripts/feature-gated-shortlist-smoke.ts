@@ -4,18 +4,27 @@ import { TickerFeatureVector } from '../src/engine/ml/types';
 import {
   runFeatureGatedShortlistStrategy,
   ShortlistFeatureBoundaryError,
+  ShortlistInputAuthorityError,
 } from '../src/engine/strategy/featureDrivenShortlist';
 
 const universe = buildUniverse();
 const featuresByTicker = Object.fromEntries(
-  universe.map(stock => [
-    stock.ticker,
-    { ticker: stock.ticker } as TickerFeatureVector,
-  ]),
+  universe.map(stock => [stock.ticker, { ticker: stock.ticker } as TickerFeatureVector]),
 );
 
 const baseline = runFeatureGatedShortlistStrategy(universe, featuresByTicker);
 assert.equal(baseline.evaluatedUniverseCount, universe.length);
+
+for (const mode of ['DELAYED', 'EOD', 'REALTIME'] as const) {
+  assert.throws(
+    () => runFeatureGatedShortlistStrategy(universe, featuresByTicker, undefined, undefined, mode),
+    (error: unknown) => {
+      assert.ok(error instanceof ShortlistInputAuthorityError);
+      assert.equal(error.providerMode, mode);
+      return true;
+    },
+  );
+}
 
 const missingTicker = universe[0].ticker;
 const missingFeatures = { ...featuresByTicker };
@@ -34,10 +43,7 @@ assert.throws(
 const mismatchedTicker = universe[1].ticker;
 const mismatchedFeatures = {
   ...featuresByTicker,
-  [mismatchedTicker]: {
-    ...featuresByTicker[mismatchedTicker],
-    ticker: 'WRONG',
-  },
+  [mismatchedTicker]: { ...featuresByTicker[mismatchedTicker], ticker: 'WRONG' },
 };
 assert.throws(
   () => runFeatureGatedShortlistStrategy(universe, mismatchedFeatures),
