@@ -1,5 +1,5 @@
 import type { StockData } from '../src/types';
-import { MockMarketDataProvider } from '../src/engine/dataProviders';
+import { MockMarketDataProvider, ProviderRequestError } from '../src/engine/dataProviders';
 import { CachedMarketDataProvider } from '../src/engine/providerCache';
 
 const sentinel = {
@@ -45,9 +45,30 @@ if (second[0].positiveFactors[0] !== 'A') {
   throw new Error('cached provider universe must detach nested factor arrays from consumers.');
 }
 
+for (const malformedTicker of ['', '   ']) {
+  try {
+    await provider.getQuote(malformedTicker);
+    throw new Error('cached quote boundary accepted malformed ticker identity.');
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError) || error.field !== 'ticker') throw error;
+  }
+}
+
+for (const malformedLimit of [0, -1, 1.5, Number.NaN]) {
+  try {
+    await provider.getDailyBars('CACHE', malformedLimit);
+    throw new Error('cached daily-bar boundary accepted malformed limit.');
+  } catch (error) {
+    if (!(error instanceof ProviderRequestError) || error.field !== 'limit') throw error;
+  }
+}
+
 const snapshot = provider.getCacheSnapshot();
 if (!snapshot.universeCached || snapshot.stats.hits < 1) {
   throw new Error('ownership isolation must preserve normal cache-hit behavior.');
 }
+if (snapshot.quoteEntries !== 0 || snapshot.dailyBarEntries !== 0) {
+  throw new Error('invalid provider requests must fail before polluting cache identity/state.');
+}
 
-console.log('Provider-cache smoke passed: cached universe records retain provider ownership across nested consumer mutations without disabling cache hits.');
+console.log('Provider-cache smoke passed: cached universe ownership is isolated and malformed ticker/limit requests fail before cache access or delegate ingestion.');
