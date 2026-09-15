@@ -6,7 +6,7 @@ import {
   ProviderMetadata,
   ProviderRequestError,
 } from './dataProviders';
-import { MarketRegime } from './strategyTypes';
+import { MarketRegime } from './market/marketRegime';
 
 export interface ProviderCachePolicy {
   quoteTtlMs: number;
