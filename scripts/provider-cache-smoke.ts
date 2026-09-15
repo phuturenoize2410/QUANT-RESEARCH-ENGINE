@@ -39,6 +39,21 @@ for (const [field, value] of [
 }
 
 const provider = new CachedMarketDataProvider(delegate);
+const cachedProviderId = provider.metadata.id;
+const cachedSupportedMarkets = [...provider.metadata.supportedMarkets];
+const delegateMetadata = delegate.metadata as { id: string; supportedMarkets: string[] };
+delegateMetadata.id = 'MUTATED_PROVIDER';
+delegateMetadata.supportedMarkets.push('US');
+if (provider.metadata.id !== cachedProviderId) {
+  throw new Error('cached provider metadata identity must be detached from delegate mutation.');
+}
+if (provider.metadata.supportedMarkets.join(',') !== cachedSupportedMarkets.join(',')) {
+  throw new Error('cached provider supported markets must be detached from delegate mutation.');
+}
+if (!Object.isFrozen(provider.metadata) || !Object.isFrozen(provider.metadata.supportedMarkets)) {
+  throw new Error('cached provider metadata snapshot must be immutable.');
+}
+
 const first = await provider.getUniverse();
 first[0].historicalBars[0].close = 777;
 first[0].bandarmology.topBuyers[0].brokerCode = 'MUTATED';
@@ -85,4 +100,4 @@ if (snapshot.quoteEntries !== 0 || snapshot.dailyBarEntries !== 0) {
   throw new Error('invalid provider requests must fail before polluting cache identity/state.');
 }
 
-console.log('Provider-cache smoke passed: cache policy/request boundaries fail closed while cached universe ownership remains isolated.');
+console.log('Provider-cache smoke passed: metadata/cache ownership is isolated and cache policy/request boundaries fail closed.');
