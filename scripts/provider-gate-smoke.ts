@@ -12,6 +12,7 @@ const baseStatus: ProviderStatusSnapshot = {
     name: 'Test Provider',
     source: 'MOCK_ENGINE',
     mode: 'MOCK',
+    isPaid: false,
     supportsHistorical: true,
     supportsIntraday: true,
     supportsRealtime: false,
@@ -43,6 +44,24 @@ baseStatus.readiness.EOD_RESEARCH.warnings.push('late mutation');
 assert.deepEqual(gatedReadiness.warnings, ['mock'], 'post-gate source mutation must not alter enforced diagnostics');
 baseStatus.readiness.EOD_RESEARCH.warnings.pop();
 
+const rejectedStatus: ProviderStatusSnapshot = {
+  ...baseStatus,
+  metadata: { ...baseStatus.metadata, supportedMarkets: [...baseStatus.metadata.supportedMarkets] },
+};
+let rejectedError: ProviderReadinessError | undefined;
+try {
+  assertProviderReady(rejectedStatus, 'LIVE_EXECUTION');
+} catch (error) {
+  assert.ok(error instanceof ProviderReadinessError);
+  rejectedError = error;
+}
+assert.ok(rejectedError);
+assert.notEqual(rejectedError.provider, rejectedStatus.metadata, 'error must snapshot provider metadata');
+assert.equal(Object.isFrozen(rejectedError.provider), true, 'rejected provider metadata must be immutable');
+assert.equal(Object.isFrozen(rejectedError.provider.supportedMarkets), true, 'rejected provider markets must be immutable');
+rejectedStatus.metadata.name = 'Mutated Provider';
+assert.equal(rejectedError.provider.name, 'Test Provider', 'post-gate metadata mutation must not alter rejected provider identity');
+
 for (const malformed of [
   { useCase: 'EOD_RESEARCH', allowed: 'yes', reasons: [], warnings: [] },
   { useCase: 'LIVE_EXECUTION', allowed: true, reasons: [], warnings: [] },
@@ -72,4 +91,4 @@ for (const malformed of [
   );
 }
 
-console.log('Provider gate smoke passed: valid decisions are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
+console.log('Provider gate smoke passed: readiness and rejected provider identity are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
