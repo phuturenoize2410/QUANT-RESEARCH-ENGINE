@@ -224,6 +224,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   }
 
   getCacheSnapshot(): ProviderCacheSnapshot {
+    this.pruneExpiredEntries();
     const cachedAtValues = [
       ...Array.from(this.quotes.values()).map(entry => entry.cachedAtMs),
       ...Array.from(this.dailyBars.values()).map(entry => entry.cachedAtMs),
@@ -244,6 +245,19 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
         ? new Date(Math.max(...cachedAtValues)).toISOString()
         : undefined,
     });
+  }
+
+  private pruneExpiredEntries(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.quotes) {
+      if (entry.expiresAtMs <= now) this.quotes.delete(key);
+    }
+    for (const [key, entry] of this.dailyBars) {
+      if (entry.expiresAtMs <= now) this.dailyBars.delete(key);
+    }
+    if (this.universe?.expiresAtMs !== undefined && this.universe.expiresAtMs <= now) {
+      this.universe = undefined;
+    }
   }
 
   private read<T>(entry?: CacheEntry<T>): T | undefined {
