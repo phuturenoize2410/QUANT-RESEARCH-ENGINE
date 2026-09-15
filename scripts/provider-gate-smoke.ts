@@ -4,35 +4,41 @@ import {
   getProviderReadiness,
   ProviderReadinessError,
 } from '../src/engine/providerGate';
-import { ProviderStatusSnapshot } from '../src/engine/providerPolicy';
+import { ProviderStatusSnapshot, snapshotProviderStatus } from '../src/engine/providerPolicy';
 
 const baseStatus: ProviderStatusSnapshot = {
   metadata: {
-    id: 'TEST',
-    name: 'Test Provider',
-    source: 'MOCK_ENGINE',
-    mode: 'MOCK',
-    isPaid: false,
-    supportsHistorical: true,
-    supportsIntraday: true,
-    supportsRealtime: false,
-    supportedMarkets: ['IDX'],
+    id: 'TEST', name: 'Test Provider', source: 'MOCK_ENGINE', mode: 'MOCK', isPaid: false,
+    supportsHistorical: true, supportsIntraday: true, supportsRealtime: false, supportedMarkets: ['IDX'],
   },
-  health: {
-    status: 'HEALTHY',
-    checkedAt: '2026-09-12T09:00:00.000Z',
-    message: 'test',
-  },
+  health: { status: 'HEALTHY', checkedAt: '2026-09-12T09:00:00.000Z', message: 'test' },
   readiness: {
     HISTORICAL_BACKTEST: { useCase: 'HISTORICAL_BACKTEST', allowed: false, reasons: ['mock'], warnings: [] },
     EOD_RESEARCH: { useCase: 'EOD_RESEARCH', allowed: true, reasons: [], warnings: ['mock'] },
     PRECLOSE_SCREENING: { useCase: 'PRECLOSE_SCREENING', allowed: false, reasons: ['mock'], warnings: [] },
     LIVE_EXECUTION: { useCase: 'LIVE_EXECUTION', allowed: false, reasons: ['mock'], warnings: [] },
   },
-  targetMarket: 'IDX',
-  marketCompatible: true,
-  capturedAt: '2026-09-12T09:00:00.000Z',
+  targetMarket: 'IDX', marketCompatible: true, capturedAt: '2026-09-12T09:00:00.000Z',
 };
+
+const canonicalStatus = snapshotProviderStatus(baseStatus);
+assert.notEqual(canonicalStatus, baseStatus, 'provider status boundary must detach caller-owned status');
+assert.equal(Object.isFrozen(canonicalStatus), true, 'canonical provider status must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.metadata), true, 'canonical provider metadata must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.metadata.supportedMarkets), true, 'canonical supported markets must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.health), true, 'canonical provider health must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.readiness), true, 'canonical readiness matrix must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.readiness.EOD_RESEARCH), true, 'canonical readiness decisions must be immutable');
+assert.equal(Object.isFrozen(canonicalStatus.readiness.EOD_RESEARCH.warnings), true, 'canonical readiness diagnostics must be immutable');
+baseStatus.metadata.name = 'Mutated after snapshot';
+baseStatus.health.message = 'mutated after snapshot';
+baseStatus.readiness.EOD_RESEARCH.warnings.push('late mutation');
+assert.equal(canonicalStatus.metadata.name, 'Test Provider');
+assert.equal(canonicalStatus.health.message, 'test');
+assert.deepEqual(canonicalStatus.readiness.EOD_RESEARCH.warnings, ['mock']);
+baseStatus.metadata.name = 'Test Provider';
+baseStatus.health.message = 'test';
+baseStatus.readiness.EOD_RESEARCH.warnings.pop();
 
 const gatedReadiness = getProviderReadiness(baseStatus, 'EOD_RESEARCH');
 assert.equal(gatedReadiness.allowed, true);
@@ -48,19 +54,11 @@ const rejectedStatus: ProviderStatusSnapshot = {
   ...baseStatus,
   metadata: { ...baseStatus.metadata, supportedMarkets: [...baseStatus.metadata.supportedMarkets] },
   health: { ...baseStatus.health },
-  readiness: Object.fromEntries(
-    Object.entries(baseStatus.readiness).map(([key, value]) => [
-      key,
-      { ...value, reasons: [...value.reasons], warnings: [...value.warnings] },
-    ]),
-  ) as ProviderStatusSnapshot['readiness'],
+  readiness: Object.fromEntries(Object.entries(baseStatus.readiness).map(([key, value]) => [key, { ...value, reasons: [...value.reasons], warnings: [...value.warnings] }])) as ProviderStatusSnapshot['readiness'],
 };
 let rejectedError: ProviderReadinessError | undefined;
-try {
-  assertProviderReady(rejectedStatus, 'LIVE_EXECUTION');
-} catch (error) {
-  assert.ok(error instanceof ProviderReadinessError);
-  rejectedError = error;
+try { assertProviderReady(rejectedStatus, 'LIVE_EXECUTION'); } catch (error) {
+  assert.ok(error instanceof ProviderReadinessError); rejectedError = error;
 }
 assert.ok(rejectedError);
 assert.notEqual(rejectedError.status, rejectedStatus, 'error must snapshot complete provider status evidence');
@@ -71,7 +69,6 @@ assert.equal(Object.isFrozen(rejectedError.provider.supportedMarkets), true, 're
 assert.equal(Object.isFrozen(rejectedError.status.health), true, 'rejected provider health must be immutable');
 assert.equal(Object.isFrozen(rejectedError.status.readiness), true, 'rejected readiness matrix must be immutable');
 assert.equal(Object.isFrozen(rejectedError.status.readiness.EOD_RESEARCH), true, 'all rejected readiness decisions must be immutable');
-
 rejectedStatus.metadata.name = 'Mutated Provider';
 rejectedStatus.health.message = 'mutated health';
 rejectedStatus.readiness.EOD_RESEARCH.warnings.push('mutated warning');
@@ -90,22 +87,12 @@ for (const malformed of [
   { useCase: 'EOD_RESEARCH', allowed: true, reasons: [], warnings: ['   '] },
   null,
 ]) {
-  const status = {
-    ...baseStatus,
-    readiness: {
-      ...baseStatus.readiness,
-      EOD_RESEARCH: malformed,
-    },
-  } as unknown as ProviderStatusSnapshot;
-
+  const status = { ...baseStatus, readiness: { ...baseStatus.readiness, EOD_RESEARCH: malformed } } as unknown as ProviderStatusSnapshot;
   const readiness = getProviderReadiness(status, 'EOD_RESEARCH');
   assert.equal(readiness.allowed, false, 'malformed readiness must fail closed');
   assert.equal(Object.isFrozen(readiness), true, 'fail-closed readiness must also be immutable');
   assert.match(readiness.reasons[0], /missing or malformed/i);
-  assert.throws(
-    () => assertProviderReady(status, 'EOD_RESEARCH'),
-    (error: unknown) => error instanceof ProviderReadinessError,
-  );
+  assert.throws(() => assertProviderReady(status, 'EOD_RESEARCH'), (error: unknown) => error instanceof ProviderReadinessError);
 }
 
-console.log('Provider gate smoke passed: readiness and complete rejected provider status evidence are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
+console.log('Provider gate smoke passed: canonical provider status ownership and rejected evidence are immutable snapshots; contradictory, unexplained, and malformed runtime decisions fail closed before data ingestion.');
