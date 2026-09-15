@@ -4,6 +4,7 @@ import {
   MarketQuote,
   ProviderHealth,
   ProviderMetadata,
+  ProviderRequestError,
 } from './dataProviders';
 import { MarketRegime } from './strategyTypes';
 
@@ -51,15 +52,27 @@ function normalizeTicker(ticker: string): string {
   return ticker.trim().toUpperCase();
 }
 
+function requireTicker(ticker: string, providerId: string): string {
+  const normalized = normalizeTicker(ticker);
+  if (!normalized) {
+    throw new ProviderRequestError(providerId, 'ticker', 'Ticker must be a non-empty instrument identity.');
+  }
+  return normalized;
+}
+
+function requireLimit(limit: number, providerId: string): number {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new ProviderRequestError(providerId, 'limit', 'Daily-bar limit must be a positive integer.');
+  }
+  return limit;
+}
+
 function isFiniteBar(bar: DailyBar): boolean {
   return [bar.open, bar.high, bar.low, bar.close, bar.volume, bar.turnover]
     .every(Number.isFinite);
 }
 
 function cloneStockData(stock: StockData): StockData {
-  // Universe records contain nested bars, technical/broker-flow structures and
-  // factor arrays. A shallow copy would let UI/feature consumers mutate the
-  // provider cache through those nested references.
   return structuredClone(stock);
 }
 
@@ -129,7 +142,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   }
 
   async getQuote(ticker: string): Promise<MarketQuote> {
-    const key = normalizeTicker(ticker);
+    const key = requireTicker(ticker, this.metadata.id);
     const cached = this.read(this.quotes.get(key));
     if (cached) return { ...cached };
 
@@ -140,21 +153,22 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   }
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
-    const normalizedTicker = normalizeTicker(ticker);
+    const normalizedTicker = requireTicker(ticker, this.metadata.id);
+    const validatedLimit = requireLimit(limit, this.metadata.id);
     const cachedEntry = this.dailyBars.get(normalizedTicker);
     const cached = this.read(cachedEntry);
 
-    if (cached && cached.length >= limit) {
-      return cached.slice(-limit).map(bar => ({ ...bar }));
+    if (cached && cached.length >= validatedLimit) {
+      return cached.slice(-validatedLimit).map(bar => ({ ...bar }));
     }
 
-    const bars = normalizeDailyBars(await this.delegate.getDailyBars(normalizedTicker, limit));
+    const bars = normalizeDailyBars(await this.delegate.getDailyBars(normalizedTicker, validatedLimit));
     this.dailyBars.set(
       normalizedTicker,
       this.createEntry(bars, this.policy.dailyBarsTtlMs),
     );
     this.stats.writes += 1;
-    return bars.slice(-limit).map(bar => ({ ...bar }));
+    return bars.slice(-validatedLimit).map(bar => ({ ...bar }));
   }
 
   async getUniverse(): Promise<StockData[]> {
