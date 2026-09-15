@@ -113,6 +113,21 @@ if (snapshot.stats.hits !== capturedHits) {
   throw new Error('provider cache evidence must remain point-in-time after later cache activity.');
 }
 
+const coverageProvider = new CachedMarketDataProvider(new MockMarketDataProvider([sentinel]));
+await coverageProvider.getDailyBars('CACHE', 1);
+const beforeCoverageExpansion = coverageProvider.getCacheSnapshot();
+await coverageProvider.getDailyBars('CACHE', 2);
+const afterCoverageExpansion = coverageProvider.getCacheSnapshot();
+if (afterCoverageExpansion.stats.hits !== beforeCoverageExpansion.stats.hits) {
+  throw new Error('insufficient daily-bar cache coverage must not be classified as a cache hit.');
+}
+if (afterCoverageExpansion.stats.misses !== beforeCoverageExpansion.stats.misses + 1) {
+  throw new Error('insufficient daily-bar cache coverage must be classified as a cache miss before refetch.');
+}
+if (afterCoverageExpansion.stats.writes !== beforeCoverageExpansion.stats.writes + 1) {
+  throw new Error('insufficient daily-bar cache coverage must refetch and replace cached evidence.');
+}
+
 const immediateExpiryProvider = new CachedMarketDataProvider(
   new MockMarketDataProvider([sentinel]),
   { quoteTtlMs: 0, dailyBarsTtlMs: 0, universeTtlMs: 0 },
@@ -135,4 +150,4 @@ if (expiredSnapshot.stats.evictions !== 6) {
   throw new Error(`expired provider entries must be evicted on read and observation boundaries; received ${expiredSnapshot.stats.evictions}.`);
 }
 
-console.log('Provider-cache smoke passed: metadata/health/cache ownership, read-time expiry eviction, and immutable live-cache evidence are isolated; policy/request boundaries fail closed.');
+console.log('Provider-cache smoke passed: metadata/health/cache ownership, request-coverage semantics, read-time expiry eviction, and immutable live-cache evidence are isolated; policy/request boundaries fail closed.');
