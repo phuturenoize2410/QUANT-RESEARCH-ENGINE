@@ -48,6 +48,17 @@ const DEFAULT_CACHE_POLICY: ProviderCachePolicy = {
   universeTtlMs: 5 * 60 * 1_000,
 };
 
+export class ProviderCachePolicyError extends Error {
+  constructor(
+    readonly providerId: string,
+    readonly field: keyof ProviderCachePolicy,
+    readonly value: number,
+  ) {
+    super(`Provider ${providerId} cache policy ${field} must be a finite non-negative number.`);
+    this.name = 'ProviderCachePolicyError';
+  }
+}
+
 function normalizeTicker(ticker: string): string {
   return ticker.trim().toUpperCase();
 }
@@ -65,6 +76,20 @@ function requireLimit(limit: number, providerId: string): number {
     throw new ProviderRequestError(providerId, 'limit', 'Daily-bar limit must be a positive integer.');
   }
   return limit;
+}
+
+function requireCachePolicy(
+  providerId: string,
+  policy: Partial<ProviderCachePolicy>,
+): ProviderCachePolicy {
+  const resolved = { ...DEFAULT_CACHE_POLICY, ...policy };
+  for (const field of Object.keys(resolved) as Array<keyof ProviderCachePolicy>) {
+    const value = resolved[field];
+    if (!Number.isFinite(value) || value < 0) {
+      throw new ProviderCachePolicyError(providerId, field, value);
+    }
+  }
+  return resolved;
 }
 
 function isFiniteBar(bar: DailyBar): boolean {
@@ -130,7 +155,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     policy: Partial<ProviderCachePolicy> = {},
   ) {
     this.metadata = delegate.metadata;
-    this.policy = { ...DEFAULT_CACHE_POLICY, ...policy };
+    this.policy = requireCachePolicy(this.metadata.id, policy);
   }
 
   async getHealth(): Promise<ProviderHealth> {
@@ -225,7 +250,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     return {
       value,
       cachedAtMs,
-      expiresAtMs: cachedAtMs + Math.max(0, ttlMs),
+      expiresAtMs: cachedAtMs + ttlMs,
     };
   }
 }
