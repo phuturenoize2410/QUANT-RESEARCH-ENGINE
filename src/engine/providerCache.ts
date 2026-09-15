@@ -18,6 +18,7 @@ export interface ProviderCacheStats {
   hits: number;
   misses: number;
   writes: number;
+  evictions: number;
 }
 
 export interface ProviderCacheSnapshot {
@@ -159,7 +160,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   private readonly dailyBars = new Map<string, CacheEntry<DailyBar[]>>();
   private universe?: CacheEntry<StockData[]>;
   private readonly policy: ProviderCachePolicy;
-  private readonly stats: ProviderCacheStats = { hits: 0, misses: 0, writes: 0 };
+  private readonly stats: ProviderCacheStats = { hits: 0, misses: 0, writes: 0, evictions: 0 };
 
   constructor(
     private readonly delegate: MarketDataProvider,
@@ -179,7 +180,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
 
   async getQuote(ticker: string): Promise<MarketQuote> {
     const key = requireTicker(ticker, this.metadata.id);
-    const cached = this.read(this.quotes.get(key));
+    const cached = this.read(this.quotes.get(key), () => this.quotes.delete(key));
     if (cached) return { ...cached };
 
     const normalized = normalizeMarketQuote(await this.delegate.getQuote(key));
@@ -192,7 +193,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
     const normalizedTicker = requireTicker(ticker, this.metadata.id);
     const validatedLimit = requireLimit(limit, this.metadata.id);
     const cachedEntry = this.dailyBars.get(normalizedTicker);
-    const cached = this.read(cachedEntry);
+    const cached = this.read(cachedEntry, () => this.dailyBars.delete(normalizedTicker));
 
     if (cached && cached.length >= validatedLimit) {
       return cached.slice(-validatedLimit).map(bar => ({ ...bar }));
@@ -208,7 +209,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   }
 
   async getUniverse(): Promise<StockData[]> {
-    const cached = this.read(this.universe);
+    const cached = this.read(this.universe, () => { this.universe = undefined; });
     if (cached) return cached.map(cloneStockData);
 
     const normalized = normalizeUniverse(await this.delegate.getUniverse());
@@ -250,18 +251,31 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
   private pruneExpiredEntries(): void {
     const now = Date.now();
     for (const [key, entry] of this.quotes) {
-      if (entry.expiresAtMs <= now) this.quotes.delete(key);
+      if (entry.expiresAtMs <= now) {
+        this.quotes.delete(key);
+        this.stats.evictions += 1;
+      }
     }
     for (const [key, entry] of this.dailyBars) {
-      if (entry.expiresAtMs <= now) this.dailyBars.delete(key);
+      if (entry.expiresAtMs <= now) {
+        this.dailyBars.delete(key);
+        this.stats.evictions += 1;
+      }
     }
     if (this.universe?.expiresAtMs !== undefined && this.universe.expiresAtMs <= now) {
       this.universe = undefined;
+      this.stats.evictions += 1;
     }
   }
 
-  private read<T>(entry?: CacheEntry<T>): T | undefined {
-    if (!entry || entry.expiresAtMs <= Date.now()) {
+  private read<T>(entry?: CacheEntry<T>, evict?: () => void): T | undefined {
+    if (!entry) {
+      this.stats.misses += 1;
+      return undefined;
+    }
+    if (entry.expiresAtMs <= Date.now()) {
+      evict?.();
+      this.stats.evictions += 1;
       this.stats.misses += 1;
       return undefined;
     }
