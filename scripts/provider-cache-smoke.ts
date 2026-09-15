@@ -104,5 +104,13 @@ if (!snapshot.universeCached || snapshot.stats.hits < 1) {
 if (snapshot.quoteEntries !== 0 || snapshot.dailyBarEntries !== 0) {
   throw new Error('invalid provider requests must fail before polluting cache identity/state.');
 }
+if (!Object.isFrozen(snapshot) || !Object.isFrozen(snapshot.policy) || !Object.isFrozen(snapshot.stats)) {
+  throw new Error('provider cache evidence must be immutable at the observation boundary.');
+}
+const capturedHits = snapshot.stats.hits;
+await provider.getUniverse();
+if (snapshot.stats.hits !== capturedHits) {
+  throw new Error('provider cache evidence must remain point-in-time after later cache activity.');
+}
 
-console.log('Provider-cache smoke passed: metadata/health/cache ownership is isolated and cache policy/request boundaries fail closed.');
+console.log('Provider-cache smoke passed: metadata/health/cache ownership and immutable cache evidence are isolated; policy/request boundaries fail closed.');
