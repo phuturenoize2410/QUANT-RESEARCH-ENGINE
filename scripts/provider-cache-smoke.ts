@@ -1,6 +1,6 @@
 import type { StockData } from '../src/types';
 import { MockMarketDataProvider, ProviderRequestError } from '../src/engine/dataProviders';
-import { CachedMarketDataProvider } from '../src/engine/providerCache';
+import { CachedMarketDataProvider, ProviderCachePolicyError } from '../src/engine/providerCache';
 
 const sentinel = {
   ticker: 'CACHE',
@@ -24,7 +24,21 @@ const sentinel = {
   riskFactors: ['B'],
 } as unknown as StockData;
 
-const provider = new CachedMarketDataProvider(new MockMarketDataProvider([sentinel]));
+const delegate = new MockMarketDataProvider([sentinel]);
+for (const [field, value] of [
+  ['quoteTtlMs', -1],
+  ['dailyBarsTtlMs', Number.NaN],
+  ['universeTtlMs', Number.POSITIVE_INFINITY],
+] as const) {
+  try {
+    new CachedMarketDataProvider(delegate, { [field]: value });
+    throw new Error(`cached provider accepted malformed ${field}.`);
+  } catch (error) {
+    if (!(error instanceof ProviderCachePolicyError) || error.field !== field) throw error;
+  }
+}
+
+const provider = new CachedMarketDataProvider(delegate);
 const first = await provider.getUniverse();
 first[0].historicalBars[0].close = 777;
 first[0].bandarmology.topBuyers[0].brokerCode = 'MUTATED';
@@ -71,4 +85,4 @@ if (snapshot.quoteEntries !== 0 || snapshot.dailyBarEntries !== 0) {
   throw new Error('invalid provider requests must fail before polluting cache identity/state.');
 }
 
-console.log('Provider-cache smoke passed: cached universe ownership is isolated and malformed ticker/limit requests fail before cache access or delegate ingestion.');
+console.log('Provider-cache smoke passed: cache policy/request boundaries fail closed while cached universe ownership remains isolated.');
