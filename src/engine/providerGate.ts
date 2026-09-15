@@ -12,25 +12,35 @@ const missingReadiness = (useCase: ResearchUseCase): ProviderReadiness => ({
   warnings: [],
 });
 
-const isStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every(item => typeof item === 'string');
+const isDiagnosticArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(
+    item => typeof item === 'string' && item.trim().length > 0,
+  );
 
 /**
  * Runtime guard for readiness payloads crossing adapter/cache/persistence boundaries.
  * TypeScript types do not protect against malformed JSON, stale cached snapshots or
  * third-party adapters. A readiness decision is usable only when its use case,
  * boolean decision and diagnostic arrays all satisfy the canonical contract.
+ * Allowed decisions cannot carry blocking reasons, while rejected decisions must
+ * explain why they failed so downstream UI/telemetry never has to infer policy.
  */
 export function isProviderReadiness(value: unknown, useCase: ResearchUseCase): value is ProviderReadiness {
   if (!value || typeof value !== 'object') return false;
 
   const candidate = value as Partial<ProviderReadiness>;
-  return (
-    candidate.useCase === useCase &&
-    typeof candidate.allowed === 'boolean' &&
-    isStringArray(candidate.reasons) &&
-    isStringArray(candidate.warnings)
-  );
+  if (
+    candidate.useCase !== useCase ||
+    typeof candidate.allowed !== 'boolean' ||
+    !isDiagnosticArray(candidate.reasons) ||
+    !isDiagnosticArray(candidate.warnings)
+  ) {
+    return false;
+  }
+
+  return candidate.allowed
+    ? candidate.reasons.length === 0
+    : candidate.reasons.length > 0;
 }
 
 /**
