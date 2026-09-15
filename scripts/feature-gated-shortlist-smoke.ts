@@ -41,6 +41,7 @@ assert.throws(
     assert.deepEqual(error.mismatchedTickers, []);
     assert.deepEqual(error.unexpectedTickers, []);
     assert.deepEqual(error.invalidTimestampTickers, []);
+    assert.deepEqual(error.inconsistentTimestampTickers, []);
     return true;
   },
 );
@@ -58,6 +59,7 @@ assert.throws(
     assert.deepEqual(error.mismatchedTickers, [`${mismatchedTicker}->WRONG`]);
     assert.deepEqual(error.unexpectedTickers, []);
     assert.deepEqual(error.invalidTimestampTickers, []);
+    assert.deepEqual(error.inconsistentTimestampTickers, []);
     return true;
   },
 );
@@ -74,6 +76,7 @@ assert.throws(
     assert.deepEqual(error.mismatchedTickers, []);
     assert.deepEqual(error.unexpectedTickers, ['STALE']);
     assert.deepEqual(error.invalidTimestampTickers, []);
+    assert.deepEqual(error.inconsistentTimestampTickers, []);
     return true;
   },
 );
@@ -95,9 +98,42 @@ for (const timestamp of ['', 'not-a-date']) {
       assert.deepEqual(error.mismatchedTickers, []);
       assert.deepEqual(error.unexpectedTickers, []);
       assert.deepEqual(error.invalidTimestampTickers, [invalidTimestampTicker]);
+      assert.deepEqual(error.inconsistentTimestampTickers, []);
       return true;
     },
   );
 }
+
+const crossSnapshotTicker = universe[3].ticker;
+const crossSnapshotFeatures = {
+  ...featuresByTicker,
+  [crossSnapshotTicker]: {
+    ...featuresByTicker[crossSnapshotTicker],
+    timestamp: '2026-09-15T01:05:00.000Z',
+  },
+};
+assert.throws(
+  () => runFeatureGatedShortlistStrategy(universe, crossSnapshotFeatures),
+  (error: unknown) => {
+    assert.ok(error instanceof ShortlistFeatureBoundaryError);
+    assert.deepEqual(error.missingTickers, []);
+    assert.deepEqual(error.mismatchedTickers, []);
+    assert.deepEqual(error.unexpectedTickers, []);
+    assert.deepEqual(error.invalidTimestampTickers, []);
+    assert.deepEqual(error.inconsistentTimestampTickers, [crossSnapshotTicker]);
+    return true;
+  },
+);
+
+const equivalentInstantTicker = universe[4].ticker;
+const equivalentInstantFeatures = {
+  ...featuresByTicker,
+  [equivalentInstantTicker]: {
+    ...featuresByTicker[equivalentInstantTicker],
+    timestamp: '2026-09-15T08:00:00.000+07:00',
+  },
+};
+const equivalentInstantResult = runFeatureGatedShortlistStrategy(universe, equivalentInstantFeatures);
+assert.equal(equivalentInstantResult.evaluatedUniverseCount, universe.length);
 
 console.log('feature-gated shortlist strategy smoke passed');
