@@ -89,7 +89,7 @@ function requireCachePolicy(
       throw new ProviderCachePolicyError(providerId, field, value);
     }
   }
-  return resolved;
+  return Object.freeze(resolved);
 }
 
 function snapshotProviderMetadata(metadata: ProviderMetadata): ProviderMetadata {
@@ -230,10 +230,10 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
       ...(this.universe ? [this.universe.cachedAtMs] : []),
     ];
 
-    return {
+    return Object.freeze({
       providerId: this.metadata.id,
-      policy: { ...this.policy },
-      stats: { ...this.stats },
+      policy: Object.freeze({ ...this.policy }),
+      stats: Object.freeze({ ...this.stats }),
       quoteEntries: this.quotes.size,
       dailyBarEntries: this.dailyBars.size,
       universeCached: Boolean(this.universe),
@@ -243,7 +243,7 @@ export class CachedMarketDataProvider implements CacheAwareMarketDataProvider {
       newestEntryAt: cachedAtValues.length
         ? new Date(Math.max(...cachedAtValues)).toISOString()
         : undefined,
-    };
+    });
   }
 
   private read<T>(entry?: CacheEntry<T>): T | undefined {
