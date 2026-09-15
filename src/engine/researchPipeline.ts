@@ -222,16 +222,11 @@ export class DefaultResearchPipeline implements ResearchPipeline {
       this.provider.setUniverse(this.seedUniverse(settings));
     }
 
-    const providerIdentity = this.provider as unknown as { metadata?: { name?: unknown } };
-    const runtimeProviderName = typeof providerIdentity.metadata?.name === 'string'
-      ? providerIdentity.metadata.name
-      : 'unknown-market-data-provider';
-    assertMarketDataProviderRuntimeContract(this.provider, runtimeProviderName);
-
     const providerStatus = await getProviderStatusSnapshot(
       this.provider, undefined, Date.now(), this.market.identity.marketId,
     );
     assertProviderReady(providerStatus, 'EOD_RESEARCH');
+    assertMarketDataProviderRuntimeContract(this.provider, providerStatus.metadata.name);
 
     const providerMode = providerStatus.metadata.mode;
     const providerName = providerStatus.metadata.name;
