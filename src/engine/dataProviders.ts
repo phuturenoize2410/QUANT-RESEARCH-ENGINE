@@ -3,6 +3,7 @@ import { MarketId } from './market/marketAdapter';
 import { normalizeSymbol } from './market/instrumentIdentity';
 import { MarketRegime } from './market/marketRegime';
 import { normalizeProviderQuote } from './providerQuote';
+import { normalizeProviderBars } from './providerBars';
 
 export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
 export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
@@ -220,7 +221,10 @@ export class MockMarketDataProvider implements MarketDataProvider {
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
-    return copyDailyBars(stock.historicalBars.slice(-validateHistoricalLimit(limit, this.metadata.id)));
+    return normalizeProviderBars(
+      this.metadata.id,
+      stock.historicalBars.slice(-validateHistoricalLimit(limit, this.metadata.id)),
+    );
   }
 
   async getUniverse(): Promise<StockData[]> { return copyUniverse(this.universeCache); }
