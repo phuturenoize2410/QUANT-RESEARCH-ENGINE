@@ -1,9 +1,9 @@
 import { ExitDecisionStatus, StrategySettings } from '../types';
 
 export interface ExecutionCosts {
-  buyFeePct: number;
-  sellFeePct: number;
-  slippagePct: number;
+  readonly buyFeePct: number;
+  readonly sellFeePct: number;
+  readonly slippagePct: number;
 }
 
 /** Canonical percentage domain for execution/risk policy inputs. */
@@ -43,13 +43,13 @@ export const DEFAULT_TOTAL_FRICTION_PCT =
 
 export interface OvernightExitPolicy {
   /** Stop distance below entry, expressed as a positive percentage. */
-  stopLossPct: number;
+  readonly stopLossPct: number;
   /** Take-profit distance above entry, expressed as a positive percentage. */
-  takeProfitPct: number;
+  readonly takeProfitPct: number;
   /** Open-gap threshold that immediately classifies the position as take profit. */
-  takeProfitGapPct: number;
+  readonly takeProfitGapPct: number;
   /** Absolute negative open-gap threshold that immediately classifies the position as cut loss. */
-  cutLossGapPct: number;
+  readonly cutLossGapPct: number;
 }
 
 /**
@@ -65,9 +65,9 @@ export const DEFAULT_OVERNIGHT_EXIT_POLICY: Readonly<OvernightExitPolicy> = Obje
 });
 
 export interface OvernightExitDecision {
-  cutLossLevel: number;
-  takeProfitLevel: number;
-  exitStatus: ExitDecisionStatus;
+  readonly cutLossLevel: number;
+  readonly takeProfitLevel: number;
+  readonly exitStatus: ExitDecisionStatus;
 }
 
 function finitePolicyPercentage(value: number, fallback: number): number {
@@ -83,29 +83,31 @@ function finitePolicyPercentage(value: number, fallback: number): number {
  * simulated execution and future broker/provider integrations cannot silently
  * diverge on fees or slippage. Percentage inputs outside the canonical 0-100
  * domain fail closed to defaults rather than contaminating downstream P/L.
+ * Returned snapshots are immutable so downstream strategy/application consumers
+ * cannot mutate the canonicalized economics after validation.
  */
 export function normalizeExecutionCosts(
   costs: Partial<ExecutionCosts> = DEFAULT_EXECUTION_COSTS,
-): ExecutionCosts {
-  return {
+): Readonly<ExecutionCosts> {
+  return Object.freeze({
     buyFeePct: finitePolicyPercentage(costs.buyFeePct ?? DEFAULT_EXECUTION_COSTS.buyFeePct, DEFAULT_EXECUTION_COSTS.buyFeePct),
     sellFeePct: finitePolicyPercentage(costs.sellFeePct ?? DEFAULT_EXECUTION_COSTS.sellFeePct, DEFAULT_EXECUTION_COSTS.sellFeePct),
     slippagePct: finitePolicyPercentage(costs.slippagePct ?? DEFAULT_EXECUTION_COSTS.slippagePct, DEFAULT_EXECUTION_COSTS.slippagePct),
-  };
+  });
 }
 
 export function normalizeOvernightExitPolicy(
   policy: Partial<OvernightExitPolicy> = DEFAULT_OVERNIGHT_EXIT_POLICY,
-): OvernightExitPolicy {
-  return {
+): Readonly<OvernightExitPolicy> {
+  return Object.freeze({
     stopLossPct: finitePolicyPercentage(policy.stopLossPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct, DEFAULT_OVERNIGHT_EXIT_POLICY.stopLossPct),
     takeProfitPct: finitePolicyPercentage(policy.takeProfitPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitPct),
     takeProfitGapPct: finitePolicyPercentage(policy.takeProfitGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct),
     cutLossGapPct: finitePolicyPercentage(policy.cutLossGapPct ?? DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct, DEFAULT_OVERNIGHT_EXIT_POLICY.cutLossGapPct),
-  };
+  });
 }
 
-export function executionCostsFromSettings(settings: StrategySettings): ExecutionCosts {
+export function executionCostsFromSettings(settings: StrategySettings): Readonly<ExecutionCosts> {
   return normalizeExecutionCosts({
     buyFeePct: settings.buyFeePct,
     sellFeePct: settings.sellFeePct,
@@ -134,7 +136,7 @@ export function deriveOvernightExitDecision(
   entryPrice: number,
   openGapPct: number,
   policy: Partial<OvernightExitPolicy> = DEFAULT_OVERNIGHT_EXIT_POLICY,
-): OvernightExitDecision {
+): Readonly<OvernightExitDecision> {
   const normalized = normalizeOvernightExitPolicy(policy);
   const safeEntryPrice = Number.isFinite(entryPrice) && entryPrice > 0 ? entryPrice : 0;
   const safeOpenGapPct = Number.isFinite(openGapPct) ? openGapPct : 0;
@@ -148,9 +150,9 @@ export function deriveOvernightExitDecision(
         ? 'CUT LOSS'
         : 'FLAT / EXIT';
 
-  return {
+  return Object.freeze({
     cutLossLevel,
     takeProfitLevel,
     exitStatus,
-  };
+  });
 }
