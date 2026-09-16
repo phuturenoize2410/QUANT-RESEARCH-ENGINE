@@ -99,8 +99,11 @@ for (const file of riskExecutionRoots) {
 }
 for (const file of collectTypeScriptFiles(engineRoot)) {
   const source = readFileSync(file, 'utf8');
-  for (const specifier of importSpecifiers(source)) if (specifier.includes('/components/') || specifier.endsWith('/App') || specifier.endsWith('/App.tsx')) violations.push(`${relative(repoRoot, file)} imports ${specifier}; engine layers must remain independent from React/UI.`);
+  for (const specifier of importSpecifiers(source)) {
+    if (specifier.includes('/components/') || specifier.endsWith('/App') || specifier.endsWith('/App.tsx')) violations.push(`${relative(repoRoot, file)} imports ${specifier}; engine layers must remain independent from React/UI.`);
+    if (specifier.includes('/application/') || specifier.endsWith('/application')) violations.push(`${relative(repoRoot, file)} imports ${specifier}; engine layers must remain below the application orchestration boundary and cannot depend on application facades.`);
+  }
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
