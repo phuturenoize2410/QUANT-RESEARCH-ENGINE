@@ -40,15 +40,14 @@ function importSpecifiers(source: string): string[] {
   return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
 }
 
-/** React is terminal presentation. Risk and execution are both explicitly blocked
- * here so a new UI surface cannot bypass the application boundary by importing
- * risk sizing/policy directly while execution remains protected. */
-const uiForbiddenBoundaries = [
-  '/engine/dataProviders', '/engine/providerPolicy', '/engine/providerGate', '/engine/providerCache', '/engine/providerHealth',
-  '/engine/featureContext', '/engine/featureProvenance', '/engine/analytics', '/engine/risk', '/engine/execution',
-  '/engine/scorePolicy', '/engine/strategies/', '/engine/strategy/', '/engine/researchApplication', '/engine/ml/',
-  '/engine/quantLabEngine', '/data/mockStocks',
-];
+/**
+ * React is terminal presentation. Default-deny every engine import rather than
+ * maintaining a filename allow/deny list that new quant-core modules can silently
+ * escape. Presentation consumes application facades and passive shared DTOs only.
+ * The exact legacy ML Lab exceptions below are temporary migration debt and must
+ * remain exercised so they cannot become reusable bypasses.
+ */
+const uiForbiddenBoundaries = ['/engine/', '/data/mockStocks'];
 
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   ['src/components/MLLabView.tsx', new Set(['../engine/ml/featureStore', '../engine/ml/models', '../engine/ml/ensembleRouter', '../engine/ml/modelRegistry'])],
@@ -70,7 +69,7 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
     const exceptionKey = `${filePath}::${specifier}`;
     if (exceptions.has(specifier)) exercisedLegacyUiExceptions.add(exceptionKey);
     if (uiForbiddenBoundaries.some(boundary => specifier.includes(boundary)) && !exceptions.has(specifier)) {
-      violations.push(`${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data and decision-model outputs through the application/pipeline boundary.`);
+      violations.push(`${relative(repoRoot, file)} imports ${specifier}; UI must consume quant-core behavior through the application boundary instead of importing engine modules directly.`);
     }
   }
 }
@@ -104,4 +103,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI cannot bypass provider/feature/strategy/risk-execution/application boundaries or add new direct quant-core imports; all ML engine modules are UI-forbidden by default; FinalDecisionModal and QuantLabView have no engine exceptions; remaining MLLab legacy UI exceptions are exact and non-stale; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; and engine code remains UI-independent.`);
