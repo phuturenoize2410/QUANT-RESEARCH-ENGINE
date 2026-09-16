@@ -25,13 +25,18 @@ export interface ProviderMetadata {
   notes?: string;
 }
 
+/**
+ * Health is an observation captured at one instant, not mutable provider state.
+ * Readonly fields plus frozen runtime snapshots prevent downstream application/UI
+ * code from rewriting provider status evidence after the adapter boundary.
+ */
 export interface ProviderHealth {
-  status: ProviderHealthStatus;
-  checkedAt: string;
-  lastSuccessfulSyncAt?: string;
-  latencyMs?: number;
-  staleAfterSeconds?: number;
-  message?: string;
+  readonly status: ProviderHealthStatus;
+  readonly checkedAt: string;
+  readonly lastSuccessfulSyncAt?: string;
+  readonly latencyMs?: number;
+  readonly staleAfterSeconds?: number;
+  readonly message?: string;
 }
 
 /**
@@ -177,22 +182,22 @@ function mockProviderHealth(
   checkedAt: string = new Date().toISOString(),
 ): ProviderHealth {
   if (universeSize === 0) {
-    return {
+    return Object.freeze({
       status: 'DEGRADED',
       checkedAt,
       lastSuccessfulSyncAt,
       latencyMs: 0,
       message: 'Mock provider adapter is operational, but no simulated universe is loaded.',
-    };
+    });
   }
 
-  return {
+  return Object.freeze({
     status: 'HEALTHY',
     checkedAt,
     lastSuccessfulSyncAt,
     latencyMs: 0,
     message: healthyMessage,
-  };
+  });
 }
 
 /**
