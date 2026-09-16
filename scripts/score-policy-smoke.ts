@@ -47,6 +47,20 @@ assert.deepEqual(normalizeScoreBounds({ min: -20, max: 80 }), { min: -20, max: 8
 assert.equal(clampScore(150, null as unknown as { min: number; max: number }), 100);
 assert.equal(roundScore(Number.NaN, ['bad'] as unknown as { min: number; max: number }), 0);
 
+// Canonical and runtime-normalized score policies are immutable evidence. This
+// prevents strategy/application/UI consumers from mutating validated score bounds
+// after they cross the centralized score-policy boundary.
+assert.equal(Object.isFrozen(NORMALIZED_SCORE_BOUNDS), true);
+assert.equal(Object.isFrozen(OVERNIGHT_EDGE_SCORE_BOUNDS), true);
+assert.equal(Object.isFrozen(ESTABLISHED_SCORE_BOUNDS), true);
+assert.equal(Object.isFrozen(RESEARCH_ROBUSTNESS_SCORE_BOUNDS), true);
+const normalizedRuntimeBounds = normalizeScoreBounds({ min: 20, max: 80 });
+assert.equal(Object.isFrozen(normalizedRuntimeBounds), true);
+assert.throws(() => {
+  (normalizedRuntimeBounds as { min: number }).min = -100;
+}, TypeError);
+assert.deepEqual(normalizedRuntimeBounds, { min: 20, max: 80 });
+
 assert.equal(clampNormalizedScore(-5), 0);
 assert.equal(clampNormalizedScore(101), 100);
 assert.equal(roundNormalizedScore(72.6), 73);
