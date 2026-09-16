@@ -4,28 +4,32 @@ export type CurrencyCode = 'IDR' | 'USD' | (string & {});
 /**
  * Minimal market identity carried by market-specific adapters. The quant/ML core
  * should depend on this contract instead of embedding exchange conventions.
+ * Identity is configuration evidence and must not be rewritten after an adapter
+ * has crossed into the engine pipeline.
  */
 export interface MarketIdentity {
-  marketId: MarketId;
-  currency: CurrencyCode;
-  timezone: string;
+  readonly marketId: MarketId;
+  readonly currency: CurrencyCode;
+  readonly timezone: string;
   /** Human-readable timezone label for market-local UI text, e.g. WIB or ET. */
-  timezoneLabel: string;
+  readonly timezoneLabel: string;
 }
 
 /**
  * Market microstructure rules that affect whether an order/execution simulation
  * is valid. Keep the first contract intentionally small: add rules only when an
  * implemented IDX workflow needs them, while leaving room for a future US adapter.
+ * The rule surface itself is immutable so provider/application code cannot swap
+ * market conventions after strategy or execution has observed the adapter.
  */
 export interface MarketMicrostructureRules {
   /** Number of shares represented by one board lot for the instrument. */
-  sharesPerLot(symbol?: string): number;
+  readonly sharesPerLot: (symbol?: string) => number;
 }
 
 export interface MarketAdapter {
-  readonly identity: MarketIdentity;
-  readonly microstructure: MarketMicrostructureRules;
+  readonly identity: Readonly<MarketIdentity>;
+  readonly microstructure: Readonly<MarketMicrostructureRules>;
 }
 
 export function normalizeSharesPerLot(value: number): number {
