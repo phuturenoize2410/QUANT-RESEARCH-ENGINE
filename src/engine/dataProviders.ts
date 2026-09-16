@@ -2,6 +2,7 @@ import { StockData, DailyBar, BandarmologyData } from '../types';
 import { MarketId } from './market/marketAdapter';
 import { normalizeSymbol } from './market/instrumentIdentity';
 import { MarketRegime } from './market/marketRegime';
+import { normalizeProviderQuote } from './providerQuote';
 
 export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
 export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
@@ -202,13 +203,19 @@ export class MockMarketDataProvider implements MarketDataProvider {
   async getQuote(ticker: string): Promise<MarketQuote> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     const lastBar = stock.historicalBars[stock.historicalBars.length - 1];
-    return {
-      ticker: normalizeSymbol(stock.ticker), price: stock.price,
-      open: lastBar ? lastBar.open : stock.price, high: lastBar ? lastBar.high : stock.price,
-      low: lastBar ? lastBar.low : stock.price, close: stock.price, change: stock.change,
-      changePct: stock.changePct, volume: stock.volume, turnover: stock.turnover,
-      timestamp: new Date().toISOString(), source: this.metadata.source,
-    };
+    return normalizeProviderQuote(this.metadata.id, this.metadata.source, {
+      ticker: stock.ticker,
+      price: stock.price,
+      open: lastBar ? lastBar.open : stock.price,
+      high: lastBar ? lastBar.high : stock.price,
+      low: lastBar ? lastBar.low : stock.price,
+      close: stock.price,
+      change: stock.change,
+      changePct: stock.changePct,
+      volume: stock.volume,
+      turnover: stock.turnover,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
