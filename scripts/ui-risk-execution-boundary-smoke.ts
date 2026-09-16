@@ -14,8 +14,10 @@ function collectTypeScriptFiles(path: string): string[] {
 }
 
 function importSpecifiers(source: string): string[] {
-  return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)]
-    .map(match => match[1]);
+  const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
+  const dynamicSpecifiers = [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
+  const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
+  return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
 /**
@@ -82,5 +84,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI application-boundary smoke passed: new React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
+  `UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
 );
