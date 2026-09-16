@@ -14,7 +14,7 @@
     "validate:execution": "tsx scripts/execution-policy-smoke.ts",
     "validate:scores": "tsx scripts/score-policy-smoke.ts",
     "validate:strategy": "tsx scripts/shortlist-strategy-contract-smoke.ts && tsx scripts/feature-gated-shortlist-smoke.ts",
-    "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts && tsx scripts/application-facade-smoke.ts && tsx scripts/ml-lab-application-smoke.ts && tsx scripts/ui-risk-execution-boundary-smoke.ts",
+    "validate:application": "tsx scripts/research-application-smoke.ts && tsx scripts/architecture-boundary-smoke.ts && tsx scripts/application-boundary-smoke.ts && tsx scripts/application-facade-smoke.ts && tsx scripts/ml-lab-application-smoke.ts && tsx scripts/ui-risk-execution-boundary-smoke.ts",
     "validate:opportunities": "tsx scripts/opportunity-map-smoke.ts",
     "check": "npm run lint && npm run validate:data && npm run validate:provider && npm run validate:execution && npm run validate:scores && npm run validate:strategy && npm run validate:application && npm run validate:opportunities && npm run build"
   },
