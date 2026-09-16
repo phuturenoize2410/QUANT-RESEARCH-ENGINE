@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { ProviderBarsError, normalizeProviderBars } from '../src/engine/providerBars';
+
+const validBars = [
+  {
+    date: '2026-09-15',
+    open: 100,
+    high: 105,
+    low: 99,
+    close: 103,
+    volume: 1_000,
+    turnover: 103_000,
+    nextOpen: 104,
+    nextHigh: 108,
+    nextLow: 102,
+    nextClose: 107,
+  },
+  {
+    date: '2026-09-16',
+    open: 104,
+    high: 108,
+    low: 102,
+    close: 107,
+    volume: 1_200,
+    turnover: 128_400,
+  },
+] as const;
+
+const normalized = normalizeProviderBars('free-idx-history-adapter', validBars);
+assert.deepEqual(normalized, validBars, 'Canonical history boundary must preserve valid observations.');
+assert.notEqual(normalized, validBars, 'Canonical history boundary must detach the returned collection from adapter input.');
+assert.notEqual(normalized[0], validBars[0], 'Canonical history boundary must detach each returned observation from adapter input.');
+
+for (const invalid of [
+  [{ ...validBars[0], date: 'not-a-date' }],
+  [{ ...validBars[0], close: Number.NaN }],
+  [{ ...validBars[0], volume: -1 }],
+  [{ ...validBars[0], high: 98 }],
+  [{ ...validBars[0], nextLow: 109 }],
+  [validBars[1], validBars[0]],
+  [validBars[0], validBars[0]],
+]) {
+  assert.throws(
+    () => normalizeProviderBars('future-history-adapter', invalid),
+    ProviderBarsError,
+    'Malformed provider history must fail before reaching feature consumers.',
+  );
+}
+
+assert.throws(
+  () => normalizeProviderBars('identified-history-adapter', [{ ...validBars[0], volume: -1 }]),
+  (error: unknown) => error instanceof ProviderBarsError && error.providerId === 'identified-history-adapter' && error.index === 0,
+  'Historical validation failures must retain provider and observation identity for health/status diagnostics.',
+);
+
+console.log('provider bars contract smoke: ok');
