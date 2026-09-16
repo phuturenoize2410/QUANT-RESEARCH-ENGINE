@@ -42,7 +42,14 @@ const riskExecutionRoots = collectTypeScriptFiles(engineRoot).filter(file => {
 });
 
 function importSpecifiers(source: string): string[] {
-  return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
+  const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
+  const dynamicSpecifiers = [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
+  const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
+
+  // Architecture boundaries are dependency boundaries, not syntax boundaries.
+  // Treat static imports, dynamic imports and CommonJS require calls identically
+  // so lazy loading or adapter implementation style cannot bypass the pipeline.
+  return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
 /**
@@ -115,4 +122,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain the first executable layer and independent from Feature/Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
+console.log(`Architecture-boundary smoke passed: static, dynamic and CommonJS dependencies are inspected; UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain the first executable layer and independent from Feature/Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
