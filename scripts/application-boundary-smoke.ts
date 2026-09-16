@@ -1,0 +1,45 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+
+const repoRoot = resolve(process.cwd());
+const srcRoot = join(repoRoot, 'src');
+const applicationRoot = join(srcRoot, 'application');
+
+function collectTypeScriptFiles(path: string): string[] {
+  const stat = statSync(path);
+  if (stat.isFile()) return /\.(ts|tsx)$/.test(path) ? [path] : [];
+  return readdirSync(path).flatMap(entry => collectTypeScriptFiles(join(path, entry)));
+}
+
+function importSpecifiers(source: string): string[] {
+  return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
+}
+
+const forbiddenBoundaries = [
+  '/components/',
+  '/data/mockStocks',
+];
+
+const violations: string[] = [];
+for (const file of collectTypeScriptFiles(applicationRoot)) {
+  const source = readFileSync(file, 'utf8');
+  for (const specifier of importSpecifiers(source)) {
+    if (
+      forbiddenBoundaries.some(boundary => specifier.includes(boundary)) ||
+      specifier.endsWith('/App') ||
+      specifier.endsWith('/App.tsx')
+    ) {
+      violations.push(
+        `${relative(repoRoot, file)} imports ${specifier}; application orchestration must remain presentation-neutral and cannot depend on React/UI or the prototype mock universe.`,
+      );
+    }
+  }
+}
+
+if (violations.length > 0) {
+  throw new Error(`Application boundary violations:\n- ${violations.join('\n- ')}`);
+}
+
+console.log(
+  `Application-boundary smoke passed: ${collectTypeScriptFiles(applicationRoot).length} application modules remain independent from React/UI and prototype mock-universe implementations.`,
+);
