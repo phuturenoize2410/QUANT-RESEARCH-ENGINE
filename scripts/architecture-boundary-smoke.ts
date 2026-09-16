@@ -15,7 +15,12 @@ function collectTypeScriptFiles(path: string): string[] {
 
 const providerRoots = collectTypeScriptFiles(engineRoot).filter(file => {
   const name = basename(file);
-  return name === 'dataProviders.ts' || /^provider.*\.ts$/i.test(name);
+  // Provider adapters are allowed to be vendor-named (for example
+  // googleFinanceProvider.ts or idxFeedProvider.ts). Match "provider" anywhere in
+  // the filename so future free/paid adapters cannot silently escape the upstream
+  // DataProvider dependency guard merely because their filename does not start
+  // with "provider".
+  return name === 'dataProviders.ts' || /provider.*\.ts$/i.test(name);
 });
 
 const featureRoots = collectTypeScriptFiles(engineRoot).filter(file => {
