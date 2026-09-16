@@ -21,6 +21,10 @@ if (readModel.health.status !== 'DEGRADED') {
   throw new Error('Application provider status must preserve engine-normalized health state.');
 }
 
+if (readModel.isHealthy || !readModel.requiresAttention || readModel.isUnavailable || readModel.isStale) {
+  throw new Error('Application provider status must interpret DEGRADED presentation state centrally and consistently.');
+}
+
 if (readModel.capturedAt !== '2026-09-17T00:00:00.000Z') {
   throw new Error('Application provider status must preserve the canonical capture timestamp.');
 }
@@ -29,4 +33,24 @@ if (!Object.isFrozen(readModel) || !Object.isFrozen(readModel.provider) || !Obje
   throw new Error('Provider status presentation snapshots must remain immutable across the application boundary.');
 }
 
-console.log('Provider-status application smoke passed: canonical provider health/provenance reaches presentation through an immutable application read model.');
+const staleReadModel = await buildProviderStatusReadModel(provider, {
+  status: 'STALE',
+  checkedAt: '2026-09-17T00:00:00.000Z',
+  lastSuccessfulSyncAt: '2026-09-16T23:00:00.000Z',
+  staleAfterSeconds: 60,
+}, nowMs);
+
+if (!staleReadModel.isStale || !staleReadModel.requiresAttention || staleReadModel.isHealthy || staleReadModel.isUnavailable) {
+  throw new Error('Application provider status must expose STALE without forcing React to reinterpret engine health semantics.');
+}
+
+const unavailableReadModel = await buildProviderStatusReadModel(provider, {
+  status: 'UNAVAILABLE',
+  checkedAt: '2026-09-17T00:00:00.000Z',
+}, nowMs);
+
+if (!unavailableReadModel.isUnavailable || !unavailableReadModel.requiresAttention || unavailableReadModel.isHealthy) {
+  throw new Error('Application provider status must expose UNAVAILABLE as attention-required presentation state.');
+}
+
+console.log('Provider-status application smoke passed: canonical provider health/provenance and presentation flags reach UI through one immutable application read model.');
