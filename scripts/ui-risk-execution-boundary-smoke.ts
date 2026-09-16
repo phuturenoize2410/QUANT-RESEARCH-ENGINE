@@ -23,12 +23,12 @@ function importSpecifiers(source: string): string[] {
 /**
  * UI may render canonical application outputs, but it must not execute
  * Risk/Execution policy, re-apply canonical score bounds, depend directly on the
- * concrete research-pipeline contract, or bypass the application facade by
- * importing the application-service implementation from the engine package.
+ * concrete research-pipeline contract, inspect provider adapters/health policy,
+ * or bypass the application facade by importing engine implementations directly.
  */
 function isDirectDecisionPolicyImport(specifier: string): boolean {
   const normalized = specifier.replaceAll('\\', '/');
-  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy|researchPipeline|researchApplication)$/i.test(normalized);
+  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy|researchPipeline|researchApplication|dataProviders|provider[^/]*)$/i.test(normalized);
 }
 
 /**
@@ -84,5 +84,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI application-boundary smoke passed: React surfaces cannot directly import researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
+  `UI application-boundary smoke passed: React surfaces cannot directly import provider adapters/health policy, researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
 );
