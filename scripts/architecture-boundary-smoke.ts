@@ -58,7 +58,11 @@ const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   ['src/components/MLLabView.tsx', new Set(['../engine/ml/featureStore', '../engine/ml/models', '../engine/ml/ensembleRouter', '../engine/ml/modelRegistry'])],
 ]);
 
-const providerForbiddenBoundaries = ['strategyTypes', '/strategies/', '/strategy/', './strategies/', './strategy/', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
+// DataProvider is the first executable layer. It may publish canonical provider
+// contracts, but it must never reach downstream into Feature/Strategy/Risk/Execution.
+// Keeping this direction explicit prevents a future Google Finance, IDX feed or
+// broker adapter from quietly embedding indicators or signal logic in ingestion.
+const providerForbiddenBoundaries = ['/featureContext', './featureContext', '/featureProvenance', './featureProvenance', '/ml/featureStore', './ml/featureStore', 'strategyTypes', '/strategies/', '/strategy/', './strategies/', './strategy/', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
 const featureForbiddenBoundaries = ['strategyTypes', '/strategies/', '/strategy/', './strategies/', './strategy/', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
 const strategyForbiddenBoundaries = ['/dataProviders', './dataProviders', '/providerPolicy', './providerPolicy', '/providerGate', './providerGate', '/providerCache', './providerCache', '/providerHealth', './providerHealth', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
 const riskExecutionForbiddenBoundaries = ['/dataProviders', './dataProviders', '/providerPolicy', './providerPolicy', '/providerGate', './providerGate', '/providerCache', './providerCache', '/providerHealth', './providerHealth', '/featureContext', './featureContext', '/featureProvenance', './featureProvenance', '/ml/featureStore', './ml/featureStore', '/components/', '/data/mockStocks'];
@@ -88,7 +92,7 @@ for (const [filePath, exceptions] of legacyUiBoundaryExceptions) {
 
 for (const file of providerRoots) {
   const source = readFileSync(file, 'utf8');
-  for (const specifier of importSpecifiers(source)) if (providerForbiddenBoundaries.some(boundary => specifier.includes(boundary))) violations.push(`${relative(repoRoot, file)} imports ${specifier}; DataProvider infrastructure must remain upstream of Strategy/Risk/Execution and independent from UI/mock-universe implementations.`);
+  for (const specifier of importSpecifiers(source)) if (providerForbiddenBoundaries.some(boundary => specifier.includes(boundary))) violations.push(`${relative(repoRoot, file)} imports ${specifier}; DataProvider infrastructure must remain the first executable layer, independent from Feature/Strategy/Risk/Execution and UI/mock-universe implementations.`);
 }
 for (const file of featureRoots) {
   const source = readFileSync(file, 'utf8');
@@ -111,4 +115,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain upstream of Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain the first executable layer and independent from Feature/Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
