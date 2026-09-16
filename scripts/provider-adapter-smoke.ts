@@ -133,6 +133,9 @@ const normalizedQuote = await marketProvider.getQuote('  test  ');
 if (normalizedQuote.ticker !== 'TEST' || normalizedQuote.price !== 100) {
   throw new Error('market adapter: quote lookup must canonicalize symbol identity.');
 }
+if (normalizedQuote.source !== 'MOCK_ENGINE') {
+  throw new Error('market adapter: mock quote snapshots must remain explicitly labelled MOCK_ENGINE.');
+}
 if ((await marketProvider.getDailyBars(' test ')).length !== 1) {
   throw new Error('market adapter: daily-bar lookup must canonicalize symbol identity.');
 }
@@ -141,6 +144,20 @@ if ((await brokerProvider.getBrokerSummary(' test ')).netForeignFlow !== 123) {
 }
 if ((await brokerProvider.getNetForeignFlow(' test ')) !== 123) {
   throw new Error('broker adapter: foreign-flow lookup must canonicalize symbol identity.');
+}
+
+// Quote results are consumer-owned snapshots. Mutating one response must never
+// rewrite provider-owned state or alter a subsequent quote. This is especially
+// important once external/free/paid adapters cache vendor responses internally.
+normalizedQuote.price = 999;
+normalizedQuote.close = 999;
+normalizedQuote.source = 'FREE_API';
+const secondQuoteSnapshot = await marketProvider.getQuote('TEST');
+if (secondQuoteSnapshot.price !== 100 || secondQuoteSnapshot.close !== 100) {
+  throw new Error('market adapter: getQuote() consumer mutation must not alter provider-owned quote state.');
+}
+if (secondQuoteSnapshot.source !== 'MOCK_ENGINE') {
+  throw new Error('market adapter: consumer mutation must not alter canonical mock source provenance.');
 }
 
 // Invalid requests fail at the provider contract boundary instead of relying on
@@ -268,4 +285,4 @@ brokerProvider.setUniverse([]);
 await assertEmptyProviderIsDegraded('market adapter after clear', marketProvider);
 await assertEmptyProviderIsDegraded('broker adapter after clear', brokerProvider);
 
-console.log('Provider-adapter smoke passed: mock providers validate canonical request contracts, own detached nested universe snapshots, report DEGRADED until simulated data is loaded, fail explicitly on invalid/missing ticker data, and clear successful-sync state when emptied.');
+console.log('Provider-adapter smoke passed: mock providers validate canonical request contracts, own detached quote/universe snapshots with explicit MOCK_ENGINE provenance, report DEGRADED until simulated data is loaded, fail explicitly on invalid/missing ticker data, and clear successful-sync state when emptied.');
