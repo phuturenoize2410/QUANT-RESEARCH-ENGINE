@@ -33,6 +33,9 @@ assert.notEqual(normalized[0], validBars[0], 'Canonical history boundary must de
 
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
+  [{ ...validBars[0], date: '2026-02-30' }],
+  [{ ...validBars[0], date: '2025-02-29' }],
+  [{ ...validBars[0], date: '2026-13-01' }],
   [{ ...validBars[0], close: Number.NaN }],
   [{ ...validBars[0], volume: -1 }],
   [{ ...validBars[0], high: 98 }],
@@ -46,6 +49,11 @@ for (const invalid of [
     'Malformed provider history must fail before reaching feature consumers.',
   );
 }
+
+assert.doesNotThrow(
+  () => normalizeProviderBars('leap-year-history-adapter', [{ ...validBars[0], date: '2024-02-29' }]),
+  'Canonical history boundary must preserve legitimate leap-day observations.',
+);
 
 assert.throws(
   () => normalizeProviderBars('identified-history-adapter', [{ ...validBars[0], volume: -1 }]),
