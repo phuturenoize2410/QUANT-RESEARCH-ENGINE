@@ -26,6 +26,17 @@ function validateRange(high: number | undefined, low: number | undefined, open: 
   }
 }
 
+function isValidCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const [year, month, day] = value.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+}
+
 /**
  * Canonical validation/copy boundary for historical market-data adapters.
  * Vendor-specific adapters should map payloads to DailyBar first, then pass the
@@ -35,8 +46,8 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
   let previousDate = '';
 
   return bars.map((bar, index) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(bar.date) || Number.isNaN(Date.parse(`${bar.date}T00:00:00Z`))) {
-      throw new ProviderBarsError(providerId, index, 'Historical bar date must be a valid YYYY-MM-DD date.');
+    if (!isValidCalendarDate(bar.date)) {
+      throw new ProviderBarsError(providerId, index, 'Historical bar date must be a valid YYYY-MM-DD calendar date.');
     }
     if (previousDate && bar.date <= previousDate) {
       throw new ProviderBarsError(providerId, index, 'Historical bars must be strictly ordered by ascending unique date.');
