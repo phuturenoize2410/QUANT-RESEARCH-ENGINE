@@ -46,24 +46,19 @@ export interface HealthCheckedProvider {
   getHealth(): Promise<ProviderHealth>;
 }
 
-/**
- * Quotes are point-in-time provider observations. Treat them as immutable after
- * they cross the provider boundary so feature/strategy/application consumers
- * cannot rewrite source provenance or market values in-place.
- */
 export interface MarketQuote {
-  readonly ticker: string;
-  readonly price: number;
-  readonly open: number;
-  readonly high: number;
-  readonly low: number;
-  readonly close: number;
-  readonly change: number;
-  readonly changePct: number;
-  readonly volume: number;
-  readonly turnover: number;
-  readonly timestamp: string;
-  readonly source: MarketDataSource;
+  ticker: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  change: number;
+  changePct: number;
+  volume: number;
+  turnover: number;
+  timestamp: string;
+  source: MarketDataSource;
 }
 
 export interface MarketDataProvider extends HealthCheckedProvider {
@@ -207,13 +202,13 @@ export class MockMarketDataProvider implements MarketDataProvider {
   async getQuote(ticker: string): Promise<MarketQuote> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     const lastBar = stock.historicalBars[stock.historicalBars.length - 1];
-    return Object.freeze({
+    return {
       ticker: normalizeSymbol(stock.ticker), price: stock.price,
       open: lastBar ? lastBar.open : stock.price, high: lastBar ? lastBar.high : stock.price,
       low: lastBar ? lastBar.low : stock.price, close: stock.price, change: stock.change,
       changePct: stock.changePct, volume: stock.volume, turnover: stock.turnover,
       timestamp: new Date().toISOString(), source: this.metadata.source,
-    });
+    };
   }
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
