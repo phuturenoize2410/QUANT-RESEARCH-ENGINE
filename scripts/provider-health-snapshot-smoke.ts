@@ -7,15 +7,19 @@ import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
 
 const nowMs = Date.parse('2026-09-11T12:00:00.000Z');
 
-const injectedHealth: ProviderHealth = {
+const injectedHealth = {
   status: 'HEALTHY',
   checkedAt: '2026-09-11T12:00:00.000Z',
   lastSuccessfulSyncAt: '2026-09-11T11:59:30.000Z',
   latencyMs: 25,
   staleAfterSeconds: 120,
-};
+} satisfies ProviderHealth;
 
 const marketProvider = new MockMarketDataProvider();
+const rawMarketHealth = await marketProvider.getHealth();
+if (!Object.isFrozen(rawMarketHealth)) {
+  throw new Error('market adapter getHealth() must return an immutable observation snapshot.');
+}
 const marketSnapshot = await getProviderHealthSnapshot(marketProvider, injectedHealth, nowMs);
 
 if (marketSnapshot.metadata.id !== marketProvider.metadata.id) {
@@ -47,6 +51,10 @@ if (!Object.isFrozen(marketSnapshot.health) || !Object.isFrozen(marketSnapshot))
 }
 
 const brokerProvider = new MockBrokerDataProvider();
+const rawBrokerHealth = await brokerProvider.getHealth();
+if (!Object.isFrozen(rawBrokerHealth)) {
+  throw new Error('broker adapter getHealth() must return an immutable observation snapshot.');
+}
 const brokerSnapshot = await getProviderHealthSnapshot(brokerProvider, injectedHealth, nowMs);
 
 if (brokerSnapshot.metadata.id !== brokerProvider.metadata.id) {
@@ -205,4 +213,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, contradictory mode/realtime and mock/source capability claims fail closed, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters emit immutable raw health observations and share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, contradictory mode/realtime and mock/source capability claims fail closed, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
