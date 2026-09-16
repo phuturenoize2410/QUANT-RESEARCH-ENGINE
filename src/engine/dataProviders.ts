@@ -11,18 +11,20 @@ export type ProviderHealthStatus = 'HEALTHY' | 'DEGRADED' | 'STALE' | 'UNAVAILAB
  * Data capabilities are provider concerns, while market identity is carried
  * separately. Keeping them orthogonal avoids encoding vendor, delivery mode and
  * exchange assumptions into one enum as additional markets/providers are added.
+ * Metadata is configuration evidence and must not be rewritten downstream after
+ * an adapter is constructed.
  */
 export interface ProviderMetadata {
-  id: string;
-  name: string;
-  source: MarketDataSource;
-  mode: ProviderMode;
-  isPaid: boolean;
-  supportedMarkets: readonly MarketId[];
-  supportsHistorical: boolean;
-  supportsIntraday: boolean;
-  supportsRealtime: boolean;
-  notes?: string;
+  readonly id: string;
+  readonly name: string;
+  readonly source: MarketDataSource;
+  readonly mode: ProviderMode;
+  readonly isPaid: boolean;
+  readonly supportedMarkets: readonly MarketId[];
+  readonly supportsHistorical: boolean;
+  readonly supportsIntraday: boolean;
+  readonly supportsRealtime: boolean;
+  readonly notes?: string;
 }
 
 /**
@@ -39,12 +41,6 @@ export interface ProviderHealth {
   readonly message?: string;
 }
 
-/**
- * Smallest provider contract required by infrastructure health/status handling.
- * Market-data and broker-flow adapters both cross external-system boundaries, so
- * health capture must not be coupled to quote/universe methods that only market
- * data providers implement.
- */
 export interface HealthCheckedProvider {
   readonly metadata: ProviderMetadata;
   getHealth(): Promise<ProviderHealth>;
@@ -113,12 +109,6 @@ function copyBandarmology(data: BandarmologyData): BandarmologyData {
   };
 }
 
-/**
- * Providers own their cached records. Clone nested mutable structures at the
- * adapter boundary so feature/strategy/UI consumers cannot mutate provider state
- * through a previously returned snapshot (and callers cannot mutate stored input
- * after setUniverse/constructor ingestion).
- */
 function copyStock(stock: StockData): StockData {
   return {
     ...stock,
@@ -142,81 +132,52 @@ function copyUniverse(universe: readonly StockData[]): StockData[] {
 function canonicalProviderTicker(ticker: string, providerId: string): string {
   const canonicalTicker = normalizeSymbol(ticker);
   if (!canonicalTicker) {
-    throw new ProviderRequestError(
-      providerId,
-      'ticker',
-      `Provider ${providerId} requires a non-empty ticker.`,
-    );
+    throw new ProviderRequestError(providerId, 'ticker', `Provider ${providerId} requires a non-empty ticker.`);
   }
   return canonicalTicker;
 }
 
 function validateHistoricalLimit(limit: number, providerId: string): number {
   if (!Number.isInteger(limit) || limit <= 0) {
-    throw new ProviderRequestError(
-      providerId,
-      'limit',
-      `Provider ${providerId} requires historical limit to be a positive integer.`,
-    );
+    throw new ProviderRequestError(providerId, 'limit', `Provider ${providerId} requires historical limit to be a positive integer.`);
   }
   return limit;
 }
 
-function requireStock(
-  universe: readonly StockData[],
-  ticker: string,
-  providerId: string,
-): StockData {
+function requireStock(universe: readonly StockData[], ticker: string, providerId: string): StockData {
   const canonicalTicker = canonicalProviderTicker(ticker, providerId);
   const stock = universe.find(item => normalizeSymbol(item.ticker) === canonicalTicker);
-  if (!stock) {
-    throw new ProviderDataError(providerId, canonicalTicker);
-  }
+  if (!stock) throw new ProviderDataError(providerId, canonicalTicker);
   return stock;
 }
 
-function mockProviderHealth(
-  universeSize: number,
-  lastSuccessfulSyncAt: string | undefined,
-  healthyMessage: string,
-  checkedAt: string = new Date().toISOString(),
-): ProviderHealth {
+function mockProviderHealth(universeSize: number, lastSuccessfulSyncAt: string | undefined, healthyMessage: string, checkedAt: string = new Date().toISOString()): ProviderHealth {
   if (universeSize === 0) {
-    return Object.freeze({
-      status: 'DEGRADED',
-      checkedAt,
-      lastSuccessfulSyncAt,
-      latencyMs: 0,
-      message: 'Mock provider adapter is operational, but no simulated universe is loaded.',
-    });
+    return Object.freeze({ status: 'DEGRADED', checkedAt, lastSuccessfulSyncAt, latencyMs: 0, message: 'Mock provider adapter is operational, but no simulated universe is loaded.' });
   }
+  return Object.freeze({ status: 'HEALTHY', checkedAt, lastSuccessfulSyncAt, latencyMs: 0, message: healthyMessage });
+}
 
+function freezeProviderMetadata(metadata: ProviderMetadata): ProviderMetadata {
   return Object.freeze({
-    status: 'HEALTHY',
-    checkedAt,
-    lastSuccessfulSyncAt,
-    latencyMs: 0,
-    message: healthyMessage,
+    ...metadata,
+    supportedMarkets: Object.freeze([...metadata.supportedMarkets]),
   });
 }
 
-/**
- * Concrete mock implementation. It intentionally identifies itself as MOCK so
- * downstream UI and research code can never mistake simulated data for a live feed.
- */
 export class MockMarketDataProvider implements MarketDataProvider {
-  readonly metadata: ProviderMetadata = {
+  readonly metadata: ProviderMetadata = freezeProviderMetadata({
     id: 'mock-market-v1',
     name: 'Mock IDX Market Engine',
     source: 'MOCK_ENGINE',
     mode: 'MOCK',
     isPaid: false,
-    supportedMarkets: Object.freeze(['IDX'] as MarketId[]),
+    supportedMarkets: ['IDX'],
     supportsHistorical: true,
     supportsIntraday: true,
     supportsRealtime: false,
     notes: 'Synthetic prototype data only. Not suitable for live trading decisions.',
-  };
+  });
 
   private universeCache: StockData[] = [];
   private regime: MarketRegime = 'BULLISH_TREND';
@@ -224,9 +185,7 @@ export class MockMarketDataProvider implements MarketDataProvider {
 
   constructor(initialUniverse: StockData[] = []) {
     this.universeCache = copyUniverse(initialUniverse);
-    if (initialUniverse.length > 0) {
-      this.lastSuccessfulSyncAt = new Date().toISOString();
-    }
+    if (initialUniverse.length > 0) this.lastSuccessfulSyncAt = new Date().toISOString();
   }
 
   setUniverse(universe: StockData[]) {
@@ -234,74 +193,46 @@ export class MockMarketDataProvider implements MarketDataProvider {
     this.lastSuccessfulSyncAt = universe.length > 0 ? new Date().toISOString() : undefined;
   }
 
-  setRegime(regime: MarketRegime) {
-    this.regime = regime;
-  }
+  setRegime(regime: MarketRegime) { this.regime = regime; }
 
   async getHealth(): Promise<ProviderHealth> {
-    return mockProviderHealth(
-      this.universeCache.length,
-      this.lastSuccessfulSyncAt,
-      'Mock provider operational. Data remains simulated.',
-    );
+    return mockProviderHealth(this.universeCache.length, this.lastSuccessfulSyncAt, 'Mock provider operational. Data remains simulated.');
   }
 
   async getQuote(ticker: string): Promise<MarketQuote> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
     const lastBar = stock.historicalBars[stock.historicalBars.length - 1];
     return {
-      ticker: normalizeSymbol(stock.ticker),
-      price: stock.price,
-      open: lastBar ? lastBar.open : stock.price,
-      high: lastBar ? lastBar.high : stock.price,
-      low: lastBar ? lastBar.low : stock.price,
-      close: stock.price,
-      change: stock.change,
-      changePct: stock.changePct,
-      volume: stock.volume,
-      turnover: stock.turnover,
-      timestamp: new Date().toISOString(),
-      source: this.metadata.source,
+      ticker: normalizeSymbol(stock.ticker), price: stock.price,
+      open: lastBar ? lastBar.open : stock.price, high: lastBar ? lastBar.high : stock.price,
+      low: lastBar ? lastBar.low : stock.price, close: stock.price, change: stock.change,
+      changePct: stock.changePct, volume: stock.volume, turnover: stock.turnover,
+      timestamp: new Date().toISOString(), source: this.metadata.source,
     };
   }
 
   async getDailyBars(ticker: string, limit: number = 90): Promise<DailyBar[]> {
     const stock = requireStock(this.universeCache, ticker, this.metadata.id);
-    const validatedLimit = validateHistoricalLimit(limit, this.metadata.id);
-    return copyDailyBars(stock.historicalBars.slice(-validatedLimit));
+    return copyDailyBars(stock.historicalBars.slice(-validateHistoricalLimit(limit, this.metadata.id)));
   }
 
-  async getUniverse(): Promise<StockData[]> {
-    return copyUniverse(this.universeCache);
-  }
-
-  getCurrentRegime(): MarketRegime {
-    return this.regime;
-  }
+  async getUniverse(): Promise<StockData[]> { return copyUniverse(this.universeCache); }
+  getCurrentRegime(): MarketRegime { return this.regime; }
 }
 
 export class MockBrokerDataProvider implements BrokerDataProvider {
-  readonly metadata: ProviderMetadata = {
-    id: 'mock-broker-v1',
-    name: 'Mock IDX Broker Flow Engine',
-    source: 'MOCK_ENGINE',
-    mode: 'MOCK',
-    isPaid: false,
-    supportedMarkets: Object.freeze(['IDX'] as MarketId[]),
-    supportsHistorical: true,
-    supportsIntraday: false,
-    supportsRealtime: false,
-    notes: 'Synthetic broker-flow data only.',
-  };
+  readonly metadata: ProviderMetadata = freezeProviderMetadata({
+    id: 'mock-broker-v1', name: 'Mock IDX Broker Flow Engine', source: 'MOCK_ENGINE', mode: 'MOCK',
+    isPaid: false, supportedMarkets: ['IDX'], supportsHistorical: true, supportsIntraday: false,
+    supportsRealtime: false, notes: 'Synthetic broker-flow data only.',
+  });
 
   private universeCache: StockData[] = [];
   private lastSuccessfulSyncAt?: string;
 
   constructor(initialUniverse: StockData[] = []) {
     this.universeCache = copyUniverse(initialUniverse);
-    if (initialUniverse.length > 0) {
-      this.lastSuccessfulSyncAt = new Date().toISOString();
-    }
+    if (initialUniverse.length > 0) this.lastSuccessfulSyncAt = new Date().toISOString();
   }
 
   setUniverse(universe: StockData[]) {
@@ -310,11 +241,7 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
   }
 
   async getHealth(): Promise<ProviderHealth> {
-    return mockProviderHealth(
-      this.universeCache.length,
-      this.lastSuccessfulSyncAt,
-      'Mock broker provider operational. Data remains simulated.',
-    );
+    return mockProviderHealth(this.universeCache.length, this.lastSuccessfulSyncAt, 'Mock broker provider operational. Data remains simulated.');
   }
 
   async getBrokerSummary(ticker: string): Promise<BandarmologyData> {
