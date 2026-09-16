@@ -1,6 +1,6 @@
 export interface ScoreBounds {
-  min: number;
-  max: number;
+  readonly min: number;
+  readonly max: number;
 }
 
 /** Canonical 0-100 range for probabilities, normalized features, and percentages. */
@@ -23,9 +23,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Score contracts may eventually arrive from strategy configuration or external
  * research metadata. Normalize malformed bounds at the policy boundary so NaN,
  * Infinity, strings, arrays, or nullish runtime payloads can never propagate into
- * strategy ranking, risk decisions, or UI.
+ * strategy ranking, risk decisions, or UI. The returned policy snapshot is frozen
+ * so downstream consumers cannot mutate validated bounds after crossing the
+ * canonical score-policy boundary.
  */
-export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): ScoreBounds {
+export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): Readonly<ScoreBounds> {
   const candidate = isRecord(bounds) ? bounds : NORMALIZED_SCORE_BOUNDS;
   const candidateMin = typeof candidate.min === 'number' && Number.isFinite(candidate.min)
     ? candidate.min
@@ -34,13 +36,13 @@ export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS):
     ? candidate.max
     : NORMALIZED_SCORE_BOUNDS.max;
 
-  return {
+  return Object.freeze({
     min: Math.min(candidateMin, candidateMax),
     max: Math.max(candidateMin, candidateMax),
-  };
+  });
 }
 
-export function clampScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE_BOUNDS): number {
+export function clampScore(value: number, bounds: Readonly<ScoreBounds> = NORMALIZED_SCORE_BOUNDS): number {
   const normalizedBounds = normalizeScoreBounds(bounds);
 
   if (!Number.isFinite(value)) {
@@ -50,7 +52,7 @@ export function clampScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE
   return Math.min(normalizedBounds.max, Math.max(normalizedBounds.min, value));
 }
 
-export function roundScore(value: number, bounds: ScoreBounds = NORMALIZED_SCORE_BOUNDS): number {
+export function roundScore(value: number, bounds: Readonly<ScoreBounds> = NORMALIZED_SCORE_BOUNDS): number {
   return Math.round(clampScore(value, bounds));
 }
 
