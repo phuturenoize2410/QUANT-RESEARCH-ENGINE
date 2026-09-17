@@ -2,6 +2,7 @@ import type { HealthCheckedProvider, ProviderHealth } from '../engine/dataProvid
 import { getProviderHealthSnapshot } from '../engine/providerHealth';
 
 export type ProviderDataReadiness = 'RESEARCH_ONLY' | 'READY' | 'CAUTION' | 'BLOCKED';
+export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'HEALTH_BLOCKED' | 'RESEARCH_ONLY' | null;
 
 /**
  * Presentation-facing provider status read model.
@@ -11,9 +12,9 @@ export type ProviderDataReadiness = 'RESEARCH_ONLY' | 'READY' | 'CAUTION' | 'BLO
  * Finance/free IDX/broker/paid adapters can be swapped without UI components
  * importing provider implementations or reinterpreting health/freshness rules.
  *
- * Keep presentation flags, provenance labels, capability gates and data-readiness
- * semantics here: React must not independently decide what provider health or
- * capabilities mean, or weaken MOCK/synthetic disclosure when rendering state.
+ * Keep presentation flags, provenance labels, capability gates/reasons and
+ * data-readiness semantics here: React must not independently decide what
+ * provider health or capabilities mean, or weaken MOCK/synthetic disclosure.
  */
 export async function buildProviderStatusReadModel(
   provider: HealthCheckedProvider,
@@ -30,12 +31,24 @@ export async function buildProviderStatusReadModel(
       : healthStatus === 'DEGRADED'
         ? 'CAUTION'
         : 'BLOCKED';
-  const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && dataReadiness !== 'BLOCKED';
-  const canServeIntradayResearch = snapshot.metadata.supportsIntraday && dataReadiness !== 'BLOCKED';
+  const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE';
+  const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && !healthBlocked;
+  const canServeIntradayResearch = snapshot.metadata.supportsIntraday && !healthBlocked;
   const canServeRealtime = !isMock
     && snapshot.metadata.supportsRealtime
     && snapshot.metadata.mode === 'REALTIME'
     && dataReadiness === 'READY';
+  const historicalBlockReason: ProviderCapabilityBlockReason = canServeHistoricalResearch
+    ? null
+    : !snapshot.metadata.supportsHistorical ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
+  const intradayBlockReason: ProviderCapabilityBlockReason = canServeIntradayResearch
+    ? null
+    : !snapshot.metadata.supportsIntraday ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
+  const realtimeBlockReason: ProviderCapabilityBlockReason = canServeRealtime
+    ? null
+    : isMock ? 'RESEARCH_ONLY'
+      : !snapshot.metadata.supportsRealtime || snapshot.metadata.mode !== 'REALTIME' ? 'UNSUPPORTED'
+        : 'HEALTH_BLOCKED';
 
   return Object.freeze({
     provider: snapshot.metadata,
@@ -52,6 +65,9 @@ export async function buildProviderStatusReadModel(
     canServeHistoricalResearch,
     canServeIntradayResearch,
     canServeRealtime,
+    historicalBlockReason,
+    intradayBlockReason,
+    realtimeBlockReason,
     dataDisclosure: isMock
       ? 'MOCK / SYNTHETIC DATA — NOT FOR LIVE TRADING'
       : `${snapshot.metadata.mode} DATA — ${snapshot.metadata.source}`,
