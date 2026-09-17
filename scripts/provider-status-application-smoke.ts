@@ -40,7 +40,12 @@ if (readyReadModel.statusMessage !== 'Provider is healthy and available for its 
 
 const unsupportedMarketReadModel = await buildProviderStatusReadModel(realProvider, undefined, nowMs, 'US');
 if (unsupportedMarketReadModel.supportsRequestedMarket || unsupportedMarketReadModel.marketBlockReason !== 'MARKET_UNSUPPORTED') throw new Error('Provider application status must fail closed when the requested market is not declared by the adapter.');
+if (unsupportedMarketReadModel.dataReadiness !== 'BLOCKED' || !unsupportedMarketReadModel.requiresAttention) throw new Error('Market incompatibility must dominate overall provider readiness instead of presenting an unusable provider as READY.');
+if (unsupportedMarketReadModel.statusMessage !== 'Provider does not support requested market US. Capability use is blocked.') throw new Error('Market incompatibility messaging must be centralized so UI does not reinterpret provider routing failures.');
 if (unsupportedMarketReadModel.canServeHistoricalResearch || unsupportedMarketReadModel.historicalBlockReason !== 'MARKET_UNSUPPORTED' || unsupportedMarketReadModel.canServeIntradayResearch || unsupportedMarketReadModel.intradayBlockReason !== 'MARKET_UNSUPPORTED' || unsupportedMarketReadModel.canServeRealtime || unsupportedMarketReadModel.realtimeBlockReason !== 'MARKET_UNSUPPORTED') throw new Error('Market incompatibility must dominate capability gates so future multi-market UI cannot route an IDX-only provider into US research.');
+
+const unsupportedMockMarketReadModel = await buildProviderStatusReadModel(provider, undefined, nowMs, 'US');
+if (unsupportedMockMarketReadModel.dataReadiness !== 'BLOCKED' || unsupportedMockMarketReadModel.historicalBlockReason !== 'MARKET_UNSUPPORTED' || unsupportedMockMarketReadModel.dataDisclosure !== 'MOCK / SYNTHETIC DATA — NOT FOR LIVE TRADING') throw new Error('Unsupported-market MOCK providers must fail closed while preserving explicit synthetic-data provenance.');
 
 const cautionReadModel = await buildProviderStatusReadModel(realProvider, { status: 'DEGRADED', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs, 'IDX');
 if (cautionReadModel.dataReadiness !== 'CAUTION' || !cautionReadModel.canServeHistoricalResearch || cautionReadModel.historicalBlockReason !== null) throw new Error('Degraded non-mock providers may remain research-capable while surfacing CAUTION.');

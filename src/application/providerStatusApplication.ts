@@ -8,7 +8,10 @@ export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'MARKET_UNSUPPORTED'
 function providerStatusMessage(
   readiness: ProviderDataReadiness,
   health: ProviderHealth,
+  requestedMarket: MarketId | undefined,
+  supportsRequestedMarket: boolean,
 ): string {
+  if (!supportsRequestedMarket) return `Provider does not support requested market ${requestedMarket}. Capability use is blocked.`;
   if (health.message?.trim()) return health.message.trim();
   if (readiness === 'RESEARCH_ONLY') return 'Synthetic provider available for research only. Not for live trading.';
   if (readiness === 'READY') return 'Provider is healthy and available for its declared capabilities.';
@@ -40,15 +43,16 @@ export async function buildProviderStatusReadModel(
   const isMock = snapshot.metadata.mode === 'MOCK';
   const supportsRequestedMarket = requestedMarket === undefined
     || snapshot.metadata.supportedMarkets.includes(requestedMarket);
-  const dataReadiness: ProviderDataReadiness = isMock
+  const healthReadiness: ProviderDataReadiness = isMock
     ? 'RESEARCH_ONLY'
     : healthStatus === 'HEALTHY'
       ? 'READY'
       : healthStatus === 'DEGRADED'
         ? 'CAUTION'
         : 'BLOCKED';
-  const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE';
   const marketBlocked = !supportsRequestedMarket;
+  const dataReadiness: ProviderDataReadiness = marketBlocked ? 'BLOCKED' : healthReadiness;
+  const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE';
   const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && !healthBlocked && !marketBlocked;
   const canServeIntradayResearch = snapshot.metadata.supportsIntraday && !healthBlocked && !marketBlocked;
   const canServeRealtime = !isMock
@@ -82,11 +86,11 @@ export async function buildProviderStatusReadModel(
     isPaid: snapshot.metadata.isPaid,
     isRealTime: snapshot.metadata.supportsRealtime && snapshot.metadata.mode === 'REALTIME',
     isHealthy: healthStatus === 'HEALTHY',
-    requiresAttention: healthStatus !== 'HEALTHY',
+    requiresAttention: healthStatus !== 'HEALTHY' || marketBlocked,
     isUnavailable: healthStatus === 'UNAVAILABLE',
     isStale: healthStatus === 'STALE',
     dataReadiness,
-    statusMessage: providerStatusMessage(dataReadiness, snapshot.health),
+    statusMessage: providerStatusMessage(dataReadiness, snapshot.health, requestedMarket, supportsRequestedMarket),
     canServeHistoricalResearch,
     canServeIntradayResearch,
     canServeRealtime,
