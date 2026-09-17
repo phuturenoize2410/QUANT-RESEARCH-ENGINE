@@ -188,8 +188,8 @@ export function promoteMLLabChallenger(
     }),
     challenger: cloneRegistryModel(comparison.challenger),
     recommendationRationale: [
-      'Promoted Challenger (LightGBM-v4) to Champion status.',
-      'Production models updated with tighter calibration and superior expected value.',
+      'Simulated promotion: Challenger (LightGBM-v4) is now the ML Lab champion candidate.',
+      'No production model or live execution path was changed; this transition remains MOCK/SIMULATED research only.',
     ],
     metricComparisons: comparison.metricComparisons.map(metric => ({ ...metric })),
   };
