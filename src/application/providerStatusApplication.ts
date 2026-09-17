@@ -1,8 +1,9 @@
 import type { HealthCheckedProvider, ProviderHealth } from '../engine/dataProviders';
+import type { MarketId } from '../engine/market/marketAdapter';
 import { getProviderHealthSnapshot } from '../engine/providerHealth';
 
 export type ProviderDataReadiness = 'RESEARCH_ONLY' | 'READY' | 'CAUTION' | 'BLOCKED';
-export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'HEALTH_BLOCKED' | 'RESEARCH_ONLY' | null;
+export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'MARKET_UNSUPPORTED' | 'HEALTH_BLOCKED' | 'RESEARCH_ONLY' | null;
 
 function providerStatusMessage(
   readiness: ProviderDataReadiness,
@@ -24,18 +25,21 @@ function providerStatusMessage(
  * Finance/free IDX/broker/paid adapters can be swapped without UI components
  * importing provider implementations or reinterpreting health/freshness rules.
  *
- * Keep presentation flags, provenance labels, capability gates/reasons and
- * data-readiness semantics here: React must not independently decide what
- * provider health or capabilities mean, or weaken MOCK/synthetic disclosure.
+ * Keep presentation flags, provenance labels, market compatibility, capability
+ * gates/reasons and data-readiness semantics here: React must not independently
+ * decide what provider health or capabilities mean, or weaken MOCK disclosure.
  */
 export async function buildProviderStatusReadModel(
   provider: HealthCheckedProvider,
   healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
+  requestedMarket?: MarketId,
 ) {
   const snapshot = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   const healthStatus = snapshot.health.status;
   const isMock = snapshot.metadata.mode === 'MOCK';
+  const supportsRequestedMarket = requestedMarket === undefined
+    || snapshot.metadata.supportedMarkets.includes(requestedMarket);
   const dataReadiness: ProviderDataReadiness = isMock
     ? 'RESEARCH_ONLY'
     : healthStatus === 'HEALTHY'
@@ -44,28 +48,36 @@ export async function buildProviderStatusReadModel(
         ? 'CAUTION'
         : 'BLOCKED';
   const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE';
-  const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && !healthBlocked;
-  const canServeIntradayResearch = snapshot.metadata.supportsIntraday && !healthBlocked;
+  const marketBlocked = !supportsRequestedMarket;
+  const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && !healthBlocked && !marketBlocked;
+  const canServeIntradayResearch = snapshot.metadata.supportsIntraday && !healthBlocked && !marketBlocked;
   const canServeRealtime = !isMock
     && snapshot.metadata.supportsRealtime
     && snapshot.metadata.mode === 'REALTIME'
-    && dataReadiness === 'READY';
+    && dataReadiness === 'READY'
+    && !marketBlocked;
   const historicalBlockReason: ProviderCapabilityBlockReason = canServeHistoricalResearch
     ? null
-    : !snapshot.metadata.supportsHistorical ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
+    : marketBlocked ? 'MARKET_UNSUPPORTED'
+      : !snapshot.metadata.supportsHistorical ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
   const intradayBlockReason: ProviderCapabilityBlockReason = canServeIntradayResearch
     ? null
-    : !snapshot.metadata.supportsIntraday ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
+    : marketBlocked ? 'MARKET_UNSUPPORTED'
+      : !snapshot.metadata.supportsIntraday ? 'UNSUPPORTED' : 'HEALTH_BLOCKED';
   const realtimeBlockReason: ProviderCapabilityBlockReason = canServeRealtime
     ? null
-    : isMock ? 'RESEARCH_ONLY'
-      : !snapshot.metadata.supportsRealtime || snapshot.metadata.mode !== 'REALTIME' ? 'UNSUPPORTED'
-        : 'HEALTH_BLOCKED';
+    : marketBlocked ? 'MARKET_UNSUPPORTED'
+      : isMock ? 'RESEARCH_ONLY'
+        : !snapshot.metadata.supportsRealtime || snapshot.metadata.mode !== 'REALTIME' ? 'UNSUPPORTED'
+          : 'HEALTH_BLOCKED';
 
   return Object.freeze({
     provider: snapshot.metadata,
     health: snapshot.health,
     capturedAt: snapshot.capturedAt,
+    requestedMarket: requestedMarket ?? null,
+    supportsRequestedMarket,
+    marketBlockReason: marketBlocked ? 'MARKET_UNSUPPORTED' as const : null,
     isMock,
     isPaid: snapshot.metadata.isPaid,
     isRealTime: snapshot.metadata.supportsRealtime && snapshot.metadata.mode === 'REALTIME',
