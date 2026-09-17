@@ -20,7 +20,7 @@ function importSpecifiers(source: string): string[] {
 
 const forbiddenBoundaries = [
   '/components/',
-  '/data/mockStocks',
+  '/data/',
 ];
 
 const violations: string[] = [];
@@ -33,7 +33,7 @@ for (const file of collectTypeScriptFiles(applicationRoot)) {
       specifier.endsWith('/App.tsx')
     ) {
       violations.push(
-        `${relative(repoRoot, file)} imports ${specifier}; application orchestration must remain presentation-neutral and cannot depend on React/UI or the prototype mock universe.`,
+        `${relative(repoRoot, file)} imports ${specifier}; application orchestration must remain presentation-neutral and cannot bypass DataProvider contracts by importing prototype/static data modules directly.`,
       );
     }
   }
@@ -44,5 +44,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Application-boundary smoke passed: ${collectTypeScriptFiles(applicationRoot).length} application modules remain independent from React/UI and prototype mock-universe implementations across static imports, dynamic imports and CommonJS require calls.`,
+  `Application-boundary smoke passed: ${collectTypeScriptFiles(applicationRoot).length} application modules remain independent from React/UI and direct prototype/static data imports across static imports, dynamic imports and CommonJS require calls; provider-backed data must enter through engine provider contracts.`,
 );
