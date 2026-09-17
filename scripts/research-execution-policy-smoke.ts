@@ -4,7 +4,11 @@ import { assertExecutionEligible } from '../src/engine/researchPipelineStagePoli
 
 const baseEvidence = Object.freeze({
   dataMode: 'REAL' as const,
-  providerHealthStatus: 'HEALTHY' as const,
+  providerHealth: Object.freeze({
+    status: 'HEALTHY' as const,
+    checkedAt: '2026-09-18T00:00:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-18T00:00:00.000Z',
+  }),
   backtestEdgeValidated: true,
   riskChecksPassed: true,
 });
@@ -16,12 +20,23 @@ assert.match(mockResult.reason, /MOCK data/);
 assert.throws(() => assertExecutionEligible(mockResult), /Execution blocked/);
 
 for (const providerHealthStatus of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
-  const unhealthyProvider = evaluateResearchExecutionEligibility({ ...baseEvidence, providerHealthStatus });
+  const unhealthyProvider = evaluateResearchExecutionEligibility({
+    ...baseEvidence,
+    providerHealth: { ...baseEvidence.providerHealth, status: providerHealthStatus },
+  });
   assert.equal(unhealthyProvider.status, 'BLOCKED');
   assert.equal(unhealthyProvider.executable, false);
   assert.match(unhealthyProvider.reason, new RegExp(providerHealthStatus));
   assert.match(unhealthyProvider.reason, /HEALTHY is required/);
 }
+
+const invalidHealthObservation = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: { ...baseEvidence.providerHealth, checkedAt: 'not-a-timestamp' },
+});
+assert.equal(invalidHealthObservation.status, 'BLOCKED');
+assert.equal(invalidHealthObservation.executable, false);
+assert.match(invalidHealthObservation.reason, /checkedAt timestamp/);
 
 const noEdge = evaluateResearchExecutionEligibility({ ...baseEvidence, backtestEdgeValidated: false });
 assert.equal(noEdge.status, 'BLOCKED');
