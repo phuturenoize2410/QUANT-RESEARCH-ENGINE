@@ -4,6 +4,18 @@ import { getProviderHealthSnapshot } from '../engine/providerHealth';
 export type ProviderDataReadiness = 'RESEARCH_ONLY' | 'READY' | 'CAUTION' | 'BLOCKED';
 export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'HEALTH_BLOCKED' | 'RESEARCH_ONLY' | null;
 
+function providerStatusMessage(
+  readiness: ProviderDataReadiness,
+  health: ProviderHealth,
+): string {
+  if (health.message?.trim()) return health.message.trim();
+  if (readiness === 'RESEARCH_ONLY') return 'Synthetic provider available for research only. Not for live trading.';
+  if (readiness === 'READY') return 'Provider is healthy and available for its declared capabilities.';
+  if (readiness === 'CAUTION') return 'Provider is degraded. Research may continue only within declared capabilities.';
+  if (health.status === 'STALE') return 'Provider data is stale. Capability use is blocked until freshness recovers.';
+  return 'Provider is unavailable. Capability use is blocked.';
+}
+
 /**
  * Presentation-facing provider status read model.
  *
@@ -62,6 +74,7 @@ export async function buildProviderStatusReadModel(
     isUnavailable: healthStatus === 'UNAVAILABLE',
     isStale: healthStatus === 'STALE',
     dataReadiness,
+    statusMessage: providerStatusMessage(dataReadiness, snapshot.health),
     canServeHistoricalResearch,
     canServeIntradayResearch,
     canServeRealtime,
