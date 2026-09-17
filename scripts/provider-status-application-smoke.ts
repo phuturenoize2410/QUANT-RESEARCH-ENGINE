@@ -17,6 +17,10 @@ if (readModel.isPaid || readModel.isRealTime) {
   throw new Error('Mock provider status must not be presented as paid or real-time data.');
 }
 
+if (readModel.dataDisclosure !== 'MOCK / SYNTHETIC DATA — NOT FOR LIVE TRADING') {
+  throw new Error('Application provider status must expose an explicit non-live synthetic-data disclosure for MOCK providers.');
+}
+
 if (readModel.health.status !== 'DEGRADED') {
   throw new Error('Application provider status must preserve engine-normalized health state.');
 }
@@ -53,4 +57,4 @@ if (!unavailableReadModel.isUnavailable || !unavailableReadModel.requiresAttenti
   throw new Error('Application provider status must expose UNAVAILABLE as attention-required presentation state.');
 }
 
-console.log('Provider-status application smoke passed: canonical provider health/provenance and presentation flags reach UI through one immutable application read model.');
+console.log('Provider-status application smoke passed: canonical provider health/provenance, disclosure, and presentation flags reach UI through one immutable application read model.');
