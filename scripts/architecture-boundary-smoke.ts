@@ -15,11 +15,6 @@ function collectTypeScriptFiles(path: string): string[] {
 
 const providerRoots = collectTypeScriptFiles(engineRoot).filter(file => {
   const name = basename(file);
-  // Provider adapters are allowed to be vendor-named (for example
-  // googleFinanceProvider.ts or idxFeedProvider.ts). Match "provider" anywhere in
-  // the filename so future free/paid adapters cannot silently escape the upstream
-  // DataProvider dependency guard merely because their filename does not start
-  // with "provider".
   return name === 'dataProviders.ts' || /provider.*\.ts$/i.test(name);
 });
 
@@ -45,30 +40,23 @@ function importSpecifiers(source: string): string[] {
   const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
   const dynamicSpecifiers = [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
   const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
-
-  // Architecture boundaries are dependency boundaries, not syntax boundaries.
-  // Treat static imports, dynamic imports and CommonJS require calls identically
-  // so lazy loading or adapter implementation style cannot bypass the pipeline.
   return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
-/**
- * React is terminal presentation. Default-deny every engine import rather than
- * maintaining a filename allow/deny list that new quant-core modules can silently
- * escape. Presentation consumes application facades and passive shared DTOs only.
- * The exact legacy ML Lab exceptions below are temporary migration debt and must
- * remain exercised so they cannot become reusable bypasses.
- */
 const uiForbiddenBoundaries = ['/engine/', '/data/mockStocks'];
 
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   ['src/components/MLLabView.tsx', new Set(['../engine/ml/featureStore', '../engine/ml/models', '../engine/ml/ensembleRouter', '../engine/ml/modelRegistry'])],
 ]);
 
-// DataProvider is the first executable layer. It may publish canonical provider
-// contracts, but it must never reach downstream into Feature/Strategy/Risk/Execution.
-// Keeping this direction explicit prevents a future Google Finance, IDX feed or
-// broker adapter from quietly embedding indicators or signal logic in ingestion.
+// Migration debt is allowed to shrink, never grow. Any new direct UI -> engine
+// dependency must be routed through src/application instead of expanding this
+// exception list. Once ML Lab is fully migrated, reduce this budget alongside
+// deleting the corresponding exceptions until it reaches zero.
+const LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET = 4;
+const declaredLegacyUiDebt = [...legacyUiBoundaryExceptions.values()]
+  .reduce((count, exceptions) => count + exceptions.size, 0);
+
 const providerForbiddenBoundaries = ['/featureContext', './featureContext', '/featureProvenance', './featureProvenance', '/ml/featureStore', './ml/featureStore', 'strategyTypes', '/strategies/', '/strategy/', './strategies/', './strategy/', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
 const featureForbiddenBoundaries = ['strategyTypes', '/strategies/', '/strategy/', './strategies/', './strategy/', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
 const strategyForbiddenBoundaries = ['/dataProviders', './dataProviders', '/providerPolicy', './providerPolicy', '/providerGate', './providerGate', '/providerCache', './providerCache', '/providerHealth', './providerHealth', '/risk', './risk', '/execution', './execution', '/components/', '/data/mockStocks'];
@@ -76,6 +64,10 @@ const riskExecutionForbiddenBoundaries = ['/dataProviders', './dataProviders', '
 
 const violations: string[] = [];
 const exercisedLegacyUiExceptions = new Set<string>();
+
+if (declaredLegacyUiDebt > LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET) {
+  violations.push(`Legacy UI -> engine import debt grew to ${declaredLegacyUiDebt}; budget is ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET}. Route new presentation dependencies through src/application instead of expanding migration exceptions.`);
+}
 
 for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
   const source = readFileSync(file, 'utf8');
@@ -122,4 +114,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: static, dynamic and CommonJS dependencies are inspected; UI default-denies all direct engine imports except exact, exercised ML Lab migration debt; UI cannot import mock universe data; ${providerRoots.length} provider modules remain the first executable layer and independent from Feature/Strategy/Risk/Execution; ${featureRoots.length} feature modules remain upstream of Strategy/Risk/Execution; ${strategyRoots.length} strategy modules remain upstream of Risk/Execution; ${riskExecutionRoots.length} Risk/Execution modules cannot bypass into providers/features/UI/mock data; engine code cannot invert the dependency into application orchestration; and engine code remains UI-independent.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies direct engine imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET} and may only shrink; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
