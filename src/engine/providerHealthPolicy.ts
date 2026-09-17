@@ -37,3 +37,20 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
 
   return null;
 }
+
+/**
+ * Canonical readiness decision for consumers that require trustworthy provider
+ * data. This deliberately composes evidence validation with the provider-owned
+ * status vocabulary so execution/application layers never reinterpret HEALTHY,
+ * DEGRADED, STALE, or UNAVAILABLE independently.
+ */
+export function providerHealthReadinessError(providerHealth: ProviderHealth): string | null {
+  const evidenceError = providerHealthEvidenceError(providerHealth);
+  if (evidenceError) return evidenceError;
+
+  if (providerHealth.status !== 'HEALTHY') {
+    return `provider health is ${providerHealth.status}; HEALTHY is required`;
+  }
+
+  return null;
+}

@@ -1,5 +1,5 @@
 import { ProviderHealth } from './dataProviders';
-import { providerHealthEvidenceError } from './providerHealthPolicy';
+import { providerHealthReadinessError } from './providerHealthPolicy';
 import {
   ResearchExecutionEligibility,
   createApprovedExecutionEligibility,
@@ -29,15 +29,9 @@ export function evaluateResearchExecutionEligibility(
     );
   }
 
-  const healthEvidenceError = providerHealthEvidenceError(evidence.providerHealth);
-  if (healthEvidenceError) {
-    return createBlockedExecutionEligibility(`Execution blocked: ${healthEvidenceError}.`);
-  }
-
-  if (evidence.providerHealth.status !== 'HEALTHY') {
-    return createBlockedExecutionEligibility(
-      `Execution blocked: provider health is ${evidence.providerHealth.status}; HEALTHY is required.`,
-    );
+  const healthReadinessError = providerHealthReadinessError(evidence.providerHealth);
+  if (healthReadinessError) {
+    return createBlockedExecutionEligibility(`Execution blocked: ${healthReadinessError}.`);
   }
 
   if (!evidence.backtestEdgeValidated) {
