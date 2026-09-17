@@ -48,11 +48,17 @@ export function assertNextResearchPipelineStage(
  * an executable order, until the Risk/Execution boundary explicitly approves it.
  */
 export interface ResearchExecutionEligibility {
-  stage: 'RISK_EXECUTION';
-  executable: boolean;
-  status: 'NOT_EVALUATED' | 'APPROVED' | 'BLOCKED';
-  reason: string;
+  readonly stage: 'RISK_EXECUTION';
+  readonly executable: boolean;
+  readonly status: 'NOT_EVALUATED' | 'APPROVED' | 'BLOCKED';
+  readonly reason: string;
 }
+
+// Runtime provenance for canonical approvals. TypeScript interfaces are structural,
+// so a presentation/application consumer could otherwise forge an APPROVED-shaped
+// object. WeakSet membership makes assertExecutionEligible fail closed unless the
+// approval was actually issued by this Risk/Execution policy boundary.
+const CANONICAL_EXECUTION_APPROVALS = new WeakSet<object>();
 
 export function createUnevaluatedExecutionEligibility(): ResearchExecutionEligibility {
   return Object.freeze({
@@ -63,8 +69,44 @@ export function createUnevaluatedExecutionEligibility(): ResearchExecutionEligib
   });
 }
 
+/**
+ * Issue execution approval from the canonical Risk/Execution boundary.
+ * Callers must supply a non-empty policy reason so approval remains auditable.
+ * This does not itself implement portfolio/risk rules; those evaluators must call
+ * this only after their checks pass.
+ */
+export function createApprovedExecutionEligibility(reason: string): ResearchExecutionEligibility {
+  const normalizedReason = reason.trim();
+  if (!normalizedReason) {
+    throw new Error('Execution approval requires a canonical Risk/Execution policy reason.');
+  }
+
+  const approval = Object.freeze({
+    stage: 'RISK_EXECUTION' as const,
+    executable: true,
+    status: 'APPROVED' as const,
+    reason: normalizedReason,
+  });
+  CANONICAL_EXECUTION_APPROVALS.add(approval);
+  return approval;
+}
+
+export function createBlockedExecutionEligibility(reason: string): ResearchExecutionEligibility {
+  const normalizedReason = reason.trim() || 'Canonical Risk/Execution policy blocked the candidate.';
+  return Object.freeze({
+    stage: 'RISK_EXECUTION' as const,
+    executable: false,
+    status: 'BLOCKED' as const,
+    reason: normalizedReason,
+  });
+}
+
 export function assertExecutionEligible(eligibility: ResearchExecutionEligibility): void {
-  if (eligibility.status !== 'APPROVED' || eligibility.executable !== true) {
+  if (
+    eligibility.status !== 'APPROVED' ||
+    eligibility.executable !== true ||
+    !CANONICAL_EXECUTION_APPROVALS.has(eligibility)
+  ) {
     throw new Error(`Execution blocked: ${eligibility.reason}`);
   }
 }
