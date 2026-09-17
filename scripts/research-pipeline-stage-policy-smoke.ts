@@ -4,6 +4,8 @@ import {
   ResearchPipelineStageOrderError,
   assertNextResearchPipelineStage,
   createUnevaluatedExecutionEligibility,
+  createApprovedExecutionEligibility,
+  createBlockedExecutionEligibility,
   assertExecutionEligible,
 } from '../src/engine/researchPipelineStagePolicy';
 
@@ -49,11 +51,34 @@ assert.throws(
   'Research shortlist must fail closed before explicit Risk/Execution approval.',
 );
 
-assert.doesNotThrow(() => assertExecutionEligible({
-  stage: 'RISK_EXECUTION',
-  status: 'APPROVED',
+const blocked = createBlockedExecutionEligibility('Risk budget unavailable.');
+assert.equal(blocked.status, 'BLOCKED');
+assert.equal(blocked.executable, false);
+assert.throws(() => assertExecutionEligible(blocked), /Execution blocked/);
+
+const forgedApproval = Object.freeze({
+  stage: 'RISK_EXECUTION' as const,
+  status: 'APPROVED' as const,
   executable: true,
-  reason: 'Canonical risk and execution policy approved the candidate.',
-}));
+  reason: 'UI-shaped approval without canonical Risk/Execution provenance.',
+});
+assert.throws(
+  () => assertExecutionEligible(forgedApproval),
+  /Execution blocked/,
+  'Structurally valid approval objects must not bypass canonical Risk/Execution provenance.',
+);
+
+assert.throws(
+  () => createApprovedExecutionEligibility('   '),
+  /requires a canonical Risk\/Execution policy reason/,
+  'Canonical approvals must retain auditable policy rationale.',
+);
+
+const approved = createApprovedExecutionEligibility(
+  'Canonical risk and execution policy approved the candidate.',
+);
+assert.equal(approved.status, 'APPROVED');
+assert.equal(approved.executable, true);
+assert.doesNotThrow(() => assertExecutionEligible(approved));
 
 console.log('research-pipeline-stage-policy-smoke: ok');
