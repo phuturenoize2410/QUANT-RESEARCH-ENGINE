@@ -43,7 +43,11 @@ function importSpecifiers(source: string): string[] {
   return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
-const uiForbiddenBoundaries = ['/engine/', '/data/mockStocks'];
+// Presentation must not bypass the application/provider boundary by reaching
+// into engine behavior or prototype/static datasets directly. Mock and other
+// research-only data remain available behind application/provider seams where
+// provenance and readiness can be disclosed consistently.
+const uiForbiddenBoundaries = ['/engine/', '/data/'];
 
 const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   ['src/components/MLLabView.tsx', new Set(['../engine/ml/featureStore', '../engine/ml/models', '../engine/ml/ensembleRouter', '../engine/ml/modelRegistry'])],
@@ -77,7 +81,7 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
     const exceptionKey = `${filePath}::${specifier}`;
     if (exceptions.has(specifier)) exercisedLegacyUiExceptions.add(exceptionKey);
     if (uiForbiddenBoundaries.some(boundary => specifier.includes(boundary)) && !exceptions.has(specifier)) {
-      violations.push(`${relative(repoRoot, file)} imports ${specifier}; UI must consume quant-core behavior through the application boundary instead of importing engine modules directly.`);
+      violations.push(`${relative(repoRoot, file)} imports ${specifier}; UI must consume provider-backed data and quant-core behavior through the application boundary instead of importing engine or prototype/static data modules directly.`);
     }
   }
 }
@@ -114,4 +118,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies direct engine imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET} and may only shrink; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies direct engine and prototype/static data imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET} and may only shrink; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
