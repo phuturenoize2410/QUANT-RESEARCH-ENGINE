@@ -1,3 +1,4 @@
+import { ProviderHealthStatus } from './dataProviders';
 import {
   ResearchExecutionEligibility,
   createApprovedExecutionEligibility,
@@ -6,24 +7,17 @@ import {
 
 /**
  * Minimum evidence required before research output can become execution-eligible.
- * This contract deliberately separates data provenance, demonstrated edge, and
- * risk approval so no single UI/strategy flag can promote a candidate.
+ * Provider health uses the canonical provider-boundary status rather than a
+ * duplicated boolean so DEGRADED/STALE/UNAVAILABLE cannot be collapsed upstream.
  */
 export interface ResearchExecutionEvidence {
   readonly dataMode: 'MOCK' | 'REAL';
-  readonly providerHealthy: boolean;
+  readonly providerHealthStatus: ProviderHealthStatus;
   readonly backtestEdgeValidated: boolean;
   readonly riskChecksPassed: boolean;
 }
 
-/**
- * Canonical fail-closed evaluator for the research -> execution transition.
- *
- * MOCK data can never produce executable approval. REAL data is also insufficient
- * by itself: provider health, validated backtest edge, and risk checks must all
- * pass. This keeps future free/paid provider integrations from silently becoming
- * an execution shortcut before the research case is demonstrated.
- */
+/** Canonical fail-closed evaluator for the research -> execution transition. */
 export function evaluateResearchExecutionEligibility(
   evidence: ResearchExecutionEvidence,
 ): ResearchExecutionEligibility {
@@ -33,9 +27,9 @@ export function evaluateResearchExecutionEligibility(
     );
   }
 
-  if (!evidence.providerHealthy) {
+  if (evidence.providerHealthStatus !== 'HEALTHY') {
     return createBlockedExecutionEligibility(
-      'Execution blocked: real-data provider health is not confirmed.',
+      `Execution blocked: provider health is ${evidence.providerHealthStatus}; HEALTHY is required.`,
     );
   }
 
@@ -52,6 +46,6 @@ export function evaluateResearchExecutionEligibility(
   }
 
   return createApprovedExecutionEligibility(
-    'Canonical Risk/Execution policy approved REAL healthy-provider research with validated backtest edge and passed risk checks.',
+    'Canonical Risk/Execution policy approved REAL research with HEALTHY provider status, validated backtest edge, and passed risk checks.',
   );
 }
