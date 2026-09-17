@@ -56,9 +56,10 @@ assert.equal(promoted.recommendation, 'KEEP CHAMPION');
 assert.equal(promoted.champion.modelId, beforePromotion.championComparison.challenger.modelId);
 assert.equal(promoted.champion.status, 'CHAMPION');
 assert.deepEqual(promoted.recommendationRationale, [
-  'Promoted Challenger (LightGBM-v4) to Champion status.',
-  'Production models updated with tighter calibration and superior expected value.',
+  'Simulated promotion: Challenger (LightGBM-v4) is now the ML Lab champion candidate.',
+  'No production model or live execution path was changed; this transition remains MOCK/SIMULATED research only.',
 ]);
+assert.ok(promoted.recommendationRationale.every(line => !line.includes('Production models updated')));
 assert.notStrictEqual(promoted.champion, beforePromotion.championComparison.challenger);
 assert.notStrictEqual(promoted.champion.metrics, beforePromotion.championComparison.challenger.metrics);
 assert.notStrictEqual(promoted.champion.calibrationBuckets, beforePromotion.championComparison.challenger.calibrationBuckets);
