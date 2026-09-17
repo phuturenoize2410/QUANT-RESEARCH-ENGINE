@@ -46,12 +46,19 @@ const missingLastSync = evaluateResearchExecutionEligibility({
 assert.equal(missingLastSync.status, 'BLOCKED');
 assert.match(missingLastSync.reason, /lastSuccessfulSyncAt evidence/);
 
-const futureLastSync = evaluateResearchExecutionEligibility({
+const toleratedClockSkew = evaluateResearchExecutionEligibility({
   ...baseEvidence,
   providerHealth: { ...baseEvidence.providerHealth, lastSuccessfulSyncAt: '2026-09-18T00:01:00.000Z' },
 });
-assert.equal(futureLastSync.status, 'BLOCKED');
-assert.match(futureLastSync.reason, /later than checkedAt/);
+assert.equal(toleratedClockSkew.status, 'APPROVED');
+assert.equal(toleratedClockSkew.executable, true);
+
+const excessiveFutureLastSync = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: { ...baseEvidence.providerHealth, lastSuccessfulSyncAt: '2026-09-18T00:06:00.001Z' },
+});
+assert.equal(excessiveFutureLastSync.status, 'BLOCKED');
+assert.match(excessiveFutureLastSync.reason, /exceeds allowed clock skew/);
 
 const staleHealth = evaluateResearchExecutionEligibility({
   ...baseEvidence,
