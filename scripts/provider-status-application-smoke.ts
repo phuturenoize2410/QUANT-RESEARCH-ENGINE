@@ -12,6 +12,7 @@ const readModel = await buildProviderStatusReadModel(provider, {
 if (readModel.provider.id !== 'mock-market-v1' || !readModel.isMock) throw new Error('Application provider status must preserve canonical provider identity and explicit MOCK provenance.');
 if (readModel.isPaid || readModel.isRealTime || readModel.canServeRealtime) throw new Error('Mock provider status must never be presented as paid or live-capable.');
 if (readModel.dataDisclosure !== 'MOCK / SYNTHETIC DATA — NOT FOR LIVE TRADING' || readModel.dataReadiness !== 'RESEARCH_ONLY') throw new Error('MOCK providers must remain explicitly synthetic and research-only regardless of health state.');
+if (readModel.statusMessage !== 'Mock provider has no simulated universe loaded.') throw new Error('Provider-supplied health evidence must reach presentation through the application status message.');
 if (!readModel.canServeHistoricalResearch || readModel.historicalBlockReason !== null) throw new Error('Healthy/degraded mock historical capability must remain usable for research without implying live readiness.');
 if (readModel.realtimeBlockReason !== 'RESEARCH_ONLY') throw new Error('Mock realtime denial must preserve research-only provenance rather than appearing as a generic provider failure.');
 if (readModel.health.status !== 'DEGRADED') throw new Error('Application provider status must preserve engine-normalized health state.');
@@ -23,6 +24,7 @@ const staleReadModel = await buildProviderStatusReadModel(provider, {
   status: 'STALE', checkedAt: '2026-09-17T00:00:00.000Z', lastSuccessfulSyncAt: '2026-09-16T23:00:00.000Z', staleAfterSeconds: 60,
 }, nowMs);
 if (!staleReadModel.isStale || !staleReadModel.requiresAttention || staleReadModel.isHealthy || staleReadModel.isUnavailable || staleReadModel.dataReadiness !== 'RESEARCH_ONLY' || staleReadModel.canServeHistoricalResearch || staleReadModel.historicalBlockReason !== 'HEALTH_BLOCKED') throw new Error('STALE providers must fail closed for capability use while preserving an explicit health-block reason.');
+if (staleReadModel.statusMessage !== 'Synthetic provider available for research only. Not for live trading.') throw new Error('Mock fallback status messaging must preserve research-only provenance even when health is stale.');
 
 const unavailableReadModel = await buildProviderStatusReadModel(provider, { status: 'UNAVAILABLE', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs);
 if (!unavailableReadModel.isUnavailable || !unavailableReadModel.requiresAttention || unavailableReadModel.isHealthy || unavailableReadModel.dataReadiness !== 'RESEARCH_ONLY' || unavailableReadModel.canServeHistoricalResearch || unavailableReadModel.historicalBlockReason !== 'HEALTH_BLOCKED') throw new Error('Unavailable providers must fail closed for capability use with an explicit health-block reason.');
@@ -33,11 +35,14 @@ const realProvider: HealthCheckedProvider = {
 };
 const readyReadModel = await buildProviderStatusReadModel(realProvider, undefined, nowMs);
 if (readyReadModel.dataReadiness !== 'READY' || readyReadModel.isMock || !readyReadModel.canServeHistoricalResearch || readyReadModel.historicalBlockReason !== null || readyReadModel.canServeIntradayResearch || readyReadModel.intradayBlockReason !== 'UNSUPPORTED' || readyReadModel.canServeRealtime || readyReadModel.realtimeBlockReason !== 'UNSUPPORTED') throw new Error('Healthy EOD providers must expose supported capabilities and explicit unsupported reasons without UI inference.');
+if (readyReadModel.statusMessage !== 'Provider is healthy and available for its declared capabilities.') throw new Error('Healthy provider fallback messaging must be centralized in the application seam.');
 
 const cautionReadModel = await buildProviderStatusReadModel(realProvider, { status: 'DEGRADED', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs);
 if (cautionReadModel.dataReadiness !== 'CAUTION' || !cautionReadModel.canServeHistoricalResearch || cautionReadModel.historicalBlockReason !== null) throw new Error('Degraded non-mock providers may remain research-capable while surfacing CAUTION.');
+if (cautionReadModel.statusMessage !== 'Provider is degraded. Research may continue only within declared capabilities.') throw new Error('Degraded provider fallback messaging must not be reinterpreted by UI components.');
 
 const blockedReadModel = await buildProviderStatusReadModel(realProvider, { status: 'STALE', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs);
 if (blockedReadModel.dataReadiness !== 'BLOCKED' || blockedReadModel.canServeHistoricalResearch || blockedReadModel.historicalBlockReason !== 'HEALTH_BLOCKED') throw new Error('Stale non-mock providers must fail closed as BLOCKED with explicit health evidence.');
+if (blockedReadModel.statusMessage !== 'Provider data is stale. Capability use is blocked until freshness recovers.') throw new Error('Stale provider fallback messaging must communicate the fail-closed state without UI inference.');
 
-console.log('Provider-status application smoke passed: provenance, health, readiness, capability gates and block reasons reach UI through one immutable application read model.');
+console.log('Provider-status application smoke passed: provenance, health, readiness, messaging, capability gates and block reasons reach UI through one immutable application read model.');
