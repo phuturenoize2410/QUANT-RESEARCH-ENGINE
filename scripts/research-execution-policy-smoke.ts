@@ -8,6 +8,7 @@ const baseEvidence = Object.freeze({
     status: 'HEALTHY' as const,
     checkedAt: '2026-09-18T00:00:00.000Z',
     lastSuccessfulSyncAt: '2026-09-18T00:00:00.000Z',
+    staleAfterSeconds: 300,
   }),
   backtestEdgeValidated: true,
   riskChecksPassed: true,
@@ -37,6 +38,39 @@ const invalidHealthObservation = evaluateResearchExecutionEligibility({
 assert.equal(invalidHealthObservation.status, 'BLOCKED');
 assert.equal(invalidHealthObservation.executable, false);
 assert.match(invalidHealthObservation.reason, /checkedAt timestamp/);
+
+const missingLastSync = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: { status: 'HEALTHY', checkedAt: baseEvidence.providerHealth.checkedAt },
+});
+assert.equal(missingLastSync.status, 'BLOCKED');
+assert.match(missingLastSync.reason, /lastSuccessfulSyncAt evidence/);
+
+const futureLastSync = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: { ...baseEvidence.providerHealth, lastSuccessfulSyncAt: '2026-09-18T00:01:00.000Z' },
+});
+assert.equal(futureLastSync.status, 'BLOCKED');
+assert.match(futureLastSync.reason, /later than checkedAt/);
+
+const staleHealth = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: {
+    ...baseEvidence.providerHealth,
+    checkedAt: '2026-09-18T00:10:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-18T00:00:00.000Z',
+    staleAfterSeconds: 300,
+  },
+});
+assert.equal(staleHealth.status, 'BLOCKED');
+assert.match(staleHealth.reason, /stale relative to staleAfterSeconds/);
+
+const invalidFreshnessWindow = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: { ...baseEvidence.providerHealth, staleAfterSeconds: 0 },
+});
+assert.equal(invalidFreshnessWindow.status, 'BLOCKED');
+assert.match(invalidFreshnessWindow.reason, /positive finite number/);
 
 const noEdge = evaluateResearchExecutionEligibility({ ...baseEvidence, backtestEdgeValidated: false });
 assert.equal(noEdge.status, 'BLOCKED');
