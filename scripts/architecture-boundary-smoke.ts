@@ -53,6 +53,15 @@ const legacyUiBoundaryExceptions = new Map<string, Set<string>>([
   ['src/components/MLLabView.tsx', new Set(['../engine/ml/featureStore', '../engine/ml/models', '../engine/ml/ensembleRouter', '../engine/ml/modelRegistry'])],
 ]);
 
+// Every temporary UI -> engine exception must already have an application-layer
+// migration seam that owns the same dependency. This prevents legacy debt from
+// becoming permanent architecture: an exception is only tolerated while React
+// is being moved onto an existing application facade, never as the sole owner of
+// engine orchestration.
+const legacyUiMigrationSeams = new Map<string, string>([
+  ['src/components/MLLabView.tsx', 'src/application/mlLabApplication.ts'],
+]);
+
 // Migration debt is allowed to shrink, never grow. Any new direct UI -> engine
 // dependency must be routed through src/application instead of expanding this
 // exception list. Once ML Lab is fully migrated, reduce this budget alongside
@@ -87,9 +96,24 @@ for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
 }
 
 for (const [filePath, exceptions] of legacyUiBoundaryExceptions) {
+  const seamPath = legacyUiMigrationSeams.get(filePath);
+  if (!seamPath) {
+    violations.push(`${filePath} has legacy UI -> engine exceptions but no declared application migration seam.`);
+    continue;
+  }
+
+  const seamSource = readFileSync(join(repoRoot, seamPath), 'utf8');
+  const seamImports = importSpecifiers(seamSource);
   for (const specifier of exceptions) {
     const exceptionKey = `${filePath}::${specifier}`;
-    if (!exercisedLegacyUiExceptions.has(exceptionKey)) violations.push(`${filePath} retains unused legacy exception ${specifier}; remove stale UI boundary exceptions as soon as the direct import is migrated.`);
+    if (!exercisedLegacyUiExceptions.has(exceptionKey)) {
+      violations.push(`${filePath} retains unused legacy exception ${specifier}; remove stale UI boundary exceptions as soon as the direct import is migrated.`);
+    }
+
+    const engineSuffix = specifier.replace(/^\.\.\/engine\//, '/engine/');
+    if (!seamImports.some(seamImport => seamImport.includes(engineSuffix))) {
+      violations.push(`${filePath} legacy dependency ${specifier} is not owned by declared migration seam ${seamPath}; route the engine dependency through the application facade before retaining a temporary UI exception.`);
+    }
   }
 }
 
@@ -118,4 +142,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies direct engine and prototype/static data imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET} and may only shrink; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
+console.log(`Architecture-boundary smoke passed: UI default-denies direct engine and prototype/static data imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET}, may only shrink, and must already be owned by a declared application migration seam; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
