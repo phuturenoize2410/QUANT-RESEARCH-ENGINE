@@ -1,4 +1,4 @@
-import { ProviderHealthStatus } from './dataProviders';
+import { ProviderHealth } from './dataProviders';
 import {
   ResearchExecutionEligibility,
   createApprovedExecutionEligibility,
@@ -7,14 +7,19 @@ import {
 
 /**
  * Minimum evidence required before research output can become execution-eligible.
- * Provider health uses the canonical provider-boundary status rather than a
- * duplicated boolean so DEGRADED/STALE/UNAVAILABLE cannot be collapsed upstream.
+ * Provider health crosses the boundary as the canonical observation rather than a
+ * duplicated status scalar, preserving timestamp/freshness evidence for future
+ * free or paid adapters and preventing downstream layers from discarding it.
  */
 export interface ResearchExecutionEvidence {
   readonly dataMode: 'MOCK' | 'REAL';
-  readonly providerHealthStatus: ProviderHealthStatus;
+  readonly providerHealth: ProviderHealth;
   readonly backtestEdgeValidated: boolean;
   readonly riskChecksPassed: boolean;
+}
+
+function hasValidHealthObservation(providerHealth: ProviderHealth): boolean {
+  return Number.isFinite(Date.parse(providerHealth.checkedAt));
 }
 
 /** Canonical fail-closed evaluator for the research -> execution transition. */
@@ -27,9 +32,15 @@ export function evaluateResearchExecutionEligibility(
     );
   }
 
-  if (evidence.providerHealthStatus !== 'HEALTHY') {
+  if (!hasValidHealthObservation(evidence.providerHealth)) {
     return createBlockedExecutionEligibility(
-      `Execution blocked: provider health is ${evidence.providerHealthStatus}; HEALTHY is required.`,
+      'Execution blocked: provider health observation has no valid checkedAt timestamp.',
+    );
+  }
+
+  if (evidence.providerHealth.status !== 'HEALTHY') {
+    return createBlockedExecutionEligibility(
+      `Execution blocked: provider health is ${evidence.providerHealth.status}; HEALTHY is required.`,
     );
   }
 
@@ -46,6 +57,6 @@ export function evaluateResearchExecutionEligibility(
   }
 
   return createApprovedExecutionEligibility(
-    'Canonical Risk/Execution policy approved REAL research with HEALTHY provider status, validated backtest edge, and passed risk checks.',
+    'Canonical Risk/Execution policy approved REAL research with a timestamped HEALTHY provider observation, validated backtest edge, and passed risk checks.',
   );
 }
