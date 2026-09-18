@@ -50,10 +50,6 @@ const snapshotReadiness = (readiness: ProviderReadiness): ProviderReadiness => O
   warnings: Object.freeze([...readiness.warnings]) as unknown as string[],
 });
 
-/**
- * Canonical immutable ownership boundary for provider status evidence.
- * Provider adapters, caches and UI consumers must not share mutable status objects.
- */
 export function snapshotProviderStatus(status: ProviderStatusSnapshot): ProviderStatusSnapshot {
   const readiness = Object.fromEntries(
     RESEARCH_USE_CASES.map(useCase => [useCase, snapshotReadiness(status.readiness[useCase])]),
@@ -91,12 +87,13 @@ export function providerSupportsMarket(metadata: ProviderMetadata, marketId: Mar
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   const runtimeMetadata = metadata as ProviderMetadata & {
-    id?: unknown; name?: unknown; source?: unknown; mode?: unknown; isPaid?: unknown;
+    id?: unknown; name?: unknown; source?: unknown; mode?: unknown; isPaid?: unknown; notes?: unknown;
     supportedMarkets?: unknown; supportsHistorical?: unknown; supportsIntraday?: unknown; supportsRealtime?: unknown;
   };
   const issues: string[] = [];
   if (!isNonEmptyString(runtimeMetadata.id)) issues.push('Provider capability contract is invalid: provider id must be a non-empty string.');
   if (!isNonEmptyString(runtimeMetadata.name)) issues.push('Provider capability contract is invalid: provider name must be a non-empty string.');
+  if (runtimeMetadata.notes !== undefined && !isNonEmptyString(runtimeMetadata.notes)) issues.push('Provider capability contract is invalid: notes must be a non-empty string when provided.');
   const hasValidSource = isMarketDataSource(runtimeMetadata.source);
   const hasValidMode = isProviderMode(runtimeMetadata.mode);
   const hasValidPaidFlag = typeof runtimeMetadata.isPaid === 'boolean';
@@ -179,9 +176,6 @@ export function evaluateProviderReadiness(metadata: ProviderMetadata, health: Pr
 }
 
 export async function getProviderReadinessMatrix(provider: MarketDataProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<Record<ResearchUseCase, ProviderReadiness>> {
-  // Validate adapter-declared metadata before the health boundary canonicalizes it.
-  // This preserves evidence such as canonical duplicate market IDs instead of
-  // allowing sanitization/deduplication to erase the original contract failure.
   const rawContractIssues = validateProviderMetadata(provider.metadata);
   const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   return buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket, rawContractIssues);
