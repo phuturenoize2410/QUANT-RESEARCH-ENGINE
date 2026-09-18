@@ -80,11 +80,12 @@ function pushUnique(target: string[], message: string): void { if (!target.inclu
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
 function isProviderMode(value: unknown): value is ProviderMode { return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode); }
 function isMarketDataSource(value: unknown): value is MarketDataSource { return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource); }
+function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
 
 export function providerSupportsMarket(metadata: ProviderMetadata, marketId: MarketId): boolean {
   if (!Array.isArray(metadata.supportedMarkets)) return false;
-  const canonicalTargetMarket = marketId.trim().toUpperCase();
-  return metadata.supportedMarkets.some(market => typeof market === 'string' && market.trim().toUpperCase() === canonicalTargetMarket);
+  const canonicalTargetMarket = canonicalMarketId(marketId);
+  return metadata.supportedMarkets.some(market => typeof market === 'string' && canonicalMarketId(market) === canonicalTargetMarket);
 }
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
@@ -112,7 +113,8 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   if (supportedMarkets.length === 0) issues.push('Provider capability contract is invalid: at least one supported market must be declared.');
   const normalizedMarkets = supportedMarkets.filter((market): market is string => typeof market === 'string').map(market => market.trim()).filter(Boolean);
   if (normalizedMarkets.length !== supportedMarkets.length) issues.push('Provider capability contract is invalid: supported market identifiers must be non-empty strings.');
-  if (new Set(normalizedMarkets).size !== normalizedMarkets.length) issues.push('Provider capability contract is invalid: supported markets must not contain duplicates.');
+  const canonicalMarkets = normalizedMarkets.map(canonicalMarketId);
+  if (new Set(canonicalMarkets).size !== canonicalMarkets.length) issues.push('Provider capability contract is invalid: supported markets must not contain canonical duplicates.');
   if (hasValidRealtimeCapability && hasValidIntradayCapability && runtimeMetadata.supportsRealtime && !runtimeMetadata.supportsIntraday) issues.push('Provider capability contract is invalid: real-time support requires intraday support.');
   if (hasValidRealtimeCapability && hasValidMode && runtimeMetadata.supportsRealtime && runtimeMetadata.mode !== 'REALTIME') issues.push('Provider capability contract is invalid: real-time support requires REALTIME mode.');
   if (hasValidMode && hasValidRealtimeCapability && runtimeMetadata.mode === 'REALTIME' && !runtimeMetadata.supportsRealtime) issues.push('Provider capability contract is invalid: REALTIME mode requires real-time support.');
