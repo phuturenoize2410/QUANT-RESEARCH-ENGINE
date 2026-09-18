@@ -45,6 +45,12 @@ const emptyTargetReadiness = evaluateProviderReadiness(baseMetadata, {
 assert.equal(emptyTargetReadiness.allowed, false, 'explicit empty target market must fail closed rather than bypass compatibility checks');
 assert.ok(emptyTargetReadiness.reasons.some(reason => reason.includes('does not support target market')));
 
+const unknownUseCaseReadiness = evaluateProviderReadiness(baseMetadata, {
+  status: 'HEALTHY', checkedAt: '2026-09-13T02:00:00.000Z', lastSuccessfulSyncAt: '2026-09-13T01:59:00.000Z',
+}, 'FUTURE_UNKNOWN_MODE' as unknown as 'EOD_RESEARCH', 'IDX');
+assert.equal(unknownUseCaseReadiness.allowed, false, 'unknown runtime research use cases must fail closed');
+assert.ok(unknownUseCaseReadiness.reasons.some(reason => reason.includes('unknown research use case')));
+
 const malformedRuntimeMetadata = {
   ...baseMetadata, source: 'UNTRUSTED_VENDOR', mode: 'STREAMING', supportsHistorical: 'yes',
   supportsIntraday: 1, supportsRealtime: 'false', isPaid: 'no', supportedMarkets: 'IDX',
