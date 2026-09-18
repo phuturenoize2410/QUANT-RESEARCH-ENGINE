@@ -80,6 +80,7 @@ function pushUnique(target: string[], message: string): void { if (!target.inclu
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
 function isProviderMode(value: unknown): value is ProviderMode { return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode); }
 function isMarketDataSource(value: unknown): value is MarketDataSource { return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource); }
+function isResearchUseCase(value: unknown): value is ResearchUseCase { return typeof value === 'string' && RESEARCH_USE_CASES.includes(value as ResearchUseCase); }
 function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
 
 export function providerSupportsMarket(metadata: ProviderMetadata, marketId: MarketId): boolean {
@@ -127,6 +128,10 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
 function evaluateNormalizedProviderReadiness(metadata: ProviderMetadata, normalizedHealth: ProviderHealth, useCase: ResearchUseCase, targetMarket?: MarketId): ProviderReadiness {
   const reasons: string[] = [...validateProviderMetadata(metadata)];
   const warnings: string[] = [];
+  if (!isResearchUseCase(useCase)) {
+    pushUnique(reasons, `Provider readiness contract is invalid: unknown research use case ${String(useCase)}.`);
+    return { useCase, allowed: false, reasons, warnings };
+  }
   if (targetMarket !== undefined && !providerSupportsMarket(metadata, targetMarket)) pushUnique(reasons, `Provider does not support target market ${targetMarket}.`);
   if (normalizedHealth.status === 'UNAVAILABLE') pushUnique(reasons, 'Provider is unavailable.');
   if (normalizedHealth.status === 'STALE') pushUnique(reasons, 'Provider data is stale.');
