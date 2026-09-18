@@ -43,7 +43,11 @@ assert.deepEqual(normalizeScoreBounds(null), NORMALIZED_SCORE_BOUNDS);
 assert.deepEqual(normalizeScoreBounds(['0', '100']), NORMALIZED_SCORE_BOUNDS);
 assert.deepEqual(normalizeScoreBounds({ min: '10', max: '90' }), NORMALIZED_SCORE_BOUNDS);
 assert.deepEqual(normalizeScoreBounds({ min: 10, max: '90' }), { min: 10, max: 100 });
-assert.deepEqual(normalizeScoreBounds({ min: -20, max: 80 }), { min: -20, max: 80 });
+assert.deepEqual(normalizeScoreBounds({ min: -20, max: 80 }), { min: 0, max: 80 });
+assert.deepEqual(normalizeScoreBounds({ min: 20, max: 180 }), { min: 20, max: 100 });
+assert.deepEqual(normalizeScoreBounds({ min: -20, max: 180 }), NORMALIZED_SCORE_BOUNDS);
+assert.equal(clampScore(-5, { min: -20, max: 80 }), 0);
+assert.equal(clampScore(150, { min: 20, max: 180 }), 100);
 assert.equal(clampScore(150, null as unknown as { min: number; max: number }), 100);
 assert.equal(roundScore(Number.NaN, ['bad'] as unknown as { min: number; max: number }), 0);
 

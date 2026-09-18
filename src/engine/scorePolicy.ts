@@ -22,10 +22,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Score contracts may eventually arrive from strategy configuration or external
  * research metadata. Normalize malformed bounds at the policy boundary so NaN,
- * Infinity, strings, arrays, or nullish runtime payloads can never propagate into
- * strategy ranking, risk decisions, or UI. The returned policy snapshot is frozen
- * so downstream consumers cannot mutate validated bounds after crossing the
- * canonical score-policy boundary.
+ * Infinity, strings, arrays, nullish payloads, or out-of-domain limits can never
+ * propagate into strategy ranking, risk decisions, or UI. Runtime bounds may
+ * narrow the canonical score domain, but may never expand beyond 0-100. The
+ * returned policy snapshot is frozen so downstream consumers cannot mutate
+ * validated bounds after crossing the canonical score-policy boundary.
  */
 export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): Readonly<ScoreBounds> {
   const candidate = isRecord(bounds) ? bounds : NORMALIZED_SCORE_BOUNDS;
@@ -35,10 +36,12 @@ export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS):
   const candidateMax = typeof candidate.max === 'number' && Number.isFinite(candidate.max)
     ? candidate.max
     : NORMALIZED_SCORE_BOUNDS.max;
+  const orderedMin = Math.min(candidateMin, candidateMax);
+  const orderedMax = Math.max(candidateMin, candidateMax);
 
   return Object.freeze({
-    min: Math.min(candidateMin, candidateMax),
-    max: Math.max(candidateMin, candidateMax),
+    min: Math.min(NORMALIZED_SCORE_BOUNDS.max, Math.max(NORMALIZED_SCORE_BOUNDS.min, orderedMin)),
+    max: Math.min(NORMALIZED_SCORE_BOUNDS.max, Math.max(NORMALIZED_SCORE_BOUNDS.min, orderedMax)),
   });
 }
 
