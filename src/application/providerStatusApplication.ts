@@ -1,6 +1,7 @@
 import type { HealthCheckedProvider, ProviderHealth } from '../engine/dataProviders';
 import type { MarketId } from '../engine/market/marketAdapter';
 import { getProviderHealthSnapshot } from '../engine/providerHealth';
+import { providerHealthEvidenceError } from '../engine/providerHealthPolicy';
 
 export type ProviderDataReadiness = 'RESEARCH_ONLY' | 'READY' | 'CAUTION' | 'BLOCKED';
 export type ProviderCapabilityBlockReason = 'UNSUPPORTED' | 'MARKET_UNSUPPORTED' | 'HEALTH_BLOCKED' | 'RESEARCH_ONLY' | null;
@@ -10,10 +11,12 @@ function providerStatusMessage(
   health: ProviderHealth,
   requestedMarket: MarketId | undefined,
   supportsRequestedMarket: boolean,
+  healthEvidenceError: string | null,
 ): string {
   if (!supportsRequestedMarket) return `Provider does not support requested market ${requestedMarket}. Capability use is blocked.`;
   if (health.message?.trim()) return health.message.trim();
   if (readiness === 'RESEARCH_ONLY') return 'Synthetic provider available for research only. Not for live trading.';
+  if (healthEvidenceError) return `Provider health evidence is not trustworthy (${healthEvidenceError}). Capability use is blocked.`;
   if (readiness === 'READY') return 'Provider is healthy and available for its declared capabilities.';
   if (readiness === 'CAUTION') return 'Provider is degraded. Research may continue only within declared capabilities.';
   if (health.status === 'STALE') return 'Provider data is stale. Capability use is blocked until freshness recovers.';
@@ -41,18 +44,24 @@ export async function buildProviderStatusReadModel(
   const snapshot = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   const healthStatus = snapshot.health.status;
   const isMock = snapshot.metadata.mode === 'MOCK';
+  // MOCK providers remain explicitly research-only and may intentionally lack a
+  // real sync provenance. Non-mock providers must satisfy the engine-owned
+  // evidence policy before application/UI can present any capability as usable.
+  const healthEvidenceError = isMock ? null : providerHealthEvidenceError(snapshot.health);
   const supportsRequestedMarket = requestedMarket === undefined
     || snapshot.metadata.supportedMarkets.includes(requestedMarket);
   const healthReadiness: ProviderDataReadiness = isMock
     ? 'RESEARCH_ONLY'
-    : healthStatus === 'HEALTHY'
-      ? 'READY'
-      : healthStatus === 'DEGRADED'
-        ? 'CAUTION'
-        : 'BLOCKED';
+    : healthEvidenceError
+      ? 'BLOCKED'
+      : healthStatus === 'HEALTHY'
+        ? 'READY'
+        : healthStatus === 'DEGRADED'
+          ? 'CAUTION'
+          : 'BLOCKED';
   const marketBlocked = !supportsRequestedMarket;
   const dataReadiness: ProviderDataReadiness = marketBlocked ? 'BLOCKED' : healthReadiness;
-  const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE';
+  const healthBlocked = healthStatus === 'STALE' || healthStatus === 'UNAVAILABLE' || healthEvidenceError !== null;
   const canServeHistoricalResearch = snapshot.metadata.supportsHistorical && !healthBlocked && !marketBlocked;
   const canServeIntradayResearch = snapshot.metadata.supportsIntraday && !healthBlocked && !marketBlocked;
   const canServeRealtime = !isMock
@@ -85,12 +94,12 @@ export async function buildProviderStatusReadModel(
     isMock,
     isPaid: snapshot.metadata.isPaid,
     isRealTime: snapshot.metadata.supportsRealtime && snapshot.metadata.mode === 'REALTIME',
-    isHealthy: healthStatus === 'HEALTHY',
-    requiresAttention: healthStatus !== 'HEALTHY' || marketBlocked,
+    isHealthy: healthStatus === 'HEALTHY' && healthEvidenceError === null,
+    requiresAttention: healthStatus !== 'HEALTHY' || healthEvidenceError !== null || marketBlocked,
     isUnavailable: healthStatus === 'UNAVAILABLE',
     isStale: healthStatus === 'STALE',
     dataReadiness,
-    statusMessage: providerStatusMessage(dataReadiness, snapshot.health, requestedMarket, supportsRequestedMarket),
+    statusMessage: providerStatusMessage(dataReadiness, snapshot.health, requestedMarket, supportsRequestedMarket, healthEvidenceError),
     canServeHistoricalResearch,
     canServeIntradayResearch,
     canServeRealtime,
