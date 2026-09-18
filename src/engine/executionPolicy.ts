@@ -7,6 +7,7 @@ export interface ExecutionCosts {
 }
 
 export interface ExecutionFrictionBreakdown {
+  readonly grossProfit: number;
   readonly buyFee: number;
   readonly sellFee: number;
   readonly slippage: number;
@@ -110,7 +111,8 @@ export function netReturnAfterCosts(
 /**
  * Canonical monetary friction calculation for simulated/backtest execution.
  * Consumers supply only authoritative buy/sell notionals; gross P/L is derived
- * internally so callers cannot inject contradictory profit evidence.
+ * internally and returned as evidence so downstream execution does not derive
+ * a second monetary truth from the same notionals.
  */
 export function calculateExecutionFriction(
   buyNotional: number,
@@ -120,18 +122,19 @@ export function calculateExecutionFriction(
   const normalized = normalizeExecutionCosts(costs);
   const safeBuyNotional = Number.isFinite(buyNotional) && buyNotional > 0 ? buyNotional : 0;
   const safeSellNotional = Number.isFinite(sellNotional) && sellNotional > 0 ? sellNotional : 0;
-  const canonicalGrossProfit = safeSellNotional - safeBuyNotional;
+  const grossProfit = safeSellNotional - safeBuyNotional;
   const buyFee = safeBuyNotional * (normalized.buyFeePct / 100);
   const sellFee = safeSellNotional * (normalized.sellFeePct / 100);
   const slippage = (safeBuyNotional + safeSellNotional) * (normalized.slippagePct / 200);
   const totalFriction = buyFee + sellFee + slippage;
 
   return Object.freeze({
+    grossProfit,
     buyFee,
     sellFee,
     slippage,
     totalFriction,
-    netProfit: canonicalGrossProfit - totalFriction,
+    netProfit: grossProfit - totalFriction,
   });
 }
 
