@@ -52,6 +52,10 @@ function isValidCalendarDate(value: string): boolean {
  * evidence after validation/provenance has been established.
  */
 export function normalizeProviderBars(providerId: string, bars: readonly DailyBar[]): DailyBar[] {
+  if (typeof providerId !== 'string' || providerId.trim().length === 0) {
+    throw new ProviderBarsError(typeof providerId === 'string' ? providerId : '', -1, 'Historical provider identity must be a non-empty string.');
+  }
+
   let previousDate = '';
 
   const normalized = bars.map((bar, index) => {

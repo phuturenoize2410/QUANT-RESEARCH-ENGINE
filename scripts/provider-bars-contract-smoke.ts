@@ -43,6 +43,14 @@ assert.throws(
   'Feature consumers must not be able to mutate validated provider evidence.',
 );
 
+for (const invalidProviderId of ['', '   ']) {
+  assert.throws(
+    () => normalizeProviderBars(invalidProviderId, validBars),
+    (error: unknown) => error instanceof ProviderBarsError && error.index === -1,
+    'Historical provider evidence without a usable provider identity must fail closed before reaching feature consumers.',
+  );
+}
+
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
   [{ ...validBars[0], date: '2026-02-30' }],
