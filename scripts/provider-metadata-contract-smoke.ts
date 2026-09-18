@@ -37,6 +37,13 @@ assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-mock', s
 
 const mixedCaseMarketMetadata = { ...baseMetadata, supportedMarkets: [' idx '] } as unknown as ProviderMetadata;
 assert.equal(providerSupportsMarket(mixedCaseMarketMetadata, 'IDX'), true, 'market compatibility must normalize provider market casing');
+assert.equal(providerSupportsMarket(baseMetadata, '' as unknown as 'IDX'), false, 'empty target market must never match provider coverage');
+assert.equal(providerSupportsMarket(baseMetadata, '   ' as unknown as 'IDX'), false, 'whitespace-only target market must never match provider coverage');
+const emptyTargetReadiness = evaluateProviderReadiness(baseMetadata, {
+  status: 'HEALTHY', checkedAt: '2026-09-13T02:00:00.000Z', lastSuccessfulSyncAt: '2026-09-13T01:59:00.000Z',
+}, 'EOD_RESEARCH', '' as unknown as 'IDX');
+assert.equal(emptyTargetReadiness.allowed, false, 'explicit empty target market must fail closed rather than bypass compatibility checks');
+assert.ok(emptyTargetReadiness.reasons.some(reason => reason.includes('does not support target market')));
 
 const malformedRuntimeMetadata = {
   ...baseMetadata, source: 'UNTRUSTED_VENDOR', mode: 'STREAMING', supportsHistorical: 'yes',
