@@ -83,9 +83,9 @@ function isMarketDataSource(value: unknown): value is MarketDataSource { return 
 function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
 
 export function providerSupportsMarket(metadata: ProviderMetadata, marketId: MarketId): boolean {
-  if (!Array.isArray(metadata.supportedMarkets)) return false;
+  if (!Array.isArray(metadata.supportedMarkets) || !isNonEmptyString(marketId)) return false;
   const canonicalTargetMarket = canonicalMarketId(marketId);
-  return metadata.supportedMarkets.some(market => typeof market === 'string' && canonicalMarketId(market) === canonicalTargetMarket);
+  return metadata.supportedMarkets.some(market => typeof market === 'string' && isNonEmptyString(market) && canonicalMarketId(market) === canonicalTargetMarket);
 }
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
@@ -127,7 +127,7 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
 function evaluateNormalizedProviderReadiness(metadata: ProviderMetadata, normalizedHealth: ProviderHealth, useCase: ResearchUseCase, targetMarket?: MarketId): ProviderReadiness {
   const reasons: string[] = [...validateProviderMetadata(metadata)];
   const warnings: string[] = [];
-  if (targetMarket && !providerSupportsMarket(metadata, targetMarket)) pushUnique(reasons, `Provider does not support target market ${targetMarket}.`);
+  if (targetMarket !== undefined && !providerSupportsMarket(metadata, targetMarket)) pushUnique(reasons, `Provider does not support target market ${targetMarket}.`);
   if (normalizedHealth.status === 'UNAVAILABLE') pushUnique(reasons, 'Provider is unavailable.');
   if (normalizedHealth.status === 'STALE') pushUnique(reasons, 'Provider data is stale.');
   if (normalizedHealth.status === 'DEGRADED') warnings.push('Provider health is degraded.');
@@ -175,6 +175,6 @@ export async function getProviderStatusSnapshot(provider: MarketDataProvider, he
     ...providerHealth,
     readiness: buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket),
     targetMarket,
-    marketCompatible: targetMarket ? providerSupportsMarket(providerHealth.metadata, targetMarket) : true,
+    marketCompatible: targetMarket !== undefined ? providerSupportsMarket(providerHealth.metadata, targetMarket) : true,
   });
 }
