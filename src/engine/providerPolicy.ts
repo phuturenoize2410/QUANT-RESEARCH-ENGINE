@@ -71,6 +71,7 @@ export function snapshotProviderStatus(status: ProviderStatusSnapshot): Provider
 const MODE_RANK: Record<ProviderMode, number> = { MOCK: 0, EOD: 1, DELAYED: 2, REALTIME: 3 };
 const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'EOD', 'DELAYED', 'REALTIME'];
 const MARKET_DATA_SOURCES: readonly MarketDataSource[] = ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API', 'IDX_FEED', 'BROKER_API'];
+const INHERENTLY_FREE_SOURCES: readonly MarketDataSource[] = ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API'];
 
 function pushUnique(target: string[], message: string): void { if (!target.includes(message)) target.push(message); }
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
@@ -103,6 +104,7 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   if (!hasValidSource) issues.push('Provider capability contract is invalid: source is not recognized.');
   if (!hasValidMode) issues.push('Provider capability contract is invalid: mode is not recognized.');
   if (!hasValidPaidFlag) issues.push('Provider capability contract is invalid: isPaid must be boolean.');
+  if (hasValidSource && hasValidPaidFlag && runtimeMetadata.isPaid && INHERENTLY_FREE_SOURCES.includes(runtimeMetadata.source)) issues.push(`Provider capability contract is invalid: ${runtimeMetadata.source} source cannot be marked as paid.`);
   if (!hasValidHistoricalCapability) issues.push('Provider capability contract is invalid: supportsHistorical must be boolean.');
   if (!hasValidIntradayCapability) issues.push('Provider capability contract is invalid: supportsIntraday must be boolean.');
   if (!hasValidRealtimeCapability) issues.push('Provider capability contract is invalid: supportsRealtime must be boolean.');
