@@ -23,21 +23,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Score contracts may eventually arrive from strategy configuration or external
  * research metadata. Normalize malformed bounds at the policy boundary so NaN,
  * Infinity, strings, arrays, nullish payloads, or out-of-domain limits can never
- * propagate into strategy ranking, risk decisions, or UI. Runtime bounds may
- * narrow the canonical score domain, but may never expand beyond 0-100. The
- * returned policy snapshot is frozen so downstream consumers cannot mutate
- * validated bounds after crossing the canonical score-policy boundary.
+ * propagate into strategy ranking, risk decisions, or UI. Runtime bounds are an
+ * atomic contract: both endpoints must be finite numbers before a custom range is
+ * accepted. Valid runtime bounds may narrow the canonical score domain, but may
+ * never expand beyond 0-100. The returned policy snapshot is frozen so downstream
+ * consumers cannot mutate validated bounds after crossing the canonical boundary.
  */
 export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): Readonly<ScoreBounds> {
-  const candidate = isRecord(bounds) ? bounds : NORMALIZED_SCORE_BOUNDS;
-  const candidateMin = typeof candidate.min === 'number' && Number.isFinite(candidate.min)
-    ? candidate.min
-    : NORMALIZED_SCORE_BOUNDS.min;
-  const candidateMax = typeof candidate.max === 'number' && Number.isFinite(candidate.max)
-    ? candidate.max
-    : NORMALIZED_SCORE_BOUNDS.max;
-  const orderedMin = Math.min(candidateMin, candidateMax);
-  const orderedMax = Math.max(candidateMin, candidateMax);
+  if (!isRecord(bounds)
+    || typeof bounds.min !== 'number'
+    || !Number.isFinite(bounds.min)
+    || typeof bounds.max !== 'number'
+    || !Number.isFinite(bounds.max)) {
+    return NORMALIZED_SCORE_BOUNDS;
+  }
+
+  const orderedMin = Math.min(bounds.min, bounds.max);
+  const orderedMax = Math.max(bounds.min, bounds.max);
 
   return Object.freeze({
     min: Math.min(NORMALIZED_SCORE_BOUNDS.max, Math.max(NORMALIZED_SCORE_BOUNDS.min, orderedMin)),
