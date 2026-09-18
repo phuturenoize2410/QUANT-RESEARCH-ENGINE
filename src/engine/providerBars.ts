@@ -41,11 +41,13 @@ function isValidCalendarDate(value: string): boolean {
  * Canonical validation/copy boundary for historical market-data adapters.
  * Vendor-specific adapters should map payloads to DailyBar first, then pass the
  * result here before Feature Engine consumers receive historical observations.
+ * The canonical snapshot is frozen so downstream stages cannot mutate provider
+ * evidence after validation/provenance has been established.
  */
 export function normalizeProviderBars(providerId: string, bars: readonly DailyBar[]): DailyBar[] {
   let previousDate = '';
 
-  return bars.map((bar, index) => {
+  const normalized = bars.map((bar, index) => {
     if (!isValidCalendarDate(bar.date)) {
       throw new ProviderBarsError(providerId, index, 'Historical bar date must be a valid YYYY-MM-DD calendar date.');
     }
@@ -68,6 +70,8 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
     validateRange(bar.high, bar.low, bar.open, bar.close, providerId, index, 'current');
     validateRange(bar.nextHigh, bar.nextLow, bar.nextOpen, bar.nextClose, providerId, index, 'next-session');
 
-    return { ...bar };
+    return Object.freeze({ ...bar });
   });
+
+  return Object.freeze(normalized) as DailyBar[];
 }
