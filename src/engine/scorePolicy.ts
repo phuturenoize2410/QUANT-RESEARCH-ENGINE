@@ -26,8 +26,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * propagate into strategy ranking, risk decisions, or UI. Runtime bounds are an
  * atomic contract: both endpoints must be finite numbers before a custom range is
  * accepted. Valid runtime bounds may narrow the canonical score domain, but may
- * never expand beyond 0-100. The returned policy snapshot is frozen so downstream
- * consumers cannot mutate validated bounds after crossing the canonical boundary.
+ * never expand beyond 0-100 or define a range wholly disjoint from that domain.
+ * The returned policy snapshot is frozen so downstream consumers cannot mutate
+ * validated bounds after crossing the canonical boundary.
  */
 export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS): Readonly<ScoreBounds> {
   if (!isRecord(bounds)
@@ -40,6 +41,13 @@ export function normalizeScoreBounds(bounds: unknown = NORMALIZED_SCORE_BOUNDS):
 
   const orderedMin = Math.min(bounds.min, bounds.max);
   const orderedMax = Math.max(bounds.min, bounds.max);
+
+  // A custom contract must overlap the canonical domain. Silently collapsing a
+  // wholly external range such as 150-200 to 100-100 (or -200--100 to 0-0)
+  // would manufacture a degenerate score policy from invalid external metadata.
+  if (orderedMax < NORMALIZED_SCORE_BOUNDS.min || orderedMin > NORMALIZED_SCORE_BOUNDS.max) {
+    return NORMALIZED_SCORE_BOUNDS;
+  }
 
   return Object.freeze({
     min: Math.min(NORMALIZED_SCORE_BOUNDS.max, Math.max(NORMALIZED_SCORE_BOUNDS.min, orderedMin)),
