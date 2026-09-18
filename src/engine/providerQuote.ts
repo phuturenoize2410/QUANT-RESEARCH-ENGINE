@@ -49,9 +49,22 @@ export function normalizeProviderQuote(
   if (input.high < input.low || input.high < input.open || input.high < input.close || input.low > input.open || input.low > input.close) {
     throw new ProviderQuoteError(providerId, 'Quote OHLC fields are internally inconsistent.');
   }
-  if (!input.timestamp || Number.isNaN(Date.parse(input.timestamp))) {
+
+  // Quote timestamps are provider evidence, not display strings. Runtime adapters
+  // may cross JSON/vendor boundaries despite the TypeScript contract, so reject
+  // non-string or unparsable values and canonicalize accepted timestamps before
+  // Feature Engine consumers see them. This prevents equivalent vendor timestamp
+  // formats from leaking different identities into caching/provenance logic.
+  const runtimeTimestamp = input.timestamp as unknown;
+  if (typeof runtimeTimestamp !== 'string' || !runtimeTimestamp.trim()) {
     throw new ProviderQuoteError(providerId, 'Quote timestamp must be a valid ISO-compatible timestamp.');
   }
+  const timestampMs = Date.parse(runtimeTimestamp);
+  if (!Number.isFinite(timestampMs)) {
+    throw new ProviderQuoteError(providerId, 'Quote timestamp must be a valid ISO-compatible timestamp.');
+  }
+  const timestamp = new Date(timestampMs).toISOString();
+
   if (input.source !== undefined && input.source !== providerSource) {
     throw new ProviderQuoteError(providerId, `Quote source ${input.source} does not match provider source ${providerSource}.`);
   }
@@ -59,6 +72,7 @@ export function normalizeProviderQuote(
   return Object.freeze({
     ...input,
     ticker,
+    timestamp,
     source: providerSource,
   });
 }
