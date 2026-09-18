@@ -30,6 +30,18 @@ const normalized = normalizeProviderBars('free-idx-history-adapter', validBars);
 assert.deepEqual(normalized, validBars, 'Canonical history boundary must preserve valid observations.');
 assert.notEqual(normalized, validBars, 'Canonical history boundary must detach the returned collection from adapter input.');
 assert.notEqual(normalized[0], validBars[0], 'Canonical history boundary must detach each returned observation from adapter input.');
+assert.ok(Object.isFrozen(normalized), 'Canonical history collection must be immutable after validation.');
+assert.ok(Object.isFrozen(normalized[0]), 'Canonical history observations must be immutable after validation.');
+assert.throws(
+  () => normalized.push({ ...validBars[1], date: '2026-09-17' }),
+  TypeError,
+  'Feature consumers must not be able to append observations after provider validation.',
+);
+assert.throws(
+  () => { normalized[0].close = 999; },
+  TypeError,
+  'Feature consumers must not be able to mutate validated provider evidence.',
+);
 
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
