@@ -3,6 +3,7 @@ import {
   DEFAULT_OVERNIGHT_EXIT_POLICY,
   DEFAULT_RESEARCH_POSITION_LOTS,
   EXECUTION_POLICY_PERCENT_MAX,
+  calculateExecutionFriction,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
   netReturnAfterCosts,
@@ -68,6 +69,36 @@ if (Math.abs(estimate.totalFrictionPct - canonicalFriction) > 1e-9) {
 
 if (estimate.netProfitIDR >= estimate.grossProfitIDR) {
   throw new Error('Positive execution costs must reduce simulated profit.');
+}
+
+// Lock the monetary execution path to the same canonical calculator. This
+// catches a future regression where execution.ts reintroduces fee/slippage math
+// that drifts from backtest/Risk policy assumptions.
+const shares = 100 * 100;
+const buyNotional = 10_000 * shares;
+const sellNotional = 10_000 * (1 + grossReturnPct / 100) * shares;
+const grossProfit = sellNotional - buyNotional;
+const canonicalMonetaryFriction = calculateExecutionFriction(
+  buyNotional,
+  sellNotional,
+  grossProfit,
+  DEFAULT_EXECUTION_COSTS,
+);
+
+if (!Object.isFrozen(canonicalMonetaryFriction)) {
+  throw new Error('Canonical monetary friction evidence must be immutable.');
+}
+
+if (Math.abs(estimate.netProfitIDR - canonicalMonetaryFriction.netProfit) > 1e-6) {
+  throw new Error('Execution estimate net profit must come from the canonical monetary friction calculator.');
+}
+
+if (Math.abs(canonicalMonetaryFriction.totalFriction - (
+  canonicalMonetaryFriction.buyFee +
+  canonicalMonetaryFriction.sellFee +
+  canonicalMonetaryFriction.slippage
+)) > 1e-6) {
+  throw new Error('Canonical monetary friction must reconcile buy fee + sell fee + slippage exactly.');
 }
 
 const takeProfitDecision = deriveOvernightExitDecision(10_000, DEFAULT_OVERNIGHT_EXIT_POLICY.takeProfitGapPct);
@@ -170,5 +201,5 @@ if (customStock.expectedNetGap !== expectedMockNetGap) {
 }
 
 console.log(
-  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, percentage inputs are bounded to 0-${EXECUTION_POLICY_PERCENT_MAX}%, normalized policy snapshots are immutable, custom mock friction is ${customFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
+  `Execution-policy smoke passed: canonical friction is ${canonicalFriction.toFixed(2)}%, monetary execution reconciles through the canonical calculator, percentage inputs are bounded to 0-${EXECUTION_POLICY_PERCENT_MAX}%, normalized policy snapshots are immutable, custom mock friction is ${customFriction.toFixed(2)}%, overnight risk/exit thresholds are centralized, and default research size is ${DEFAULT_RESEARCH_POSITION_LOTS} lots.`,
 );
