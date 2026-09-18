@@ -31,9 +31,13 @@ expectMetadataIssue({ ...baseMetadata, id: 'realtime-without-intraday', mode: 'R
 expectMetadataIssue({ ...baseMetadata, id: 'mock-mode-non-mock-source', mode: 'MOCK' }, 'MOCK mode requires MOCK_ENGINE source');
 expectMetadataIssue({ ...baseMetadata, id: 'mock-source-non-mock-mode', source: 'MOCK_ENGINE' }, 'MOCK_ENGINE source requires MOCK mode');
 expectMetadataIssue({ ...baseMetadata, id: 'canonical-market-duplicate', supportedMarkets: ['IDX', ' idx '] as unknown as readonly ['IDX'] }, 'canonical duplicates');
+expectMetadataIssue({ ...baseMetadata, id: 'paid-free-api', isPaid: true }, 'FREE_API source cannot be marked as paid');
+expectMetadataIssue({ ...baseMetadata, id: 'paid-google-finance', source: 'GOOGLE_FINANCE', isPaid: true }, 'GOOGLE_FINANCE source cannot be marked as paid');
+expectMetadataIssue({ ...baseMetadata, id: 'paid-mock', source: 'MOCK_ENGINE', mode: 'MOCK', isPaid: true }, 'MOCK_ENGINE source cannot be marked as paid');
 
 assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-delayed', mode: 'DELAYED', supportsIntraday: true }), []);
 assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-mock', source: 'MOCK_ENGINE', mode: 'MOCK', supportsIntraday: true }), []);
+assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-paid-broker', source: 'BROKER_API', mode: 'DELAYED', isPaid: true, supportsIntraday: true }), []);
 
 const mixedCaseMarketMetadata = { ...baseMetadata, supportedMarkets: [' idx '] } as unknown as ProviderMetadata;
 assert.equal(providerSupportsMarket(mixedCaseMarketMetadata, 'IDX'), true, 'market compatibility must normalize provider market casing');
