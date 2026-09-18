@@ -6,6 +6,14 @@ export interface ExecutionCosts {
   readonly slippagePct: number;
 }
 
+export interface ExecutionFrictionBreakdown {
+  readonly buyFee: number;
+  readonly sellFee: number;
+  readonly slippage: number;
+  readonly totalFriction: number;
+  readonly netProfit: number;
+}
+
 /** Canonical percentage domain for execution/risk policy inputs. */
 export const EXECUTION_POLICY_PERCENT_MIN = 0;
 export const EXECUTION_POLICY_PERCENT_MAX = 100;
@@ -24,39 +32,20 @@ export const DEFAULT_EXECUTION_COSTS: Readonly<ExecutionCosts> = Object.freeze({
   slippagePct: 0.10,
 });
 
-/**
- * Canonical prototype position size for strategy-generated journal entries.
- * This is a Risk/Execution policy, not market microstructure: the active market
- * adapter still owns the conversion from lots to shares/contracts.
- */
 export const DEFAULT_RESEARCH_POSITION_LOTS = 100;
 
-/**
- * Canonical default round-trip friction used by research consumers that only
- * need the aggregate hurdle. Exporting the aggregate prevents downstream ML,
- * strategy and UI layers from re-encoding a stale magic number.
- */
 export const DEFAULT_TOTAL_FRICTION_PCT =
   DEFAULT_EXECUTION_COSTS.buyFeePct +
   DEFAULT_EXECUTION_COSTS.sellFeePct +
   DEFAULT_EXECUTION_COSTS.slippagePct;
 
 export interface OvernightExitPolicy {
-  /** Stop distance below entry, expressed as a positive percentage. */
   readonly stopLossPct: number;
-  /** Take-profit distance above entry, expressed as a positive percentage. */
   readonly takeProfitPct: number;
-  /** Open-gap threshold that immediately classifies the position as take profit. */
   readonly takeProfitGapPct: number;
-  /** Absolute negative open-gap threshold that immediately classifies the position as cut loss. */
   readonly cutLossGapPct: number;
 }
 
-/**
- * Canonical simulated risk/exit assumptions. Keeping them next to transaction
- * costs makes Risk/Execution the single owner of execution policy instead of
- * allowing UI/builders to embed their own thresholds.
- */
 export const DEFAULT_OVERNIGHT_EXIT_POLICY: Readonly<OvernightExitPolicy> = Object.freeze({
   stopLossPct: 1.5,
   takeProfitPct: 1.5,
@@ -71,21 +60,11 @@ export interface OvernightExitDecision {
 }
 
 function finitePolicyPercentage(value: number, fallback: number): number {
-  return Number.isFinite(value) &&
-    value >= EXECUTION_POLICY_PERCENT_MIN &&
-    value <= EXECUTION_POLICY_PERCENT_MAX
+  return Number.isFinite(value) && value >= EXECUTION_POLICY_PERCENT_MIN && value <= EXECUTION_POLICY_PERCENT_MAX
     ? value
     : fallback;
 }
 
-/**
- * Keep all transaction-friction assumptions behind one boundary so backtests,
- * simulated execution and future broker/provider integrations cannot silently
- * diverge on fees or slippage. Percentage inputs outside the canonical 0-100
- * domain fail closed to defaults rather than contaminating downstream P/L.
- * Returned snapshots are immutable so downstream strategy/application consumers
- * cannot mutate the canonicalized economics after validation.
- */
 export function normalizeExecutionCosts(
   costs: Partial<ExecutionCosts> = DEFAULT_EXECUTION_COSTS,
 ): Readonly<ExecutionCosts> {
@@ -129,9 +108,34 @@ export function netReturnAfterCosts(
 }
 
 /**
- * Convert simulated open-gap output into the canonical overnight risk decision.
- * UI consumers receive the decision; they do not own or reconstruct thresholds.
+ * Canonical monetary friction calculation for simulated/backtest execution.
+ * Consumers supply buy/sell notionals and gross P/L; fee and slippage math lives
+ * here so strategy, backtest and UI paths cannot silently use different formulas.
  */
+export function calculateExecutionFriction(
+  buyNotional: number,
+  sellNotional: number,
+  grossProfit: number,
+  costs: Partial<ExecutionCosts> = DEFAULT_EXECUTION_COSTS,
+): Readonly<ExecutionFrictionBreakdown> {
+  const normalized = normalizeExecutionCosts(costs);
+  const safeBuyNotional = Number.isFinite(buyNotional) && buyNotional > 0 ? buyNotional : 0;
+  const safeSellNotional = Number.isFinite(sellNotional) && sellNotional > 0 ? sellNotional : 0;
+  const safeGrossProfit = Number.isFinite(grossProfit) ? grossProfit : 0;
+  const buyFee = safeBuyNotional * (normalized.buyFeePct / 100);
+  const sellFee = safeSellNotional * (normalized.sellFeePct / 100);
+  const slippage = (safeBuyNotional + safeSellNotional) * (normalized.slippagePct / 200);
+  const totalFriction = buyFee + sellFee + slippage;
+
+  return Object.freeze({
+    buyFee,
+    sellFee,
+    slippage,
+    totalFriction,
+    netProfit: safeGrossProfit - totalFriction,
+  });
+}
+
 export function deriveOvernightExitDecision(
   entryPrice: number,
   openGapPct: number,
@@ -150,9 +154,5 @@ export function deriveOvernightExitDecision(
         ? 'CUT LOSS'
         : 'FLAT / EXIT';
 
-  return Object.freeze({
-    cutLossLevel,
-    takeProfitLevel,
-    exitStatus,
-  });
+  return Object.freeze({ cutLossLevel, takeProfitLevel, exitStatus });
 }
