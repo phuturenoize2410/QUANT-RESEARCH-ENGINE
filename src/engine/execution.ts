@@ -4,6 +4,7 @@ import {
   DEFAULT_OVERNIGHT_EXIT_POLICY,
   DEFAULT_RESEARCH_POSITION_LOTS,
   ExecutionCosts,
+  calculateExecutionFriction,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
   normalizeExecutionCosts,
@@ -19,6 +20,7 @@ export {
   DEFAULT_EXECUTION_COSTS,
   DEFAULT_OVERNIGHT_EXIT_POLICY,
   DEFAULT_RESEARCH_POSITION_LOTS,
+  calculateExecutionFriction,
   deriveOvernightExitDecision,
   executionCostsFromSettings,
   normalizeExecutionCosts,
@@ -76,11 +78,8 @@ export function estimateOvernightExecution(
   const totalCost = safeEntryPrice * shares;
   const estimatedSellValue = estimatedOpenPrice * shares;
   const grossProfit = estimatedSellValue - totalCost;
-
-  const buyFee = totalCost * (normalizedCosts.buyFeePct / 100);
-  const sellFee = estimatedSellValue * (normalizedCosts.sellFeePct / 100);
-  const slippage = (totalCost + estimatedSellValue) * (normalizedCosts.slippagePct / 200);
-  const netProfit = grossProfit - buyFee - sellFee - slippage;
+  const friction = calculateExecutionFriction(totalCost, estimatedSellValue, grossProfit, normalizedCosts);
+  const netProfit = friction.netProfit;
 
   const grossReturnPct = totalCost > 0 ? (grossProfit / totalCost) * 100 : 0;
   const netReturnPct = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
