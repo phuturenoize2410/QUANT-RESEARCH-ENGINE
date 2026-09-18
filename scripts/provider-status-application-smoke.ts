@@ -32,11 +32,15 @@ if (!unavailableReadModel.isUnavailable || !unavailableReadModel.requiresAttenti
 
 const realProvider: HealthCheckedProvider = {
   metadata: Object.freeze({ id: 'future-free-eod', name: 'Future Free EOD Adapter', source: 'FREE_API', mode: 'EOD', isPaid: false, supportedMarkets: Object.freeze(['IDX'] as const), supportsHistorical: true, supportsIntraday: false, supportsRealtime: false }),
-  async getHealth() { return Object.freeze({ status: 'HEALTHY' as const, checkedAt: '2026-09-17T00:00:00.000Z' }); },
+  async getHealth() { return Object.freeze({ status: 'HEALTHY' as const, checkedAt: '2026-09-17T00:00:00.000Z', lastSuccessfulSyncAt: '2026-09-17T00:00:00.000Z', staleAfterSeconds: 300 }); },
 };
 const readyReadModel = await buildProviderStatusReadModel(realProvider, undefined, nowMs, 'IDX');
-if (readyReadModel.dataReadiness !== 'READY' || readyReadModel.isMock || !readyReadModel.canServeHistoricalResearch || readyReadModel.historicalBlockReason !== null || readyReadModel.canServeIntradayResearch || readyReadModel.intradayBlockReason !== 'UNSUPPORTED' || readyReadModel.canServeRealtime || readyReadModel.realtimeBlockReason !== 'UNSUPPORTED') throw new Error('Healthy EOD providers must expose supported capabilities and explicit unsupported reasons without UI inference.');
+if (readyReadModel.dataReadiness !== 'READY' || readyReadModel.isMock || !readyReadModel.canServeHistoricalResearch || readyReadModel.historicalBlockReason !== null || readyReadModel.canServeIntradayResearch || readyReadModel.intradayBlockReason !== 'UNSUPPORTED' || readyReadModel.canServeRealtime || readyReadModel.realtimeBlockReason !== 'UNSUPPORTED') throw new Error('Healthy EOD providers with trustworthy sync evidence must expose supported capabilities and explicit unsupported reasons without UI inference.');
 if (readyReadModel.statusMessage !== 'Provider is healthy and available for its declared capabilities.') throw new Error('Healthy provider fallback messaging must be centralized in the application seam.');
+
+const missingEvidenceReadModel = await buildProviderStatusReadModel(realProvider, { status: 'HEALTHY', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs, 'IDX');
+if (missingEvidenceReadModel.dataReadiness !== 'BLOCKED' || missingEvidenceReadModel.isHealthy || !missingEvidenceReadModel.requiresAttention || missingEvidenceReadModel.canServeHistoricalResearch || missingEvidenceReadModel.historicalBlockReason !== 'HEALTH_BLOCKED') throw new Error('Non-mock providers must fail closed in application status when canonical sync provenance is missing, even if the adapter labels itself HEALTHY.');
+if (!missingEvidenceReadModel.statusMessage.includes('no lastSuccessfulSyncAt evidence')) throw new Error('Application status must surface the engine-owned provider health evidence failure without recreating freshness logic in UI.');
 
 const unsupportedMarketReadModel = await buildProviderStatusReadModel(realProvider, undefined, nowMs, 'US');
 if (unsupportedMarketReadModel.supportsRequestedMarket || unsupportedMarketReadModel.marketBlockReason !== 'MARKET_UNSUPPORTED') throw new Error('Provider application status must fail closed when the requested market is not declared by the adapter.');
@@ -47,12 +51,12 @@ if (unsupportedMarketReadModel.canServeHistoricalResearch || unsupportedMarketRe
 const unsupportedMockMarketReadModel = await buildProviderStatusReadModel(provider, undefined, nowMs, 'US');
 if (unsupportedMockMarketReadModel.dataReadiness !== 'BLOCKED' || unsupportedMockMarketReadModel.historicalBlockReason !== 'MARKET_UNSUPPORTED' || unsupportedMockMarketReadModel.dataDisclosure !== 'MOCK / SYNTHETIC DATA — NOT FOR LIVE TRADING') throw new Error('Unsupported-market MOCK providers must fail closed while preserving explicit synthetic-data provenance.');
 
-const cautionReadModel = await buildProviderStatusReadModel(realProvider, { status: 'DEGRADED', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs, 'IDX');
-if (cautionReadModel.dataReadiness !== 'CAUTION' || !cautionReadModel.canServeHistoricalResearch || cautionReadModel.historicalBlockReason !== null) throw new Error('Degraded non-mock providers may remain research-capable while surfacing CAUTION.');
+const cautionReadModel = await buildProviderStatusReadModel(realProvider, { status: 'DEGRADED', checkedAt: '2026-09-17T00:00:00.000Z', lastSuccessfulSyncAt: '2026-09-17T00:00:00.000Z', staleAfterSeconds: 300 }, nowMs, 'IDX');
+if (cautionReadModel.dataReadiness !== 'CAUTION' || !cautionReadModel.canServeHistoricalResearch || cautionReadModel.historicalBlockReason !== null) throw new Error('Degraded non-mock providers with trustworthy evidence may remain research-capable while surfacing CAUTION.');
 if (cautionReadModel.statusMessage !== 'Provider is degraded. Research may continue only within declared capabilities.') throw new Error('Degraded provider fallback messaging must not be reinterpreted by UI components.');
 
-const blockedReadModel = await buildProviderStatusReadModel(realProvider, { status: 'STALE', checkedAt: '2026-09-17T00:00:00.000Z' }, nowMs, 'IDX');
+const blockedReadModel = await buildProviderStatusReadModel(realProvider, { status: 'STALE', checkedAt: '2026-09-17T00:00:00.000Z', lastSuccessfulSyncAt: '2026-09-16T23:59:00.000Z', staleAfterSeconds: 60 }, nowMs, 'IDX');
 if (blockedReadModel.dataReadiness !== 'BLOCKED' || blockedReadModel.canServeHistoricalResearch || blockedReadModel.historicalBlockReason !== 'HEALTH_BLOCKED') throw new Error('Stale non-mock providers must fail closed as BLOCKED with explicit health evidence.');
 if (blockedReadModel.statusMessage !== 'Provider data is stale. Capability use is blocked until freshness recovers.') throw new Error('Stale provider fallback messaging must communicate the fail-closed state without UI inference.');
 
-console.log('Provider-status application smoke passed: provenance, market compatibility, health, readiness, messaging, capability gates and block reasons reach UI through one immutable application read model.');
+console.log('Provider-status application smoke passed: provenance, canonical health evidence, market compatibility, readiness, messaging, capability gates and block reasons reach UI through one immutable application read model.');
