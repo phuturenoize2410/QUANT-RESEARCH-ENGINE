@@ -62,6 +62,21 @@ for (const invalid of [
   );
 }
 
+for (const requiredField of ['open', 'high', 'low', 'close', 'volume', 'turnover'] as const) {
+  const malformed = { ...validBars[0] } as Record<string, unknown>;
+  delete malformed[requiredField];
+  assert.throws(
+    () => normalizeProviderBars('runtime-schema-drift-adapter', [malformed as unknown as (typeof validBars)[number]]),
+    ProviderBarsError,
+    `Missing required ${requiredField} must fail closed before reaching feature consumers.`,
+  );
+}
+
+assert.doesNotThrow(
+  () => normalizeProviderBars('zero-activity-history-adapter', [{ ...validBars[0], volume: 0, turnover: 0 }]),
+  'Zero volume/turnover are legitimate observations and must not be confused with missing provider evidence.',
+);
+
 assert.doesNotThrow(
   () => normalizeProviderBars('leap-year-history-adapter', [{ ...validBars[0], date: '2024-02-29' }]),
   'Canonical history boundary must preserve legitimate leap-day observations.',

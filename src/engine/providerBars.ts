@@ -19,6 +19,13 @@ function validatePrice(value: number | undefined, providerId: string, index: num
   }
 }
 
+function validateRequiredObservation(value: number | undefined, providerId: string, index: number, field: string): void {
+  if (value === undefined) {
+    throw new ProviderBarsError(providerId, index, `Historical bar ${field} is required.`);
+  }
+  validatePrice(value, providerId, index, field);
+}
+
 function validateRange(high: number | undefined, low: number | undefined, open: number | undefined, close: number | undefined, providerId: string, index: number, label: string): void {
   if (high === undefined && low === undefined && open === undefined && close === undefined) return;
   if (high === undefined || low === undefined || open === undefined || close === undefined || high < low || high < open || high < close || low > open || low > close) {
@@ -56,12 +63,12 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
     }
     previousDate = bar.date;
 
-    validatePrice(bar.open, providerId, index, 'open');
-    validatePrice(bar.high, providerId, index, 'high');
-    validatePrice(bar.low, providerId, index, 'low');
-    validatePrice(bar.close, providerId, index, 'close');
-    validatePrice(bar.volume, providerId, index, 'volume');
-    validatePrice(bar.turnover, providerId, index, 'turnover');
+    validateRequiredObservation(bar.open, providerId, index, 'open');
+    validateRequiredObservation(bar.high, providerId, index, 'high');
+    validateRequiredObservation(bar.low, providerId, index, 'low');
+    validateRequiredObservation(bar.close, providerId, index, 'close');
+    validateRequiredObservation(bar.volume, providerId, index, 'volume');
+    validateRequiredObservation(bar.turnover, providerId, index, 'turnover');
     validatePrice(bar.nextOpen, providerId, index, 'nextOpen');
     validatePrice(bar.nextHigh, providerId, index, 'nextHigh');
     validatePrice(bar.nextLow, providerId, index, 'nextLow');
