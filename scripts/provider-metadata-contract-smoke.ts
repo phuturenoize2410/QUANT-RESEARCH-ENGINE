@@ -30,6 +30,7 @@ expectMetadataIssue({ ...baseMetadata, id: 'delayed-with-realtime', mode: 'DELAY
 expectMetadataIssue({ ...baseMetadata, id: 'realtime-without-intraday', mode: 'REALTIME', supportsRealtime: true }, 'real-time support requires intraday support');
 expectMetadataIssue({ ...baseMetadata, id: 'mock-mode-non-mock-source', mode: 'MOCK' }, 'MOCK mode requires MOCK_ENGINE source');
 expectMetadataIssue({ ...baseMetadata, id: 'mock-source-non-mock-mode', source: 'MOCK_ENGINE' }, 'MOCK_ENGINE source requires MOCK mode');
+expectMetadataIssue({ ...baseMetadata, id: 'canonical-market-duplicate', supportedMarkets: ['IDX', ' idx '] as unknown as readonly ['IDX'] }, 'canonical duplicates');
 
 assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-delayed', mode: 'DELAYED', supportsIntraday: true }), []);
 assert.deepEqual(validateProviderMetadata({ ...baseMetadata, id: 'valid-mock', source: 'MOCK_ENGINE', mode: 'MOCK', supportsIntraday: true }), []);
