@@ -14,16 +14,16 @@ function providerStatusMessage(
   healthEvidenceError: string | null,
 ): string {
   if (!supportsRequestedMarket) return `Provider does not support requested market ${requestedMarket}. Capability use is blocked.`;
-  // Engine-owned trust failures must dominate adapter-supplied prose. Otherwise a
-  // malformed/non-authoritative health payload could be BLOCKED correctly while
-  // still presenting a misleading provider message such as "all systems healthy".
+  // Engine-owned trust failures and non-ready health states must dominate
+  // adapter-supplied prose. Otherwise a provider can be CAUTION/BLOCKED while
+  // still presenting a misleading message such as "ready for trading".
   if (healthEvidenceError) return `Provider health evidence is not trustworthy (${healthEvidenceError}). Capability use is blocked.`;
-  if (health.message?.trim()) return health.message.trim();
   if (readiness === 'RESEARCH_ONLY') return 'Synthetic provider available for research only. Not for live trading.';
-  if (readiness === 'READY') return 'Provider is healthy and available for its declared capabilities.';
   if (readiness === 'CAUTION') return 'Provider is degraded. Research may continue only within declared capabilities.';
   if (health.status === 'STALE') return 'Provider data is stale. Capability use is blocked until freshness recovers.';
-  return 'Provider is unavailable. Capability use is blocked.';
+  if (health.status === 'UNAVAILABLE') return 'Provider is unavailable. Capability use is blocked.';
+  if (health.message?.trim()) return health.message.trim();
+  return 'Provider is healthy and available for its declared capabilities.';
 }
 
 /**
