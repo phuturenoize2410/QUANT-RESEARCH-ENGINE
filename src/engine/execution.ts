@@ -78,7 +78,7 @@ export function estimateOvernightExecution(
   const totalCost = safeEntryPrice * shares;
   const estimatedSellValue = estimatedOpenPrice * shares;
   const grossProfit = estimatedSellValue - totalCost;
-  const friction = calculateExecutionFriction(totalCost, estimatedSellValue, grossProfit, normalizedCosts);
+  const friction = calculateExecutionFriction(totalCost, estimatedSellValue, normalizedCosts);
   const netProfit = friction.netProfit;
 
   const grossReturnPct = totalCost > 0 ? (grossProfit / totalCost) * 100 : 0;

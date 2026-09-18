@@ -77,11 +77,9 @@ if (estimate.netProfitIDR >= estimate.grossProfitIDR) {
 const shares = 100 * 100;
 const buyNotional = 10_000 * shares;
 const sellNotional = 10_000 * (1 + grossReturnPct / 100) * shares;
-const grossProfit = sellNotional - buyNotional;
 const canonicalMonetaryFriction = calculateExecutionFriction(
   buyNotional,
   sellNotional,
-  grossProfit,
   DEFAULT_EXECUTION_COSTS,
 );
 

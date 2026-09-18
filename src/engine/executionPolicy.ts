@@ -109,15 +109,12 @@ export function netReturnAfterCosts(
 
 /**
  * Canonical monetary friction calculation for simulated/backtest execution.
- * Consumers supply buy/sell notionals; gross P/L is derived from those same
- * authoritative notionals so callers cannot inject a contradictory profit value.
- * The legacy grossProfit argument is retained temporarily for source compatibility
- * while callers migrate, but it is deliberately not authoritative.
+ * Consumers supply only authoritative buy/sell notionals; gross P/L is derived
+ * internally so callers cannot inject contradictory profit evidence.
  */
 export function calculateExecutionFriction(
   buyNotional: number,
   sellNotional: number,
-  _grossProfit: number,
   costs: Partial<ExecutionCosts> = DEFAULT_EXECUTION_COSTS,
 ): Readonly<ExecutionFrictionBreakdown> {
   const normalized = normalizeExecutionCosts(costs);
