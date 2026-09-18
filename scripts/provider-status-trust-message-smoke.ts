@@ -1,5 +1,5 @@
 import { buildProviderStatusReadModel } from '../src/application/providerStatusApplication';
-import type { HealthCheckedProvider } from '../src/engine/dataProviders';
+import type { HealthCheckedProvider, ProviderHealthStatus } from '../src/engine/dataProviders';
 
 const nowMs = Date.parse('2026-09-17T00:00:00.000Z');
 const provider: HealthCheckedProvider = {
@@ -34,4 +34,33 @@ if (readModel.statusMessage.includes('All systems healthy and ready for trading.
   throw new Error('Untrusted adapter prose must never override canonical application safety messaging.');
 }
 
-console.log('Provider status trust-message smoke passed: canonical trust failures dominate adapter prose before UI presentation.');
+function providerWithStatus(status: ProviderHealthStatus): HealthCheckedProvider {
+  return {
+    ...provider,
+    async getHealth() {
+      return Object.freeze({
+        status,
+        checkedAt: '2026-09-17T00:00:00.000Z',
+        lastSuccessfulSyncAt: '2026-09-17T00:00:00.000Z',
+        staleAfterSeconds: 3600,
+        message: 'All systems healthy and ready for trading.',
+      });
+    },
+  };
+}
+
+for (const [status, expectedFragment] of [
+  ['DEGRADED', 'Provider is degraded'],
+  ['STALE', 'Provider data is stale'],
+  ['UNAVAILABLE', 'Provider is unavailable'],
+] as const) {
+  const unsafeReadModel = await buildProviderStatusReadModel(providerWithStatus(status), undefined, nowMs, 'IDX');
+  if (unsafeReadModel.statusMessage.includes('All systems healthy and ready for trading.')) {
+    throw new Error(`${status} provider prose must not override canonical application status messaging.`);
+  }
+  if (!unsafeReadModel.statusMessage.includes(expectedFragment)) {
+    throw new Error(`${status} provider must expose canonical status messaging to presentation.`);
+  }
+}
+
+console.log('Provider status trust-message smoke passed: canonical trust failures and non-ready health states dominate adapter prose before UI presentation.');
