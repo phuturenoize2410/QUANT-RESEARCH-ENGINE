@@ -18,7 +18,18 @@ const validQuote = {
 const normalized = normalizeProviderQuote('free-idx-adapter', 'FREE_API', validQuote);
 assert.equal(normalized.ticker, 'BBCA');
 assert.equal(normalized.source, 'FREE_API');
+assert.equal(normalized.timestamp, '2026-09-16T08:30:00.000Z');
 assert.ok(Object.isFrozen(normalized), 'Canonical provider quote must be immutable after validation.');
+
+const equivalentOffsetTimestamp = normalizeProviderQuote('free-idx-adapter', 'FREE_API', {
+  ...validQuote,
+  timestamp: '2026-09-16T15:30:00+07:00',
+});
+assert.equal(
+  equivalentOffsetTimestamp.timestamp,
+  validQuote.timestamp,
+  'Equivalent provider timestamps must converge to one canonical instant before reaching feature consumers.',
+);
 
 assert.throws(
   () => normalizeProviderQuote('google-finance-adapter', 'GOOGLE_FINANCE', { ...validQuote, source: 'IDX_FEED' }),
@@ -31,6 +42,8 @@ for (const invalid of [
   { ...validQuote, volume: -1 },
   { ...validQuote, high: 98 },
   { ...validQuote, timestamp: 'not-a-timestamp' },
+  { ...validQuote, timestamp: 1_789_550_600_000 as unknown as string },
+  { ...validQuote, timestamp: '   ' },
 ]) {
   assert.throws(
     () => normalizeProviderQuote('future-adapter', 'FREE_API', invalid),
