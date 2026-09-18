@@ -161,8 +161,17 @@ function evaluateNormalizedProviderReadiness(metadata: ProviderMetadata, normali
   return { useCase, allowed: reasons.length === 0, reasons, warnings };
 }
 
-function buildReadinessMatrix(metadata: ProviderMetadata, normalizedHealth: ProviderHealth, targetMarket?: MarketId): Record<ResearchUseCase, ProviderReadiness> {
-  return Object.fromEntries(RESEARCH_USE_CASES.map(useCase => [useCase, evaluateNormalizedProviderReadiness(metadata, normalizedHealth, useCase, targetMarket)])) as Record<ResearchUseCase, ProviderReadiness>;
+function buildReadinessMatrix(
+  metadata: ProviderMetadata,
+  normalizedHealth: ProviderHealth,
+  targetMarket?: MarketId,
+  rawContractIssues: readonly string[] = [],
+): Record<ResearchUseCase, ProviderReadiness> {
+  return Object.fromEntries(RESEARCH_USE_CASES.map(useCase => {
+    const readiness = evaluateNormalizedProviderReadiness(metadata, normalizedHealth, useCase, targetMarket);
+    rawContractIssues.forEach(issue => pushUnique(readiness.reasons, issue));
+    return [useCase, { ...readiness, allowed: readiness.reasons.length === 0 }];
+  })) as Record<ResearchUseCase, ProviderReadiness>;
 }
 
 export function evaluateProviderReadiness(metadata: ProviderMetadata, health: ProviderHealth, useCase: ResearchUseCase, targetMarket?: MarketId): ProviderReadiness {
@@ -170,15 +179,20 @@ export function evaluateProviderReadiness(metadata: ProviderMetadata, health: Pr
 }
 
 export async function getProviderReadinessMatrix(provider: MarketDataProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<Record<ResearchUseCase, ProviderReadiness>> {
+  // Validate adapter-declared metadata before the health boundary canonicalizes it.
+  // This preserves evidence such as canonical duplicate market IDs instead of
+  // allowing sanitization/deduplication to erase the original contract failure.
+  const rawContractIssues = validateProviderMetadata(provider.metadata);
   const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
-  return buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket);
+  return buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket, rawContractIssues);
 }
 
 export async function getProviderStatusSnapshot(provider: MarketDataProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<ProviderStatusSnapshot> {
+  const rawContractIssues = validateProviderMetadata(provider.metadata);
   const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   return snapshotProviderStatus({
     ...providerHealth,
-    readiness: buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket),
+    readiness: buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket, rawContractIssues),
     targetMarket,
     marketCompatible: targetMarket !== undefined ? providerSupportsMarket(providerHealth.metadata, targetMarket) : true,
   });
