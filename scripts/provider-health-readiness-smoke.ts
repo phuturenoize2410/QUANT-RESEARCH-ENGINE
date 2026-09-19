@@ -8,167 +8,63 @@ const healthy: ProviderHealth = {
   staleAfterSeconds: 300,
 };
 
-if (providerHealthReadinessError(healthy) !== null) {
-  throw new Error('Fresh HEALTHY provider evidence must be research-ready.');
-}
-
+if (providerHealthReadinessError(healthy) !== null) throw new Error('Fresh HEALTHY provider evidence must be research-ready.');
 for (const status of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
   const error = providerHealthReadinessError({ ...healthy, status });
-  if (!error?.includes(`provider health is ${status}`)) {
-    throw new Error(`${status} provider evidence must fail canonical readiness.`);
-  }
+  if (!error?.includes(`provider health is ${status}`)) throw new Error(`${status} provider evidence must fail canonical readiness.`);
 }
-
 for (const status of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
-  const neverSynced: ProviderHealth = {
-    status,
-    checkedAt: healthy.checkedAt,
-    staleAfterSeconds: 300,
-    message: 'Provider has not completed a successful synchronization.',
-  };
-  if (providerHealthEvidenceError(neverSynced) !== null) {
-    throw new Error(`${status} providers must be able to report trustworthy health before their first successful sync.`);
-  }
+  const neverSynced: ProviderHealth = { status, checkedAt: healthy.checkedAt, staleAfterSeconds: 300, message: 'Provider has not completed a successful synchronization.' };
+  if (providerHealthEvidenceError(neverSynced) !== null) throw new Error(`${status} providers must be able to report trustworthy health before their first successful sync.`);
   const readinessError = providerHealthReadinessError(neverSynced);
-  if (!readinessError?.includes(`provider health is ${status}`)) {
-    throw new Error(`${status} never-synced providers must fail readiness because of status, not missing provenance.`);
-  }
-
+  if (!readinessError?.includes(`provider health is ${status}`)) throw new Error(`${status} never-synced providers must fail readiness because of status, not missing provenance.`);
   for (const malformedMissingSync of [null, ''] as unknown[]) {
-    const malformedError = providerHealthEvidenceError({
-      ...neverSynced,
-      lastSuccessfulSyncAt: malformedMissingSync,
-    } as ProviderHealth);
-    if (!malformedError?.includes('no valid lastSuccessfulSyncAt timestamp')) {
-      throw new Error(`${status} providers must omit absent sync provenance; null/empty runtime values are schema drift.`);
-    }
+    const malformedError = providerHealthEvidenceError({ ...neverSynced, lastSuccessfulSyncAt: malformedMissingSync } as ProviderHealth);
+    if (!malformedError?.includes('no valid lastSuccessfulSyncAt timestamp')) throw new Error(`${status} providers must omit absent sync provenance; null/empty runtime values are schema drift.`);
   }
 }
-
-const stale = providerHealthReadinessError({
-  ...healthy,
-  lastSuccessfulSyncAt: '2026-09-17T23:50:00.000Z',
-});
-if (!stale?.includes('stale relative to staleAfterSeconds')) {
-  throw new Error('HEALTHY labels must not bypass canonical freshness evidence.');
-}
-
-const missingSync = providerHealthReadinessError({
-  status: 'HEALTHY',
-  checkedAt: healthy.checkedAt,
-});
-if (!missingSync?.includes('no lastSuccessfulSyncAt evidence')) {
-  throw new Error('HEALTHY labels without sync provenance must fail closed.');
-}
-
-const toleratedSkew = providerHealthReadinessError({
-  ...healthy,
-  lastSuccessfulSyncAt: '2026-09-18T00:04:00.000Z',
-});
-if (toleratedSkew !== null) {
-  throw new Error('Canonical readiness must preserve the provider clock-skew tolerance.');
-}
-
-const excessiveSkew = providerHealthReadinessError({
-  ...healthy,
-  lastSuccessfulSyncAt: '2026-09-18T00:06:00.000Z',
-});
-if (!excessiveSkew?.includes('exceeds allowed clock skew')) {
-  throw new Error('Provider evidence beyond canonical clock skew must fail closed.');
-}
-
-const malformedRoots: unknown[] = [null, undefined, 'healthy', 42, []];
-for (const malformed of malformedRoots) {
+const stale = providerHealthReadinessError({ ...healthy, lastSuccessfulSyncAt: '2026-09-17T23:50:00.000Z' });
+if (!stale?.includes('stale relative to staleAfterSeconds')) throw new Error('HEALTHY labels must not bypass canonical freshness evidence.');
+const missingSync = providerHealthReadinessError({ status: 'HEALTHY', checkedAt: healthy.checkedAt });
+if (!missingSync?.includes('no lastSuccessfulSyncAt evidence')) throw new Error('HEALTHY labels without sync provenance must fail closed.');
+const toleratedSkew = providerHealthReadinessError({ ...healthy, lastSuccessfulSyncAt: '2026-09-18T00:04:00.000Z' });
+if (toleratedSkew !== null) throw new Error('Canonical readiness must preserve the provider clock-skew tolerance.');
+const excessiveSkew = providerHealthReadinessError({ ...healthy, lastSuccessfulSyncAt: '2026-09-18T00:06:00.000Z' });
+if (!excessiveSkew?.includes('exceeds allowed clock skew')) throw new Error('Provider evidence beyond canonical clock skew must fail closed.');
+for (const malformed of [null, undefined, 'healthy', 42, []] as unknown[]) {
   const error = providerHealthReadinessError(malformed as ProviderHealth);
-  if (!error?.includes('evidence is malformed')) {
-    throw new Error('Malformed provider-health roots must fail closed without native property-access errors.');
-  }
+  if (!error?.includes('evidence is malformed')) throw new Error('Malformed provider-health roots must fail closed without native property-access errors.');
 }
-
 for (const malformedStatus of [undefined, null, '', 'healthy', 'UNKNOWN', 42, {}, []] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    status: malformedStatus,
-  } as ProviderHealth);
-  if (!error?.includes('invalid status')) {
-    throw new Error('Runtime provider-health status must use the canonical status vocabulary.');
-  }
+  const error = providerHealthReadinessError({ ...healthy, status: malformedStatus } as ProviderHealth);
+  if (!error?.includes('invalid status')) throw new Error('Runtime provider-health status must use the canonical status vocabulary.');
 }
-
-for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-18', '09/18/2026 00:00:00', '2026-09-18T00:00:00', '2026-02-30T00:00:00Z', '2025-02-29T00:00:00Z', '2026-13-01T00:00:00Z', '2026-09-18T24:00:00Z', '2026-09-18T00:60:00Z'] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    checkedAt: malformedTimestamp,
-  } as ProviderHealth);
-  if (!error?.includes('no valid checkedAt timestamp')) {
-    throw new Error('Runtime checkedAt values must be explicit calendar-valid RFC3339-style instants.');
-  }
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-18', '09/18/2026 00:00:00', '2026-09-18T00:00:00', '2026-02-30T00:00:00Z', '2025-02-29T00:00:00Z', '2026-13-01T00:00:00Z', '2026-09-18T24:00:00Z', '2026-09-18T00:60:00Z', '2026-09-18T00:00:00-00:00'] as unknown[]) {
+  const error = providerHealthReadinessError({ ...healthy, checkedAt: malformedTimestamp } as ProviderHealth);
+  if (!error?.includes('no valid checkedAt timestamp')) throw new Error('Runtime checkedAt values must be explicit calendar-valid RFC3339-style instants with known timezone provenance.');
 }
-
-for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-17', '09/17/2026 23:59:30', '2026-09-17T23:59:30', '2026-04-31T23:59:30Z', '2026-09-17T23:59:60Z'] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    lastSuccessfulSyncAt: malformedTimestamp,
-  } as ProviderHealth);
-  if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) {
-    throw new Error('Runtime sync timestamps must be explicit calendar-valid RFC3339-style instants.');
-  }
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-17', '09/17/2026 23:59:30', '2026-09-17T23:59:30', '2026-04-31T23:59:30Z', '2026-09-17T23:59:60Z', '2026-09-17T23:59:30-00:00'] as unknown[]) {
+  const error = providerHealthReadinessError({ ...healthy, lastSuccessfulSyncAt: malformedTimestamp } as ProviderHealth);
+  if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) throw new Error('Runtime sync timestamps must be explicit calendar-valid RFC3339-style instants with known timezone provenance.');
 }
-
-const offsetInstant = providerHealthReadinessError({
-  ...healthy,
-  checkedAt: '2026-09-18T07:00:00+07:00',
-  lastSuccessfulSyncAt: '2026-09-18T06:59:30+07:00',
-});
-if (offsetInstant !== null) {
-  throw new Error('Explicit timezone-offset provider instants must remain valid evidence.');
-}
-
-const leapDayInstant = providerHealthReadinessError({
-  ...healthy,
-  checkedAt: '2028-02-29T07:00:00+07:00',
-  lastSuccessfulSyncAt: '2028-02-29T06:59:30+07:00',
-});
-if (leapDayInstant !== null) {
-  throw new Error('Calendar validation must preserve valid leap-day provider instants.');
-}
-
-if (providerHealthReadinessError({ ...healthy, latencyMs: 0 }) !== null) {
-  throw new Error('Zero provider latency is valid evidence for in-process/mock adapters.');
-}
-
+const offsetInstant = providerHealthReadinessError({ ...healthy, checkedAt: '2026-09-18T07:00:00+07:00', lastSuccessfulSyncAt: '2026-09-18T06:59:30+07:00' });
+if (offsetInstant !== null) throw new Error('Explicit timezone-offset provider instants must remain valid evidence.');
+const explicitUtcOffset = providerHealthReadinessError({ ...healthy, checkedAt: '2026-09-18T00:00:00+00:00', lastSuccessfulSyncAt: '2026-09-17T23:59:30+00:00' });
+if (explicitUtcOffset !== null) throw new Error('Explicit +00:00 UTC provider provenance must remain valid evidence.');
+const leapDayInstant = providerHealthReadinessError({ ...healthy, checkedAt: '2028-02-29T07:00:00+07:00', lastSuccessfulSyncAt: '2028-02-29T06:59:30+07:00' });
+if (leapDayInstant !== null) throw new Error('Calendar validation must preserve valid leap-day provider instants.');
+if (providerHealthReadinessError({ ...healthy, latencyMs: 0 }) !== null) throw new Error('Zero provider latency is valid evidence for in-process/mock adapters.');
 for (const malformedLatency of [-1, Number.NaN, Number.POSITIVE_INFINITY, '12', null, {}, []] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    latencyMs: malformedLatency,
-  } as ProviderHealth);
-  if (!error?.includes('latencyMs must be a non-negative finite number')) {
-    throw new Error('Runtime provider latency must remain non-negative finite numeric evidence.');
-  }
+  const error = providerHealthReadinessError({ ...healthy, latencyMs: malformedLatency } as ProviderHealth);
+  if (!error?.includes('latencyMs must be a non-negative finite number')) throw new Error('Runtime provider latency must remain non-negative finite numeric evidence.');
 }
-
 for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    staleAfterSeconds: malformedThreshold,
-  } as ProviderHealth);
-  if (!error?.includes('staleAfterSeconds must be a positive finite number')) {
-    throw new Error('Runtime freshness thresholds must remain numeric positive finite evidence.');
-  }
+  const error = providerHealthReadinessError({ ...healthy, staleAfterSeconds: malformedThreshold } as ProviderHealth);
+  if (!error?.includes('staleAfterSeconds must be a positive finite number')) throw new Error('Runtime freshness thresholds must remain numeric positive finite evidence.');
 }
-
-if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) {
-  throw new Error('String provider-health messages must remain valid optional diagnostic evidence.');
-}
-
+if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) throw new Error('String provider-health messages must remain valid optional diagnostic evidence.');
 for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
-  const error = providerHealthReadinessError({
-    ...healthy,
-    message: malformedMessage,
-  } as ProviderHealth);
-  if (!error?.includes('message must be a string when provided')) {
-    throw new Error('Runtime provider-health messages must remain string diagnostic evidence.');
-  }
+  const error = providerHealthReadinessError({ ...healthy, message: malformedMessage } as ProviderHealth);
+  if (!error?.includes('message must be a string when provided')) throw new Error('Runtime provider-health messages must remain string diagnostic evidence.');
 }
-
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants, status-vocabulary, latency, message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known timezone provenance, status-vocabulary, latency, message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
