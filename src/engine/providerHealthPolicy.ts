@@ -5,9 +5,17 @@ import { ProviderHealth } from './dataProviders';
 // independently. Larger inversions remain untrustworthy and fail closed.
 const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const PROVIDER_HEALTH_STATUSES = new Set(['HEALTHY', 'DEGRADED', 'STALE', 'UNAVAILABLE']);
+// Provider-health timestamps are cross-system evidence, so require an explicit
+// RFC3339-style instant with timezone rather than relying on Date.parse's
+// implementation-dependent acceptance of date-only or locale-shaped strings.
+const PROVIDER_HEALTH_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function isNonEmptyTimestamp(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
+  return (
+    typeof value === 'string' &&
+    PROVIDER_HEALTH_INSTANT.test(value) &&
+    Number.isFinite(Date.parse(value))
+  );
 }
 
 /**
