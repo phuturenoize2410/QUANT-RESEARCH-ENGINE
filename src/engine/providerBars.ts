@@ -71,6 +71,12 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
   let previousDate = '';
 
   const normalized = bars.map((bar, index) => {
+    // Runtime vendor payloads can contain malformed array members even when the
+    // adapter is typed as DailyBar[]. Keep those failures inside the provider
+    // boundary so Feature Engine never sees a native property-access exception.
+    if (bar === null || typeof bar !== 'object' || Array.isArray(bar)) {
+      throw new ProviderBarsError(canonicalProviderId, index, 'Historical provider payload entries must be bar objects.');
+    }
     if (!isValidCalendarDate(bar.date)) {
       throw new ProviderBarsError(canonicalProviderId, index, 'Historical bar date must be a valid YYYY-MM-DD calendar date.');
     }
