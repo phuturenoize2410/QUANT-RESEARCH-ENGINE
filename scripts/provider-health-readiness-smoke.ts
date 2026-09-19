@@ -60,13 +60,15 @@ for (const malformedLatency of [-1, Number.NaN, Number.POSITIVE_INFINITY, '12', 
   const error = providerHealthReadinessError({ ...healthy, latencyMs: malformedLatency } as ProviderHealth);
   if (!error?.includes('latencyMs must be a non-negative finite number')) throw new Error('Runtime provider latency must remain non-negative finite numeric evidence.');
 }
-for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
+const maximumSafeFreshnessSeconds = Number.MAX_SAFE_INTEGER / 1000;
+if (providerHealthReadinessError({ ...healthy, staleAfterSeconds: maximumSafeFreshnessSeconds }) !== null) throw new Error('Maximum freshness threshold that preserves safe millisecond arithmetic must remain valid.');
+for (const malformedThreshold of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, maximumSafeFreshnessSeconds + 1, '300', null, {}, []] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, staleAfterSeconds: malformedThreshold } as ProviderHealth);
-  if (!error?.includes('staleAfterSeconds must be a positive finite number')) throw new Error('Runtime freshness thresholds must remain numeric positive finite evidence.');
+  if (!error?.includes('staleAfterSeconds must be a positive finite number within safe freshness arithmetic bounds')) throw new Error('Runtime freshness thresholds must remain positive finite numeric evidence within safe millisecond arithmetic bounds.');
 }
 if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) throw new Error('Non-empty provider-health messages must remain valid optional diagnostic evidence.');
 for (const malformedMessage of [null, 42, {}, [], '', '   '] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, message: malformedMessage } as ProviderHealth);
   if (!error?.includes('message must be a non-empty string when provided')) throw new Error('Runtime provider-health messages must remain non-empty string diagnostic evidence aligned with provider normalization.');
 }
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known bounded timezone provenance, status-vocabulary, latency, non-empty diagnostic message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, bounded freshness arithmetic, provenance, clock-skew, explicit calendar-valid instants with known bounded timezone provenance, status-vocabulary, latency, non-empty diagnostic message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
