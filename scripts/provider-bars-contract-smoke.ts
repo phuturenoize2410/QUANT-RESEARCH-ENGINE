@@ -96,4 +96,10 @@ assert.throws(
   'Historical validation failures must retain provider and observation identity for health/status diagnostics.',
 );
 
+assert.throws(
+  () => normalizeProviderBars('  future-history-adapter  ', [{ ...validBars[0], volume: -1 }]),
+  (error: unknown) => error instanceof ProviderBarsError && error.providerId === 'future-history-adapter' && error.index === 0,
+  'Historical diagnostics must use one canonical provider identity even when adapter configuration contains boundary whitespace.',
+);
+
 console.log('provider bars contract smoke: ok');
