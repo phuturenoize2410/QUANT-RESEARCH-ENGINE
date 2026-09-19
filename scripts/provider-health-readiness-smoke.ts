@@ -51,4 +51,42 @@ if (!excessiveSkew?.includes('exceeds allowed clock skew')) {
   throw new Error('Provider evidence beyond canonical clock skew must fail closed.');
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, and clock-skew policy.');
+const malformedRoots: unknown[] = [null, undefined, 'healthy', 42, []];
+for (const malformed of malformedRoots) {
+  const error = providerHealthReadinessError(malformed as ProviderHealth);
+  if (!error?.includes('evidence is malformed')) {
+    throw new Error('Malformed provider-health roots must fail closed without native property-access errors.');
+  }
+}
+
+for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    checkedAt: malformedTimestamp,
+  } as ProviderHealth);
+  if (!error?.includes('no valid checkedAt timestamp')) {
+    throw new Error('Runtime checkedAt values must be actual parseable timestamp strings.');
+  }
+}
+
+for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    lastSuccessfulSyncAt: malformedTimestamp,
+  } as ProviderHealth);
+  if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) {
+    throw new Error('Runtime sync timestamps must be actual parseable timestamp strings.');
+  }
+}
+
+for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    staleAfterSeconds: malformedThreshold,
+  } as ProviderHealth);
+  if (!error?.includes('staleAfterSeconds must be a positive finite number')) {
+    throw new Error('Runtime freshness thresholds must remain numeric positive finite evidence.');
+  }
+}
+
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, and runtime-shape policy.');
