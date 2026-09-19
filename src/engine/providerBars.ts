@@ -56,30 +56,34 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
     throw new ProviderBarsError(typeof providerId === 'string' ? providerId : '', -1, 'Historical provider identity must be a non-empty string.');
   }
 
+  // Adapter identities are provenance, not display labels. Canonicalize boundary
+  // whitespace once so health/status diagnostics cannot split one provider into
+  // multiple identities because of configuration or transport formatting.
+  const canonicalProviderId = providerId.trim();
   let previousDate = '';
 
   const normalized = bars.map((bar, index) => {
     if (!isValidCalendarDate(bar.date)) {
-      throw new ProviderBarsError(providerId, index, 'Historical bar date must be a valid YYYY-MM-DD calendar date.');
+      throw new ProviderBarsError(canonicalProviderId, index, 'Historical bar date must be a valid YYYY-MM-DD calendar date.');
     }
     if (previousDate && bar.date <= previousDate) {
-      throw new ProviderBarsError(providerId, index, 'Historical bars must be strictly ordered by ascending unique date.');
+      throw new ProviderBarsError(canonicalProviderId, index, 'Historical bars must be strictly ordered by ascending unique date.');
     }
     previousDate = bar.date;
 
-    validateRequiredObservation(bar.open, providerId, index, 'open');
-    validateRequiredObservation(bar.high, providerId, index, 'high');
-    validateRequiredObservation(bar.low, providerId, index, 'low');
-    validateRequiredObservation(bar.close, providerId, index, 'close');
-    validateRequiredObservation(bar.volume, providerId, index, 'volume');
-    validateRequiredObservation(bar.turnover, providerId, index, 'turnover');
-    validatePrice(bar.nextOpen, providerId, index, 'nextOpen');
-    validatePrice(bar.nextHigh, providerId, index, 'nextHigh');
-    validatePrice(bar.nextLow, providerId, index, 'nextLow');
-    validatePrice(bar.nextClose, providerId, index, 'nextClose');
+    validateRequiredObservation(bar.open, canonicalProviderId, index, 'open');
+    validateRequiredObservation(bar.high, canonicalProviderId, index, 'high');
+    validateRequiredObservation(bar.low, canonicalProviderId, index, 'low');
+    validateRequiredObservation(bar.close, canonicalProviderId, index, 'close');
+    validateRequiredObservation(bar.volume, canonicalProviderId, index, 'volume');
+    validateRequiredObservation(bar.turnover, canonicalProviderId, index, 'turnover');
+    validatePrice(bar.nextOpen, canonicalProviderId, index, 'nextOpen');
+    validatePrice(bar.nextHigh, canonicalProviderId, index, 'nextHigh');
+    validatePrice(bar.nextLow, canonicalProviderId, index, 'nextLow');
+    validatePrice(bar.nextClose, canonicalProviderId, index, 'nextClose');
 
-    validateRange(bar.high, bar.low, bar.open, bar.close, providerId, index, 'current');
-    validateRange(bar.nextHigh, bar.nextLow, bar.nextOpen, bar.nextClose, providerId, index, 'next-session');
+    validateRange(bar.high, bar.low, bar.open, bar.close, canonicalProviderId, index, 'current');
+    validateRange(bar.nextHigh, bar.nextLow, bar.nextOpen, bar.nextClose, canonicalProviderId, index, 'next-session');
 
     return Object.freeze({ ...bar });
   });
