@@ -43,6 +43,16 @@ assert.throws(
   'Feature consumers must not be able to mutate validated provider evidence.',
 );
 
+const vendorExtendedBar = { ...validBars[0], vendorSequence: 17, transportDebug: 'adapter-only' };
+const projected = normalizeProviderBars('vendor-schema-adapter', [vendorExtendedBar] as unknown as typeof validBars);
+assert.deepEqual(
+  Object.keys(projected[0]).sort(),
+  Object.keys(validBars[0]).sort(),
+  'Provider-only transport fields must not leak through the canonical DailyBar boundary.',
+);
+assert.equal('vendorSequence' in projected[0], false, 'Vendor-specific fields must remain behind the DataProvider adapter.');
+assert.equal('transportDebug' in projected[0], false, 'Transport metadata must not become Feature Engine evidence implicitly.');
+
 for (const invalidProviderId of ['', '   ']) {
   assert.throws(
     () => normalizeProviderBars(invalidProviderId, validBars),
