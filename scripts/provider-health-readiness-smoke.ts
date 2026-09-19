@@ -69,24 +69,33 @@ for (const malformedStatus of [undefined, null, '', 'healthy', 'UNKNOWN', 42, {}
   }
 }
 
-for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-18', '09/18/2026 00:00:00', '2026-09-18T00:00:00'] as unknown[]) {
   const error = providerHealthReadinessError({
     ...healthy,
     checkedAt: malformedTimestamp,
   } as ProviderHealth);
   if (!error?.includes('no valid checkedAt timestamp')) {
-    throw new Error('Runtime checkedAt values must be actual parseable timestamp strings.');
+    throw new Error('Runtime checkedAt values must be explicit parseable RFC3339-style instants.');
   }
 }
 
-for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-17', '09/17/2026 23:59:30', '2026-09-17T23:59:30'] as unknown[]) {
   const error = providerHealthReadinessError({
     ...healthy,
     lastSuccessfulSyncAt: malformedTimestamp,
   } as ProviderHealth);
   if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) {
-    throw new Error('Runtime sync timestamps must be actual parseable timestamp strings.');
+    throw new Error('Runtime sync timestamps must be explicit parseable RFC3339-style instants.');
   }
+}
+
+const offsetInstant = providerHealthReadinessError({
+  ...healthy,
+  checkedAt: '2026-09-18T07:00:00+07:00',
+  lastSuccessfulSyncAt: '2026-09-18T06:59:30+07:00',
+});
+if (offsetInstant !== null) {
+  throw new Error('Explicit timezone-offset provider instants must remain valid evidence.');
 }
 
 if (providerHealthReadinessError({ ...healthy, latencyMs: 0 }) !== null) {
@@ -127,4 +136,4 @@ for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, latency, message, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit-instant, status-vocabulary, latency, message, and runtime-shape policy.');
