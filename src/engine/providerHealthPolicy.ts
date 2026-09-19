@@ -27,6 +27,7 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     status?: unknown;
     checkedAt?: unknown;
     lastSuccessfulSyncAt?: unknown;
+    latencyMs?: unknown;
     staleAfterSeconds?: unknown;
   };
 
@@ -49,6 +50,16 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
   const lastSuccessfulSyncAtMs = Date.parse(runtimeHealth.lastSuccessfulSyncAt);
   if (lastSuccessfulSyncAtMs > checkedAtMs + MAX_PROVIDER_CLOCK_SKEW_MS) {
     return 'provider health lastSuccessfulSyncAt exceeds allowed clock skew relative to checkedAt';
+  }
+
+  if (runtimeHealth.latencyMs !== undefined) {
+    if (
+      typeof runtimeHealth.latencyMs !== 'number' ||
+      !Number.isFinite(runtimeHealth.latencyMs) ||
+      runtimeHealth.latencyMs < 0
+    ) {
+      return 'provider health latencyMs must be a non-negative finite number';
+    }
   }
 
   if (runtimeHealth.staleAfterSeconds !== undefined) {
