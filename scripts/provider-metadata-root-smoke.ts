@@ -4,6 +4,11 @@ import type {
   ProviderMetadata,
 } from '../src/engine/dataProviders';
 import { getProviderHealthSnapshot } from '../src/engine/providerHealth';
+import {
+  evaluateProviderReadiness,
+  providerSupportsMarket,
+  validateProviderMetadata,
+} from '../src/engine/providerPolicy';
 
 const nowMs = Date.parse('2026-09-14T05:00:00.000Z');
 const healthy: ProviderHealth = {
@@ -18,6 +23,24 @@ function malformedProvider(metadata: unknown): HealthCheckedProvider {
       return healthy;
     },
   } as unknown as HealthCheckedProvider;
+}
+
+// Public policy helpers are runtime boundaries too. Future external adapters can
+// hand them schema-drifted JSON before a health snapshot has canonicalized it, so
+// malformed roots must return fail-closed diagnostics rather than throw.
+for (const metadata of [null, [], 'not-metadata', 42, true]) {
+  const runtimeMetadata = metadata as unknown as ProviderMetadata;
+  const issues = validateProviderMetadata(runtimeMetadata);
+  if (!issues.some(issue => issue.includes('metadata must be an object'))) {
+    throw new Error('metadata validation must diagnose malformed runtime roots.');
+  }
+  if (providerSupportsMarket(runtimeMetadata, 'IDX')) {
+    throw new Error('malformed metadata roots must never advertise market compatibility.');
+  }
+  const readiness = evaluateProviderReadiness(runtimeMetadata, healthy, 'EOD_RESEARCH', 'IDX');
+  if (readiness.allowed || !readiness.reasons.some(reason => reason.includes('metadata must be an object'))) {
+    throw new Error('malformed metadata roots must fail closed at direct readiness evaluation.');
+  }
 }
 
 for (const metadata of [null, [], 'not-metadata']) {
@@ -90,4 +113,4 @@ if (malformedFieldSnapshot.metadata.supportedMarkets[0] !== 'IDX') {
   throw new Error('well-formed market identifiers should still be canonicalized even when sibling metadata fields fail closed.');
 }
 
-console.log('Provider metadata root smoke passed: malformed roots and fields fail closed into immutable canonical zero-capability snapshots before downstream research layers can consume them.');
+console.log('Provider metadata root smoke passed: malformed roots fail closed in direct policy helpers and snapshots, while malformed fields collapse into immutable canonical zero-capability evidence.');
