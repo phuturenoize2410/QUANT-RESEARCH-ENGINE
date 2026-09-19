@@ -77,6 +77,15 @@ for (const malformedEntry of [null, undefined, 'not-a-bar', 42, []]) {
   );
 }
 
+for (const malformedDate of [20260915, ['2026-09-15'], { toString: () => '2026-09-15' }]) {
+  const bar = { ...validBars[0], date: malformedDate };
+  assert.throws(
+    () => normalizeProviderBars('runtime-date-adapter', [bar] as unknown as typeof validBars),
+    (error: unknown) => error instanceof ProviderBarsError && error.providerId === 'runtime-date-adapter' && error.index === 0,
+    'Coercible non-string dates must fail inside the provider boundary rather than leaking native runtime errors.',
+  );
+}
+
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
   [{ ...validBars[0], date: '2026-02-30' }],
