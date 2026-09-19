@@ -49,16 +49,30 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
   }
   const checkedAtMs = Date.parse(runtimeHealth.checkedAt);
 
-  if (runtimeHealth.lastSuccessfulSyncAt === undefined || runtimeHealth.lastSuccessfulSyncAt === null || runtimeHealth.lastSuccessfulSyncAt === '') {
+  const hasSyncEvidence = !(
+    runtimeHealth.lastSuccessfulSyncAt === undefined ||
+    runtimeHealth.lastSuccessfulSyncAt === null ||
+    runtimeHealth.lastSuccessfulSyncAt === ''
+  );
+
+  // A provider that has never synchronized can still report trustworthy
+  // DEGRADED/STALE/UNAVAILABLE health. Requiring sync provenance for those states
+  // would turn an honest outage observation into malformed evidence. HEALTHY is
+  // different: readiness must always be backed by a successful synchronization.
+  if (!hasSyncEvidence && runtimeHealth.status === 'HEALTHY') {
     return 'provider health observation has no lastSuccessfulSyncAt evidence';
   }
-  if (!isNonEmptyTimestamp(runtimeHealth.lastSuccessfulSyncAt)) {
-    return 'provider health observation has no valid lastSuccessfulSyncAt timestamp';
-  }
 
-  const lastSuccessfulSyncAtMs = Date.parse(runtimeHealth.lastSuccessfulSyncAt);
-  if (lastSuccessfulSyncAtMs > checkedAtMs + MAX_PROVIDER_CLOCK_SKEW_MS) {
-    return 'provider health lastSuccessfulSyncAt exceeds allowed clock skew relative to checkedAt';
+  let lastSuccessfulSyncAtMs: number | null = null;
+  if (hasSyncEvidence) {
+    if (!isNonEmptyTimestamp(runtimeHealth.lastSuccessfulSyncAt)) {
+      return 'provider health observation has no valid lastSuccessfulSyncAt timestamp';
+    }
+
+    lastSuccessfulSyncAtMs = Date.parse(runtimeHealth.lastSuccessfulSyncAt);
+    if (lastSuccessfulSyncAtMs > checkedAtMs + MAX_PROVIDER_CLOCK_SKEW_MS) {
+      return 'provider health lastSuccessfulSyncAt exceeds allowed clock skew relative to checkedAt';
+    }
   }
 
   if (runtimeHealth.latencyMs !== undefined) {
@@ -79,12 +93,14 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     ) {
       return 'provider health staleAfterSeconds must be a positive finite number';
     }
-    // A sync timestamp within the accepted clock-skew window can be slightly later
-    // than checkedAt. Clamp age at zero so that tolerated skew never manufactures
-    // negative freshness or bypasses the declared staleness window.
-    const ageSeconds = Math.max(0, (checkedAtMs - lastSuccessfulSyncAtMs) / 1000);
-    if (ageSeconds > runtimeHealth.staleAfterSeconds) {
-      return 'provider health evidence is stale relative to staleAfterSeconds';
+    if (lastSuccessfulSyncAtMs !== null) {
+      // A sync timestamp within the accepted clock-skew window can be slightly later
+      // than checkedAt. Clamp age at zero so that tolerated skew never manufactures
+      // negative freshness or bypasses the declared staleness window.
+      const ageSeconds = Math.max(0, (checkedAtMs - lastSuccessfulSyncAtMs) / 1000);
+      if (ageSeconds > runtimeHealth.staleAfterSeconds) {
+        return 'provider health evidence is stale relative to staleAfterSeconds';
+      }
     }
   }
 
