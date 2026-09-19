@@ -33,8 +33,11 @@ function validateRange(high: number | undefined, low: number | undefined, open: 
   }
 }
 
-function isValidCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+function isValidCalendarDate(value: unknown): value is string {
+  // Runtime provider payloads are not protected by the TypeScript DailyBar type.
+  // Reject coercible values (arrays/objects/numbers) explicitly so malformed vendor
+  // dates cannot escape as native `.split` errors or acquire accidental identity.
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 
   const [year, month, day] = value.split('-').map(Number);
   const parsed = new Date(Date.UTC(year, month - 1, day));
