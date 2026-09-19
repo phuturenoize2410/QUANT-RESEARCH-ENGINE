@@ -89,6 +89,20 @@ for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
   }
 }
 
+if (providerHealthReadinessError({ ...healthy, latencyMs: 0 }) !== null) {
+  throw new Error('Zero provider latency is valid evidence for in-process/mock adapters.');
+}
+
+for (const malformedLatency of [-1, Number.NaN, Number.POSITIVE_INFINITY, '12', null, {}, []] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    latencyMs: malformedLatency,
+  } as ProviderHealth);
+  if (!error?.includes('latencyMs must be a non-negative finite number')) {
+    throw new Error('Runtime provider latency must remain non-negative finite numeric evidence.');
+  }
+}
+
 for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
   const error = providerHealthReadinessError({
     ...healthy,
@@ -99,4 +113,4 @@ for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, latency, and runtime-shape policy.');
