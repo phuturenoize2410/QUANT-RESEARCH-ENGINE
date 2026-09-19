@@ -61,6 +61,14 @@ for (const invalidProviderId of ['', '   ']) {
   );
 }
 
+for (const controlCharacterProviderId of ['provider\nshadow', 'provider\tshadow', `provider${String.fromCharCode(0)}shadow`]) {
+  assert.throws(
+    () => normalizeProviderBars(controlCharacterProviderId, validBars),
+    (error: unknown) => error instanceof ProviderBarsError && error.index === -1,
+    'Historical provider identity control characters must fail closed before health/status or feature consumers see the identity.',
+  );
+}
+
 for (const malformedPayload of [null, undefined, {}, 'not-bars']) {
   assert.throws(
     () => normalizeProviderBars('runtime-payload-adapter', malformedPayload as unknown as typeof validBars),
