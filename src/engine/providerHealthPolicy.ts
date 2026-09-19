@@ -4,6 +4,7 @@ import { ProviderHealth } from './dataProviders';
 // timestamp differences can occur when provider systems stamp sync/check events
 // independently. Larger inversions remain untrustworthy and fail closed.
 const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const PROVIDER_HEALTH_STATUSES = new Set(['HEALTHY', 'DEGRADED', 'STALE', 'UNAVAILABLE']);
 
 function isNonEmptyTimestamp(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
@@ -23,10 +24,15 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
   }
 
   const runtimeHealth = providerHealth as ProviderHealth & {
+    status?: unknown;
     checkedAt?: unknown;
     lastSuccessfulSyncAt?: unknown;
     staleAfterSeconds?: unknown;
   };
+
+  if (typeof runtimeHealth.status !== 'string' || !PROVIDER_HEALTH_STATUSES.has(runtimeHealth.status)) {
+    return 'provider health observation has an invalid status';
+  }
 
   if (!isNonEmptyTimestamp(runtimeHealth.checkedAt)) {
     return 'provider health observation has no valid checkedAt timestamp';
