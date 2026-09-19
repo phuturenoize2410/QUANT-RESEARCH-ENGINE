@@ -41,6 +41,9 @@ function isNonEmptyTimestamp(value: unknown): value is string {
   if (offsetHourText !== undefined && offsetMinuteText !== undefined) {
     const offsetHour = Number(offsetHourText);
     const offsetMinute = Number(offsetMinuteText);
+    // RFC3339 numeric offsets are bounded to 23:59 by the ABNF time-numoffset
+    // grammar. Reject values Date.parse may normalize or accept differently so
+    // provider evidence remains portable across runtimes/adapters.
     if (offsetHour > 23 || offsetMinute > 59) return false;
   }
 
