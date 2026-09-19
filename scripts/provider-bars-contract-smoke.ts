@@ -51,6 +51,14 @@ for (const invalidProviderId of ['', '   ']) {
   );
 }
 
+for (const malformedPayload of [null, undefined, {}, 'not-bars']) {
+  assert.throws(
+    () => normalizeProviderBars('runtime-payload-adapter', malformedPayload as unknown as typeof validBars),
+    (error: unknown) => error instanceof ProviderBarsError && error.providerId === 'runtime-payload-adapter' && error.index === -1,
+    'Malformed historical payload containers must fail at the provider boundary with attributable diagnostics.',
+  );
+}
+
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
   [{ ...validBars[0], date: '2026-02-30' }],

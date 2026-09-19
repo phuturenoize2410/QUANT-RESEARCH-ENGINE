@@ -60,6 +60,14 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
   // whitespace once so health/status diagnostics cannot split one provider into
   // multiple identities because of configuration or transport formatting.
   const canonicalProviderId = providerId.trim();
+
+  // TypeScript protects in-repo callers, but future HTTP/vendor adapters are runtime
+  // boundaries. Reject malformed payload containers here instead of leaking a native
+  // `.map` TypeError into Feature Engine consumers or provider-health diagnostics.
+  if (!Array.isArray(bars)) {
+    throw new ProviderBarsError(canonicalProviderId, -1, 'Historical provider payload must be an array of bars.');
+  }
+
   let previousDate = '';
 
   const normalized = bars.map((bar, index) => {
