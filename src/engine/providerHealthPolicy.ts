@@ -8,14 +8,43 @@ const PROVIDER_HEALTH_STATUSES = new Set(['HEALTHY', 'DEGRADED', 'STALE', 'UNAVA
 // Provider-health timestamps are cross-system evidence, so require an explicit
 // RFC3339-style instant with timezone rather than relying on Date.parse's
 // implementation-dependent acceptance of date-only or locale-shaped strings.
-const PROVIDER_HEALTH_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const PROVIDER_HEALTH_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/;
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leapYear ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
 
 function isNonEmptyTimestamp(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    PROVIDER_HEALTH_INSTANT.test(value) &&
-    Number.isFinite(Date.parse(value))
-  );
+  if (typeof value !== 'string') return false;
+
+  const match = PROVIDER_HEALTH_INSTANT.exec(value);
+  if (!match) return false;
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , offsetHourText, offsetMinuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+
+  // Date.parse can normalize impossible calendar values on some runtimes (for
+  // example February 30). Validate the RFC3339 calendar/time fields explicitly
+  // before using the parsed instant for freshness or clock-skew decisions.
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return false;
+  if (hour > 23 || minute > 59 || second > 59) return false;
+
+  if (offsetHourText !== undefined && offsetMinuteText !== undefined) {
+    const offsetHour = Number(offsetHourText);
+    const offsetMinute = Number(offsetMinuteText);
+    if (offsetHour > 23 || offsetMinute > 59) return false;
+  }
+
+  return Number.isFinite(Date.parse(value));
 }
 
 /**
