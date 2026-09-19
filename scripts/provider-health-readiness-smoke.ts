@@ -1,4 +1,4 @@
-import { providerHealthReadinessError } from '../src/engine/providerHealthPolicy';
+import { providerHealthEvidenceError, providerHealthReadinessError } from '../src/engine/providerHealthPolicy';
 import type { ProviderHealth } from '../src/engine/dataProviders';
 
 const healthy: ProviderHealth = {
@@ -16,6 +16,22 @@ for (const status of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
   const error = providerHealthReadinessError({ ...healthy, status });
   if (!error?.includes(`provider health is ${status}`)) {
     throw new Error(`${status} provider evidence must fail canonical readiness.`);
+  }
+}
+
+for (const status of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
+  const neverSynced: ProviderHealth = {
+    status,
+    checkedAt: healthy.checkedAt,
+    staleAfterSeconds: 300,
+    message: 'Provider has not completed a successful synchronization.',
+  };
+  if (providerHealthEvidenceError(neverSynced) !== null) {
+    throw new Error(`${status} providers must be able to report trustworthy health before their first successful sync.`);
+  }
+  const readinessError = providerHealthReadinessError(neverSynced);
+  if (!readinessError?.includes(`provider health is ${status}`)) {
+    throw new Error(`${status} never-synced providers must fail readiness because of status, not missing provenance.`);
   }
 }
 
@@ -136,4 +152,4 @@ for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit-instant, status-vocabulary, latency, message, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit-instant, status-vocabulary, latency, message, never-synced outage, and runtime-shape policy.');
