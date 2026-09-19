@@ -49,11 +49,10 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
   }
   const checkedAtMs = Date.parse(runtimeHealth.checkedAt);
 
-  const hasSyncEvidence = !(
-    runtimeHealth.lastSuccessfulSyncAt === undefined ||
-    runtimeHealth.lastSuccessfulSyncAt === null ||
-    runtimeHealth.lastSuccessfulSyncAt === ''
-  );
+  // Optional means omitted/undefined only. Runtime null/empty-string values are
+  // schema drift from JSON/vendor adapters and must not masquerade as the valid
+  // "never synchronized" state available to non-healthy providers.
+  const hasSyncEvidence = runtimeHealth.lastSuccessfulSyncAt !== undefined;
 
   // A provider that has never synchronized can still report trustworthy
   // DEGRADED/STALE/UNAVAILABLE health. Requiring sync provenance for those states
