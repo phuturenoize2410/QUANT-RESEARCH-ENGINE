@@ -113,4 +113,18 @@ for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, latency, and runtime-shape policy.');
+if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) {
+  throw new Error('String provider-health messages must remain valid optional diagnostic evidence.');
+}
+
+for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    message: malformedMessage,
+  } as ProviderHealth);
+  if (!error?.includes('message must be a string when provided')) {
+    throw new Error('Runtime provider-health messages must remain string diagnostic evidence.');
+  }
+}
+
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, latency, message, and runtime-shape policy.');
