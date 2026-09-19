@@ -24,7 +24,7 @@ function isNonEmptyTimestamp(value: unknown): value is string {
   const match = PROVIDER_HEALTH_INSTANT.exec(value);
   if (!match) return false;
 
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, , offsetHourText, offsetMinuteText] = match;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, offsetSign, offsetHourText, offsetMinuteText] = match;
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
@@ -41,10 +41,13 @@ function isNonEmptyTimestamp(value: unknown): value is string {
   if (offsetHourText !== undefined && offsetMinuteText !== undefined) {
     const offsetHour = Number(offsetHourText);
     const offsetMinute = Number(offsetMinuteText);
-    // RFC3339 numeric offsets are bounded to 23:59 by the ABNF time-numoffset
-    // grammar. Reject values Date.parse may normalize or accept differently so
-    // provider evidence remains portable across runtimes/adapters.
     if (offsetHour > 23 || offsetMinute > 59) return false;
+    // RFC3339 reserves -00:00 to signal an unknown local offset. Provider-health
+    // timestamps are provenance used for freshness/clock-skew decisions, so an
+    // unknown offset is not sufficiently authoritative even though it denotes the
+    // same numeric instant as UTC in generic timestamp parsers. Require Z/+00:00
+    // when the producer intends to assert UTC.
+    if (offsetSign === '-' && offsetHour === 0 && offsetMinute === 0) return false;
   }
 
   return Number.isFinite(Date.parse(value));
