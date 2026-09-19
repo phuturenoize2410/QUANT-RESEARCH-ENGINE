@@ -59,6 +59,14 @@ for (const malformedPayload of [null, undefined, {}, 'not-bars']) {
   );
 }
 
+for (const malformedEntry of [null, undefined, 'not-a-bar', 42, []]) {
+  assert.throws(
+    () => normalizeProviderBars('runtime-entry-adapter', [malformedEntry] as unknown as typeof validBars),
+    (error: unknown) => error instanceof ProviderBarsError && error.providerId === 'runtime-entry-adapter' && error.index === 0,
+    'Malformed historical array members must fail at the provider boundary with attributable diagnostics.',
+  );
+}
+
 for (const invalid of [
   [{ ...validBars[0], date: 'not-a-date' }],
   [{ ...validBars[0], date: '2026-02-30' }],
