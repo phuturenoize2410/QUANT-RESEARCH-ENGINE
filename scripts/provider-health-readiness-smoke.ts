@@ -59,6 +59,16 @@ for (const malformed of malformedRoots) {
   }
 }
 
+for (const malformedStatus of [undefined, null, '', 'healthy', 'UNKNOWN', 42, {}, []] as unknown[]) {
+  const error = providerHealthReadinessError({
+    ...healthy,
+    status: malformedStatus,
+  } as ProviderHealth);
+  if (!error?.includes('invalid status')) {
+    throw new Error('Runtime provider-health status must use the canonical status vocabulary.');
+  }
+}
+
 for (const malformedTimestamp of [42, [], {}, '   '] as unknown[]) {
   const error = providerHealthReadinessError({
     ...healthy,
@@ -89,4 +99,4 @@ for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, status-vocabulary, and runtime-shape policy.');
