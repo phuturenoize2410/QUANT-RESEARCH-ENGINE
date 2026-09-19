@@ -62,9 +62,9 @@ for (const malformedThreshold of ['300', null, {}, []] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, staleAfterSeconds: malformedThreshold } as ProviderHealth);
   if (!error?.includes('staleAfterSeconds must be a positive finite number')) throw new Error('Runtime freshness thresholds must remain numeric positive finite evidence.');
 }
-if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) throw new Error('String provider-health messages must remain valid optional diagnostic evidence.');
-for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
+if (providerHealthReadinessError({ ...healthy, message: 'Provider operational.' }) !== null) throw new Error('Non-empty provider-health messages must remain valid optional diagnostic evidence.');
+for (const malformedMessage of [null, 42, {}, [], '', '   '] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, message: malformedMessage } as ProviderHealth);
-  if (!error?.includes('message must be a string when provided')) throw new Error('Runtime provider-health messages must remain string diagnostic evidence.');
+  if (!error?.includes('message must be a non-empty string when provided')) throw new Error('Runtime provider-health messages must remain non-empty string diagnostic evidence aligned with provider normalization.');
 }
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known timezone provenance, status-vocabulary, latency, message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known timezone provenance, status-vocabulary, latency, non-empty diagnostic message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
