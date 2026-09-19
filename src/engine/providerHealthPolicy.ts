@@ -138,8 +138,15 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     }
   }
 
-  if (runtimeHealth.message !== undefined && typeof runtimeHealth.message !== 'string') {
-    return 'provider health message must be a string when provided';
+  // Normalization treats blank diagnostic text as absent/invalid. Keep the
+  // canonical evidence policy aligned so direct readiness callers cannot accept a
+  // payload that the provider boundary would degrade. This matters for future
+  // JSON-backed adapters where empty strings are common schema-drift sentinels.
+  if (
+    runtimeHealth.message !== undefined &&
+    (typeof runtimeHealth.message !== 'string' || runtimeHealth.message.trim().length === 0)
+  ) {
+    return 'provider health message must be a non-empty string when provided';
   }
 
   return null;
