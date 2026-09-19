@@ -79,15 +79,26 @@ function isProviderMode(value: unknown): value is ProviderMode { return typeof v
 function isMarketDataSource(value: unknown): value is MarketDataSource { return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource); }
 function isResearchUseCase(value: unknown): value is ResearchUseCase { return typeof value === 'string' && RESEARCH_USE_CASES.includes(value as ResearchUseCase); }
 function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
+function isMetadataObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 export function providerSupportsMarket(metadata: ProviderMetadata, marketId: MarketId): boolean {
-  if (!Array.isArray(metadata.supportedMarkets) || !isNonEmptyString(marketId)) return false;
+  if (!isMetadataObject(metadata) || !Array.isArray(metadata.supportedMarkets) || !isNonEmptyString(marketId)) return false;
   const canonicalTargetMarket = canonicalMarketId(marketId);
   return metadata.supportedMarkets.some(market => typeof market === 'string' && isNonEmptyString(market) && canonicalMarketId(market) === canonicalTargetMarket);
 }
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
-  const runtimeMetadata = metadata as ProviderMetadata & {
+  // Provider metadata can originate in external adapter configuration. Treat the
+  // runtime root as untrusted even when TypeScript callers advertise the static
+  // ProviderMetadata contract; null/arrays/primitives must fail closed rather
+  // than throwing before readiness can produce diagnostics.
+  if (!isMetadataObject(metadata)) {
+    return ['Provider capability contract is invalid: metadata must be an object.'];
+  }
+
+  const runtimeMetadata = metadata as unknown as ProviderMetadata & {
     id?: unknown; name?: unknown; source?: unknown; mode?: unknown; isPaid?: unknown; notes?: unknown;
     supportedMarkets?: unknown; supportsHistorical?: unknown; supportsIntraday?: unknown; supportsRealtime?: unknown;
   };
@@ -129,6 +140,9 @@ function evaluateNormalizedProviderReadiness(metadata: ProviderMetadata, normali
   const warnings: string[] = [];
   if (!isResearchUseCase(useCase)) {
     pushUnique(reasons, `Provider readiness contract is invalid: unknown research use case ${String(useCase)}.`);
+    return { useCase, allowed: false, reasons, warnings };
+  }
+  if (!isMetadataObject(metadata)) {
     return { useCase, allowed: false, reasons, warnings };
   }
   if (targetMarket !== undefined && !providerSupportsMarket(metadata, targetMarket)) pushUnique(reasons, `Provider does not support target market ${targetMarket}.`);
