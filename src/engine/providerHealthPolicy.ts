@@ -41,7 +41,10 @@ function isNonEmptyTimestamp(value: unknown): value is string {
   if (offsetHourText !== undefined && offsetMinuteText !== undefined) {
     const offsetHour = Number(offsetHourText);
     const offsetMinute = Number(offsetMinuteText);
-    if (offsetHour > 23 || offsetMinute > 59) return false;
+    // RFC3339 numeric offsets are bounded to ±14:00. Date parsers may accept
+    // wider implementation-specific offsets, but provider provenance must remain
+    // portable across adapters/runtimes rather than inheriting parser leniency.
+    if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return false;
     // RFC3339 reserves -00:00 to signal an unknown local offset. Provider-health
     // timestamps are provenance used for freshness/clock-skew decisions, so an
     // unknown offset is not sufficiently authoritative even though it denotes the
