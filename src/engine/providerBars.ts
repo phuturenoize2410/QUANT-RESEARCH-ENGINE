@@ -64,6 +64,13 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
   // multiple identities because of configuration or transport formatting.
   const canonicalProviderId = providerId.trim();
 
+  // Provider identity is reused by health/status diagnostics and future adapter
+  // routing. Keep control characters out of that identity so malformed external
+  // configuration cannot create ambiguous map keys or multi-line diagnostics.
+  if (/[\u0000-\u001F\u007F]/.test(canonicalProviderId)) {
+    throw new ProviderBarsError(canonicalProviderId, -1, 'Historical provider identity must not contain control characters.');
+  }
+
   // TypeScript protects in-repo callers, but future HTTP/vendor adapters are runtime
   // boundaries. Reject malformed payload containers here instead of leaking a native
   // `.map` TypeError into Feature Engine consumers or provider-health diagnostics.
