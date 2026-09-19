@@ -4,6 +4,7 @@ import { ProviderHealth } from './dataProviders';
 // timestamp differences can occur when provider systems stamp sync/check events
 // independently. Larger inversions remain untrustworthy and fail closed.
 const MAX_PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_SAFE_STALE_AFTER_SECONDS = Number.MAX_SAFE_INTEGER / 1000;
 const PROVIDER_HEALTH_STATUSES = new Set(['HEALTHY', 'DEGRADED', 'STALE', 'UNAVAILABLE']);
 // Provider-health timestamps are cross-system evidence, so require an explicit
 // RFC3339-style instant with timezone rather than relying on Date.parse's
@@ -126,9 +127,10 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     if (
       typeof runtimeHealth.staleAfterSeconds !== 'number' ||
       !Number.isFinite(runtimeHealth.staleAfterSeconds) ||
-      runtimeHealth.staleAfterSeconds <= 0
+      runtimeHealth.staleAfterSeconds <= 0 ||
+      runtimeHealth.staleAfterSeconds > MAX_SAFE_STALE_AFTER_SECONDS
     ) {
-      return 'provider health staleAfterSeconds must be a positive finite number';
+      return 'provider health staleAfterSeconds must be a positive finite number within safe freshness arithmetic bounds';
     }
     if (lastSuccessfulSyncAtMs !== null) {
       // A sync timestamp within the accepted clock-skew window can be slightly later
