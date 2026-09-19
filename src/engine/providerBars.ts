@@ -99,7 +99,24 @@ export function normalizeProviderBars(providerId: string, bars: readonly DailyBa
     validateRange(bar.high, bar.low, bar.open, bar.close, canonicalProviderId, index, 'current');
     validateRange(bar.nextHigh, bar.nextLow, bar.nextOpen, bar.nextClose, canonicalProviderId, index, 'next-session');
 
-    return Object.freeze({ ...bar });
+    // Project vendor payloads onto the canonical DailyBar schema rather than
+    // spreading arbitrary adapter fields into Feature Engine evidence. This keeps
+    // provider-specific metadata and future transport fields behind the adapter.
+    const canonicalBar: DailyBar = {
+      date: bar.date,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+      turnover: bar.turnover,
+      ...(bar.nextOpen !== undefined ? { nextOpen: bar.nextOpen } : {}),
+      ...(bar.nextHigh !== undefined ? { nextHigh: bar.nextHigh } : {}),
+      ...(bar.nextLow !== undefined ? { nextLow: bar.nextLow } : {}),
+      ...(bar.nextClose !== undefined ? { nextClose: bar.nextClose } : {}),
+    };
+
+    return Object.freeze(canonicalBar);
   });
 
   return Object.freeze(normalized) as DailyBar[];
