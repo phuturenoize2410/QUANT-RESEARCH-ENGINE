@@ -39,18 +39,20 @@ for (const malformedStatus of [undefined, null, '', 'healthy', 'UNKNOWN', 42, {}
   const error = providerHealthReadinessError({ ...healthy, status: malformedStatus } as ProviderHealth);
   if (!error?.includes('invalid status')) throw new Error('Runtime provider-health status must use the canonical status vocabulary.');
 }
-for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-18', '09/18/2026 00:00:00', '2026-09-18T00:00:00', '2026-02-30T00:00:00Z', '2025-02-29T00:00:00Z', '2026-13-01T00:00:00Z', '2026-09-18T24:00:00Z', '2026-09-18T00:60:00Z', '2026-09-18T00:00:00-00:00'] as unknown[]) {
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-18', '09/18/2026 00:00:00', '2026-09-18T00:00:00', '2026-02-30T00:00:00Z', '2025-02-29T00:00:00Z', '2026-13-01T00:00:00Z', '2026-09-18T24:00:00Z', '2026-09-18T00:60:00Z', '2026-09-18T00:00:00-00:00', '2026-09-18T00:00:00+14:01', '2026-09-18T00:00:00-15:00'] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, checkedAt: malformedTimestamp } as ProviderHealth);
-  if (!error?.includes('no valid checkedAt timestamp')) throw new Error('Runtime checkedAt values must be explicit calendar-valid RFC3339-style instants with known timezone provenance.');
+  if (!error?.includes('no valid checkedAt timestamp')) throw new Error('Runtime checkedAt values must be explicit calendar-valid RFC3339-style instants with known, bounded timezone provenance.');
 }
-for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-17', '09/17/2026 23:59:30', '2026-09-17T23:59:30', '2026-04-31T23:59:30Z', '2026-09-17T23:59:60Z', '2026-09-17T23:59:30-00:00'] as unknown[]) {
+for (const malformedTimestamp of [42, [], {}, '   ', '2026-09-17', '09/17/2026 23:59:30', '2026-09-17T23:59:30', '2026-04-31T23:59:30Z', '2026-09-17T23:59:60Z', '2026-09-17T23:59:30-00:00', '2026-09-17T23:59:30+14:30', '2026-09-17T23:59:30+23:00'] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, lastSuccessfulSyncAt: malformedTimestamp } as ProviderHealth);
-  if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) throw new Error('Runtime sync timestamps must be explicit calendar-valid RFC3339-style instants with known timezone provenance.');
+  if (!error?.includes('no valid lastSuccessfulSyncAt timestamp')) throw new Error('Runtime sync timestamps must be explicit calendar-valid RFC3339-style instants with known, bounded timezone provenance.');
 }
 const offsetInstant = providerHealthReadinessError({ ...healthy, checkedAt: '2026-09-18T07:00:00+07:00', lastSuccessfulSyncAt: '2026-09-18T06:59:30+07:00' });
 if (offsetInstant !== null) throw new Error('Explicit timezone-offset provider instants must remain valid evidence.');
 const explicitUtcOffset = providerHealthReadinessError({ ...healthy, checkedAt: '2026-09-18T00:00:00+00:00', lastSuccessfulSyncAt: '2026-09-17T23:59:30+00:00' });
 if (explicitUtcOffset !== null) throw new Error('Explicit +00:00 UTC provider provenance must remain valid evidence.');
+const maximumOffset = providerHealthReadinessError({ ...healthy, checkedAt: '2026-09-18T14:00:00+14:00', lastSuccessfulSyncAt: '2026-09-18T13:59:30+14:00' });
+if (maximumOffset !== null) throw new Error('RFC3339 maximum +14:00 timezone offset must remain valid provider evidence.');
 const leapDayInstant = providerHealthReadinessError({ ...healthy, checkedAt: '2028-02-29T07:00:00+07:00', lastSuccessfulSyncAt: '2028-02-29T06:59:30+07:00' });
 if (leapDayInstant !== null) throw new Error('Calendar validation must preserve valid leap-day provider instants.');
 if (providerHealthReadinessError({ ...healthy, latencyMs: 0 }) !== null) throw new Error('Zero provider latency is valid evidence for in-process/mock adapters.');
@@ -67,4 +69,4 @@ for (const malformedMessage of [null, 42, {}, [], '', '   '] as unknown[]) {
   const error = providerHealthReadinessError({ ...healthy, message: malformedMessage } as ProviderHealth);
   if (!error?.includes('message must be a non-empty string when provided')) throw new Error('Runtime provider-health messages must remain non-empty string diagnostic evidence aligned with provider normalization.');
 }
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known timezone provenance, status-vocabulary, latency, non-empty diagnostic message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit calendar-valid instants with known bounded timezone provenance, status-vocabulary, latency, non-empty diagnostic message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
