@@ -33,6 +33,16 @@ for (const status of ['DEGRADED', 'STALE', 'UNAVAILABLE'] as const) {
   if (!readinessError?.includes(`provider health is ${status}`)) {
     throw new Error(`${status} never-synced providers must fail readiness because of status, not missing provenance.`);
   }
+
+  for (const malformedMissingSync of [null, ''] as unknown[]) {
+    const malformedError = providerHealthEvidenceError({
+      ...neverSynced,
+      lastSuccessfulSyncAt: malformedMissingSync,
+    } as ProviderHealth);
+    if (!malformedError?.includes('no valid lastSuccessfulSyncAt timestamp')) {
+      throw new Error(`${status} providers must omit absent sync provenance; null/empty runtime values are schema drift.`);
+    }
+  }
 }
 
 const stale = providerHealthReadinessError({
@@ -152,4 +162,4 @@ for (const malformedMessage of [null, 42, {}, []] as unknown[]) {
   }
 }
 
-console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit-instant, status-vocabulary, latency, message, never-synced outage, and runtime-shape policy.');
+console.log('Provider-health readiness smoke passed: downstream consumers share one fail-closed health, freshness, provenance, clock-skew, explicit-instant, status-vocabulary, latency, message, never-synced outage, strict optional-sync shape, and runtime-shape policy.');
