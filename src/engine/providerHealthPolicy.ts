@@ -29,6 +29,7 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     lastSuccessfulSyncAt?: unknown;
     latencyMs?: unknown;
     staleAfterSeconds?: unknown;
+    message?: unknown;
   };
 
   if (typeof runtimeHealth.status !== 'string' || !PROVIDER_HEALTH_STATUSES.has(runtimeHealth.status)) {
@@ -77,6 +78,10 @@ export function providerHealthEvidenceError(providerHealth: ProviderHealth): str
     if (ageSeconds > runtimeHealth.staleAfterSeconds) {
       return 'provider health evidence is stale relative to staleAfterSeconds';
     }
+  }
+
+  if (runtimeHealth.message !== undefined && typeof runtimeHealth.message !== 'string') {
+    return 'provider health message must be a string when provided';
   }
 
   return null;
