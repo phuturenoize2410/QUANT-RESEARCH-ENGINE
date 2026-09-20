@@ -1,11 +1,11 @@
-import type {
+import {
   HealthCheckedProvider,
   MarketDataSource,
   ProviderHealth,
   ProviderHealthStatus,
   ProviderMetadata,
   ProviderMode,
-} from './providerContracts';
+} from './dataProviders';
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_DATE_MS = 8.64e15;
@@ -34,382 +34,473 @@ function normalizeObservationClock(value: unknown): { nowMs: number; valid: bool
     return { nowMs: value, valid: true };
   }
 
-  const fallback = Date.now();
+  // Keep malformed injected/runtime clocks deterministic and serializable while
+  // failing health closed. Epoch is a sentinel only; it must never be interpreted
+  // as a valid provider observation time because `valid` remains false.
+  return { nowMs: 0, valid: false };
+}
+
+function parseTimestamp(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function canonicalTimestamp(value: unknown): string | undefined {
+  const parsed = parseTimestamp(value);
+  return parsed === undefined ? undefined : new Date(parsed).toISOString();
+}
+
+function normalizeNonNegativeFinite(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
+function canonicalHealthMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
+  return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
+}
+
+function isMarketDataSource(value: unknown): value is MarketDataSource {
+  return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource);
+}
+
+function isProviderMode(value: unknown): value is ProviderMode {
+  return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode);
+}
+
+function appendMessage(base: string | undefined, detail: string): string {
+  return base ? `${base} ${detail}` : detail;
+}
+
+function degradeHealth(
+  health: ProviderHealth,
+  detail: string,
+): ProviderHealth {
+  if (health.status === 'UNAVAILABLE' || health.status === 'STALE') {
+    return {
+      ...health,
+      message: appendMessage(health.message, detail),
+    };
+  }
+
   return {
-    nowMs: Number.isFinite(fallback) && fallback >= -MAX_DATE_MS && fallback <= MAX_DATE_MS ? fallback : 0,
-    valid: false,
+    ...health,
+    status: 'DEGRADED',
+    message: appendMessage(health.message, detail),
   };
 }
 
-function normalizeTimestamp(value: unknown): string | null {
-  if (typeof value !== 'string' || value.trim().length === 0) return null;
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return null;
+function failHealthClosed(
+  health: ProviderHealth,
+  detail: string,
+): ProviderHealth {
+  return {
+    ...health,
+    status: 'UNAVAILABLE',
+    message: appendMessage(health.message, detail),
+  };
+}
+
+function providerErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  return 'Unknown provider health-check failure.';
+}
+
+/**
+ * Converts provider-reported health into one canonical health snapshot.
+ *
+ * Health normalization belongs to the provider boundary, not research-use-case
+ * policy. Keeping it here means market-data, broker-flow and future alternative
+ * providers share freshness/timestamp semantics without depending on strategy or
+ * execution readiness decisions.
+ */
+export function normalizeProviderHealth(
+  health: ProviderHealth,
+  nowMs: number = Date.now(),
+): ProviderHealth {
+  const observationClock = normalizeObservationClock(nowMs);
+  const effectiveNowMs = observationClock.nowMs;
+  const isHealthObject = Boolean(health) && typeof health === 'object' && !Array.isArray(health);
+
+  // External adapters can violate their TypeScript contract at runtime (bad JSON,
+  // schema drift, proxy errors). Reject malformed roots before field access so a
+  // null/array/primitive response cannot throw or leak into downstream layers.
+  if (!isHealthObject) {
+    const malformed: ProviderHealth = {
+      status: 'UNAVAILABLE',
+      checkedAt: new Date(observationClock.nowMs).toISOString(),
+      message: 'Provider health payload is malformed; expected an object.',
+    };
+    return observationClock.valid
+      ? malformed
+      : failHealthClosed(malformed, 'Provider observation clock is invalid.');
+  }
+
+  const runtimeHealth = health as ProviderHealth & {
+    status?: unknown;
+    checkedAt?: unknown;
+    lastSuccessfulSyncAt?: unknown;
+    latencyMs?: unknown;
+    staleAfterSeconds?: unknown;
+    message?: unknown;
+  };
+  const reportedStatus = runtimeHealth.status;
+  const hasValidStatus = isProviderHealthStatus(reportedStatus);
+  const checkedAtMs = parseTimestamp(runtimeHealth.checkedAt);
+  const lastSuccessfulSyncMs = parseTimestamp(runtimeHealth.lastSuccessfulSyncAt);
+  const canonicalMessage = canonicalHealthMessage(runtimeHealth.message);
+
+  let normalized: ProviderHealth = {
+    ...health,
+    status: hasValidStatus ? reportedStatus : 'UNAVAILABLE',
+    checkedAt: canonicalTimestamp(runtimeHealth.checkedAt) ?? '',
+    lastSuccessfulSyncAt: canonicalTimestamp(runtimeHealth.lastSuccessfulSyncAt),
+    latencyMs: normalizeNonNegativeFinite(runtimeHealth.latencyMs),
+    staleAfterSeconds: normalizeNonNegativeFinite(runtimeHealth.staleAfterSeconds),
+    message: canonicalMessage,
+  };
+
+  // Provider payloads cross a runtime boundary. TypeScript cannot guarantee that
+  // JSON/free-feed/paid-adapter responses actually honour the declared union, so
+  // unknown status values must fail closed before Feature/Strategy/UI sees them.
+  if (!hasValidStatus) {
+    normalized = {
+      ...normalized,
+      message: appendMessage(
+        normalized.message,
+        `Invalid provider health status "${String(reportedStatus)}"; failing closed as UNAVAILABLE.`,
+      ),
+    };
+  }
+
+  if (runtimeHealth.message !== undefined && canonicalMessage === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid provider health message ignored.');
+  }
+
+  if (runtimeHealth.latencyMs !== undefined && normalized.latencyMs === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid provider latency metadata ignored.');
+  }
+
+  if (runtimeHealth.staleAfterSeconds !== undefined && normalized.staleAfterSeconds === undefined) {
+    normalized = degradeHealth(normalized, 'Invalid freshness threshold ignored.');
+  }
+
+  // The injected/runtime observation clock is part of the trust boundary too.
+  // Invalid clocks previously reached Date#toISOString and could throw before a
+  // canonical health envelope was produced. Fail closed deterministically instead.
+  if (!observationClock.valid) {
+    return failHealthClosed(normalized, 'Provider observation clock is invalid.');
+  }
+
+  // checkedAt anchors the health snapshot itself. If this timestamp cannot be
+  // trusted, downstream research cannot know whether the reported status is
+  // current, so fail closed rather than treating it as a non-blocking warning.
+  if (checkedAtMs === undefined) {
+    normalized = failHealthClosed(normalized, 'Provider health check timestamp is invalid.');
+  } else if (checkedAtMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
+    normalized = failHealthClosed(normalized, 'Provider health check timestamp is unexpectedly in the future.');
+  }
+
+  if (normalized.status === 'UNAVAILABLE') return normalized;
+
+  const staleAfterSeconds = normalized.staleAfterSeconds;
+
+  if (runtimeHealth.lastSuccessfulSyncAt !== undefined && lastSuccessfulSyncMs === undefined) {
+    normalized = degradeHealth(normalized, 'Last successful sync timestamp is invalid.');
+  }
+
+  if (lastSuccessfulSyncMs !== undefined && lastSuccessfulSyncMs > effectiveNowMs + MAX_CLOCK_SKEW_MS) {
+    normalized = degradeHealth(normalized, 'Last successful sync timestamp is unexpectedly in the future.');
+  }
+
+  if (
+    checkedAtMs !== undefined &&
+    lastSuccessfulSyncMs !== undefined &&
+    lastSuccessfulSyncMs > checkedAtMs + MAX_CLOCK_SKEW_MS
+  ) {
+    normalized = degradeHealth(
+      normalized,
+      'Last successful sync timestamp is later than the provider health check timestamp.',
+    );
+  }
+
+  if (staleAfterSeconds !== undefined && lastSuccessfulSyncMs === undefined) {
+    normalized = degradeHealth(
+      normalized,
+      'Freshness threshold is declared but last successful sync time is unavailable.',
+    );
+  }
+
+  if (
+    lastSuccessfulSyncMs !== undefined &&
+    staleAfterSeconds !== undefined &&
+    effectiveNowMs - lastSuccessfulSyncMs > staleAfterSeconds * 1000
+  ) {
+    return {
+      ...normalized,
+      status: 'STALE',
+      message: appendMessage(normalized.message, 'Freshness threshold exceeded.'),
+    };
+  }
+
+  return normalized;
+}
+
+/**
+ * Capture provider health behind a failure-safe external-system boundary.
+ * A failed probe becomes canonical UNAVAILABLE state before feature, strategy,
+ * risk/execution or UI layers can interpret provider failures independently.
+ */
+export async function captureProviderHealth(
+  provider: HealthCheckedProvider,
+  nowMs: number = Date.now(),
+): Promise<ProviderHealth> {
+  const observationClock = normalizeObservationClock(nowMs);
+
   try {
-    return new Date(parsed).toISOString();
-  } catch {
-    return null;
+    return normalizeProviderHealth(await provider.getHealth(), nowMs);
+  } catch (error) {
+    const baseMessage = `Provider health check failed: ${providerErrorMessage(error)}`;
+    return {
+      status: 'UNAVAILABLE',
+      checkedAt: new Date(observationClock.nowMs).toISOString(),
+      message: observationClock.valid
+        ? baseMessage
+        : appendMessage(baseMessage, 'Provider observation clock is invalid.'),
+    };
   }
 }
 
-function normalizeNonNegativeFinite(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+function canonicalMetadataText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
-function normalizePositiveFinite(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+function canonicalMarketId(value: unknown): string | undefined {
+  const text = canonicalMetadataText(value);
+  return text?.toUpperCase();
 }
 
-function normalizeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) ? value : null;
+function snapshotProviderMetadata(metadata: ProviderMetadata): {
+  metadata: ProviderMetadata;
+  issues: string[];
+} {
+  const isMetadataObject = Boolean(metadata) && typeof metadata === 'object' && !Array.isArray(metadata);
+  const runtimeMetadata = (isMetadataObject ? metadata : {}) as ProviderMetadata & {
+    id?: unknown;
+    name?: unknown;
+    source?: unknown;
+    mode?: unknown;
+    isPaid?: unknown;
+    supportedMarkets?: unknown;
+    supportsHistorical?: unknown;
+    supportsIntraday?: unknown;
+    supportsRealtime?: unknown;
+    notes?: unknown;
+  };
+  const issues: string[] = [];
+
+  if (!isMetadataObject) {
+    issues.push('metadata');
+  }
+
+  const id = canonicalMetadataText(runtimeMetadata.id);
+  const name = canonicalMetadataText(runtimeMetadata.name);
+  const notes = runtimeMetadata.notes === undefined
+    ? undefined
+    : canonicalMetadataText(runtimeMetadata.notes);
+  const hasValidSource = isMarketDataSource(runtimeMetadata.source);
+  const hasValidMode = isProviderMode(runtimeMetadata.mode);
+  const hasValidPaidFlag = typeof runtimeMetadata.isPaid === 'boolean';
+  const hasValidHistoricalCapability = typeof runtimeMetadata.supportsHistorical === 'boolean';
+  const hasValidIntradayCapability = typeof runtimeMetadata.supportsIntraday === 'boolean';
+  const hasValidRealtimeCapability = typeof runtimeMetadata.supportsRealtime === 'boolean';
+
+  if (!id) issues.push('id');
+  if (!name) issues.push('name');
+  if (!hasValidSource) issues.push('source');
+  if (!hasValidMode) issues.push('mode');
+  if (!hasValidPaidFlag) issues.push('isPaid');
+  if (!hasValidHistoricalCapability) issues.push('supportsHistorical');
+  if (!hasValidIntradayCapability) issues.push('supportsIntraday');
+  if (!hasValidRealtimeCapability) issues.push('supportsRealtime');
+  if (runtimeMetadata.notes !== undefined && notes === undefined) issues.push('notes');
+
+  // Capability semantics are part of the provider contract, not a UI concern.
+  // Fail closed when an adapter advertises combinations that cannot be true at
+  // the same time. This keeps future Google Finance/free API/paid feed adapters
+  // honest before Feature/Strategy layers make readiness decisions from metadata.
+  if (
+    hasValidMode &&
+    hasValidRealtimeCapability &&
+    (runtimeMetadata.mode === 'REALTIME') !== runtimeMetadata.supportsRealtime
+  ) {
+    issues.push('mode/supportsRealtime');
+  }
+  if (
+    hasValidRealtimeCapability &&
+    hasValidIntradayCapability &&
+    runtimeMetadata.supportsRealtime &&
+    !runtimeMetadata.supportsIntraday
+  ) {
+    issues.push('supportsRealtime/supportsIntraday');
+  }
+  if (
+    hasValidMode &&
+    hasValidIntradayCapability &&
+    runtimeMetadata.mode === 'EOD' &&
+    runtimeMetadata.supportsIntraday
+  ) {
+    issues.push('mode/supportsIntraday');
+  }
+  if (
+    hasValidSource &&
+    hasValidMode &&
+    (runtimeMetadata.source === 'MOCK_ENGINE') !== (runtimeMetadata.mode === 'MOCK')
+  ) {
+    issues.push('source/mode');
+  }
+
+  const rawSupportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets)
+    ? runtimeMetadata.supportedMarkets
+    : [];
+  const canonicalSupportedMarkets = rawSupportedMarkets
+    .map(canonicalMarketId)
+    .filter((market): market is string => Boolean(market));
+  const supportedMarkets = [...new Set(canonicalSupportedMarkets)];
+
+  if (
+    !Array.isArray(runtimeMetadata.supportedMarkets) ||
+    canonicalSupportedMarkets.length !== rawSupportedMarkets.length ||
+    supportedMarkets.length === 0
+  ) {
+    issues.push('supportedMarkets');
+  }
+
+  // Any malformed field or contradictory capability contract must produce a
+  // conservative presentation snapshot. Health already fails closed below; the
+  // metadata itself must not keep advertising unsafe runtime values to UI/status
+  // consumers while the provider is unavailable.
+  const hasMalformedContract = issues.length > 0;
+  const safeMetadata: ProviderMetadata = isMetadataObject
+    ? {
+        ...metadata,
+        id: id ?? '',
+        name: name ?? '',
+        source: hasMalformedContract
+          ? 'MOCK_ENGINE'
+          : runtimeMetadata.source as MarketDataSource,
+        mode: hasMalformedContract
+          ? 'MOCK'
+          : runtimeMetadata.mode as ProviderMode,
+        isPaid: hasMalformedContract ? false : runtimeMetadata.isPaid as boolean,
+        notes,
+        supportedMarkets: Object.freeze([...supportedMarkets]),
+        supportsHistorical: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsHistorical as boolean,
+        supportsIntraday: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsIntraday as boolean,
+        supportsRealtime: hasMalformedContract
+          ? false
+          : runtimeMetadata.supportsRealtime as boolean,
+      }
+    : {
+        id: '',
+        name: '',
+        source: 'MOCK_ENGINE',
+        mode: 'MOCK',
+        isPaid: false,
+        supportedMarkets: Object.freeze([]),
+        supportsHistorical: false,
+        supportsIntraday: false,
+        supportsRealtime: false,
+      };
+
+  return {
+    metadata: Object.freeze(safeMetadata),
+    issues,
+  };
 }
 
-function normalizeBoolean(value: unknown): boolean | null {
-  return typeof value === 'boolean' ? value : null;
-}
-
-function normalizeString(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-}
-
-function normalizeMarketDataSource(value: unknown): MarketDataSource | null {
-  return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource)
-    ? (value as MarketDataSource)
-    : null;
-}
-
-function normalizeProviderMode(value: unknown): ProviderMode | null {
-  return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode)
-    ? (value as ProviderMode)
-    : null;
-}
-
-function normalizeProviderHealthStatus(value: unknown): ProviderHealthStatus | null {
-  return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus)
-    ? (value as ProviderHealthStatus)
-    : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function freezeArray<T>(values: T[]): readonly T[] {
-  return Object.freeze(values.slice());
-}
-
-function freezeMetadata(metadata: ProviderMetadata): ProviderMetadata {
-  return Object.freeze({
-    ...metadata,
-    markets: freezeArray([...metadata.markets]),
-  });
-}
-
-function freezeHealth(health: ProviderHealth): ProviderHealth {
+function snapshotProviderHealth(health: ProviderHealth): ProviderHealth {
   return Object.freeze({ ...health });
 }
 
+/**
+ * Vendor-neutral health/status envelope shared by every external data adapter.
+ *
+ * This intentionally stops before market-data readiness. Market-data providers
+ * additionally need research-use-case capability policy, while broker-flow or
+ * future alternative-data providers still need the same canonical metadata,
+ * health normalization and capture timestamp semantics.
+ */
 export interface ProviderHealthSnapshot {
   metadata: ProviderMetadata;
   health: ProviderHealth;
-  observedAt: string;
-  observationClockValid: boolean;
-  contractValid: boolean;
-  contractIssues: readonly string[];
+  capturedAt: string;
 }
 
-function invalidMetadata(issues: string[]): ProviderMetadata {
-  issues.push('provider metadata unavailable or invalid');
-  return freezeMetadata({
-    id: 'UNKNOWN_PROVIDER',
-    name: 'Unknown provider',
-    source: 'MOCK_ENGINE',
-    mode: 'MOCK',
-    isPaid: false,
-    supportsRealtime: false,
-    markets: [],
-  });
-}
-
-function invalidHealth(issues: string[], observedAt: string): ProviderHealth {
-  issues.push('provider health unavailable or invalid');
-  return freezeHealth({
-    status: 'UNAVAILABLE',
-    checkedAt: observedAt,
-    message: 'Provider health contract unavailable or invalid.',
-  });
-}
-
-function normalizeMetadata(value: unknown, issues: string[]): ProviderMetadata {
-  if (!isRecord(value)) return invalidMetadata(issues);
-
-  const id = normalizeString(value.id);
-  const name = normalizeString(value.name);
-  const source = normalizeMarketDataSource(value.source);
-  const mode = normalizeProviderMode(value.mode);
-  const isPaid = normalizeBoolean(value.isPaid);
-  const supportsRealtime = normalizeBoolean(value.supportsRealtime);
-  const markets = Array.isArray(value.markets)
-    ? value.markets.filter((market): market is string => typeof market === 'string' && market.trim().length > 0)
-    : null;
-
-  if (!id) issues.push('provider metadata id is invalid');
-  if (!name) issues.push('provider metadata name is invalid');
-  if (!source) issues.push('provider metadata source is invalid');
-  if (!mode) issues.push('provider metadata mode is invalid');
-  if (isPaid === null) issues.push('provider metadata isPaid is invalid');
-  if (supportsRealtime === null) issues.push('provider metadata supportsRealtime is invalid');
-  if (!markets) issues.push('provider metadata markets is invalid');
-
-  if (!id || !name || !source || !mode || isPaid === null || supportsRealtime === null || !markets) {
-    return invalidMetadata([]);
-  }
-
-  return freezeMetadata({
-    id,
-    name,
-    source,
-    mode,
-    isPaid,
-    supportsRealtime,
-    markets: markets.map((market) => market.trim()),
-  });
-}
-
-function normalizeHealth(
-  value: unknown,
-  issues: string[],
-  observedAt: string,
-  observedAtMs: number,
-): ProviderHealth {
-  if (!isRecord(value)) return invalidHealth(issues, observedAt);
-
-  const status = normalizeProviderHealthStatus(value.status);
-  const checkedAt = normalizeTimestamp(value.checkedAt);
-  const latencyMs = value.latencyMs === undefined ? undefined : normalizeNonNegativeFinite(value.latencyMs);
-  const message = value.message === undefined ? undefined : normalizeString(value.message);
-  const lastSuccessfulFetchAt =
-    value.lastSuccessfulFetchAt === undefined ? undefined : normalizeTimestamp(value.lastSuccessfulFetchAt);
-  const lastQuoteAt = value.lastQuoteAt === undefined ? undefined : normalizeTimestamp(value.lastQuoteAt);
-  const lastBarAt = value.lastBarAt === undefined ? undefined : normalizeTimestamp(value.lastBarAt);
-  const consecutiveFailures =
-    value.consecutiveFailures === undefined ? undefined : normalizeInteger(value.consecutiveFailures);
-  const rateLimitRemaining =
-    value.rateLimitRemaining === undefined ? undefined : normalizeInteger(value.rateLimitRemaining);
-  const rateLimitResetAt =
-    value.rateLimitResetAt === undefined ? undefined : normalizeTimestamp(value.rateLimitResetAt);
-
-  if (!status) issues.push('provider health status is invalid');
-  if (!checkedAt) issues.push('provider health checkedAt is invalid');
-  if (latencyMs === null) issues.push('provider health latencyMs is invalid');
-  if (message === null) issues.push('provider health message is invalid');
-  if (lastSuccessfulFetchAt === null) issues.push('provider health lastSuccessfulFetchAt is invalid');
-  if (lastQuoteAt === null) issues.push('provider health lastQuoteAt is invalid');
-  if (lastBarAt === null) issues.push('provider health lastBarAt is invalid');
-  if (consecutiveFailures === null || (consecutiveFailures !== undefined && consecutiveFailures < 0)) {
-    issues.push('provider health consecutiveFailures is invalid');
-  }
-  if (rateLimitRemaining === null || (rateLimitRemaining !== undefined && rateLimitRemaining < 0)) {
-    issues.push('provider health rateLimitRemaining is invalid');
-  }
-  if (rateLimitResetAt === null) issues.push('provider health rateLimitResetAt is invalid');
-
-  if (checkedAt) {
-    const checkedAtMs = Date.parse(checkedAt);
-    if (checkedAtMs > observedAtMs + MAX_CLOCK_SKEW_MS) {
-      issues.push('provider health checkedAt is implausibly in the future');
-    }
-  }
-
-  if (!status || !checkedAt) return invalidHealth([], observedAt);
-
-  return freezeHealth({
-    status,
-    checkedAt,
-    ...(latencyMs !== undefined && latencyMs !== null ? { latencyMs } : {}),
-    ...(message !== undefined && message !== null ? { message } : {}),
-    ...(lastSuccessfulFetchAt !== undefined && lastSuccessfulFetchAt !== null ? { lastSuccessfulFetchAt } : {}),
-    ...(lastQuoteAt !== undefined && lastQuoteAt !== null ? { lastQuoteAt } : {}),
-    ...(lastBarAt !== undefined && lastBarAt !== null ? { lastBarAt } : {}),
-    ...(consecutiveFailures !== undefined && consecutiveFailures !== null ? { consecutiveFailures } : {}),
-    ...(rateLimitRemaining !== undefined && rateLimitRemaining !== null ? { rateLimitRemaining } : {}),
-    ...(rateLimitResetAt !== undefined && rateLimitResetAt !== null ? { rateLimitResetAt } : {}),
-  });
-}
-
-export async function observeProviderHealth(
+/**
+ * Capture one canonical health snapshot for any provider crossing an external
+ * system boundary. Callers may inject an already captured health payload when
+ * coordinating multiple status decisions at the same instant; the payload is
+ * still normalized by engine-owned health semantics.
+ */
+export async function getProviderHealthSnapshot(
   provider: HealthCheckedProvider,
+  healthSnapshot?: ProviderHealth,
   nowMs: number = Date.now(),
 ): Promise<ProviderHealthSnapshot> {
   const observationClock = normalizeObservationClock(nowMs);
-  const observedAt = new Date(observationClock.nowMs).toISOString();
-  const issues: string[] = [];
+  const isProviderObject = Boolean(provider) && typeof provider === 'object' && !Array.isArray(provider);
+  const runtimeProvider = (isProviderObject ? provider : {}) as Partial<HealthCheckedProvider> & {
+    metadata?: unknown;
+    getHealth?: unknown;
+  };
+  const hasHealthCheck = typeof runtimeProvider.getHealth === 'function';
+  const capturedMetadata = snapshotProviderMetadata(runtimeProvider.metadata as ProviderMetadata);
+  const hasInjectedHealthSnapshot = healthSnapshot !== undefined;
 
-  if (!observationClock.valid) {
-    issues.push('provider health observation clock is invalid');
+  let health = hasInjectedHealthSnapshot
+    ? normalizeProviderHealth(healthSnapshot as ProviderHealth, nowMs)
+    : hasHealthCheck
+      ? await captureProviderHealth(provider, nowMs)
+      : normalizeProviderHealth(
+          {
+            status: 'UNAVAILABLE',
+            checkedAt: new Date(observationClock.nowMs).toISOString(),
+            message: 'Provider contract is malformed; expected an object with getHealth().',
+          },
+          nowMs,
+        );
+
+  if (!isProviderObject || !hasHealthCheck) {
+    health = failHealthClosed(
+      health,
+      'Invalid provider root contract; failing closed as UNAVAILABLE.',
+    );
   }
 
-  let metadataValue: unknown;
-  try {
-    metadataValue = provider?.getMetadata?.();
-  } catch {
-    metadataValue = undefined;
-    issues.push('provider metadata read failed');
+  if (capturedMetadata.issues.length > 0) {
+    health = failHealthClosed(
+      health,
+      `Invalid provider metadata fields: ${capturedMetadata.issues.join(', ')}; failing closed as UNAVAILABLE.`,
+    );
   }
-  const metadata = normalizeMetadata(metadataValue, issues);
 
-  let healthValue: unknown;
-  try {
-    healthValue = await provider?.getHealth?.();
-  } catch {
-    healthValue = undefined;
-    issues.push('provider health read failed');
-  }
-  const health = normalizeHealth(healthValue, issues, observedAt, observationClock.nowMs);
-
-  const contractIssues = freezeArray(issues);
   return Object.freeze({
-    metadata,
-    health,
-    observedAt,
-    observationClockValid: observationClock.valid,
-    contractValid: contractIssues.length === 0,
-    contractIssues,
+    metadata: capturedMetadata.metadata,
+    health: snapshotProviderHealth(health),
+    capturedAt: new Date(observationClock.nowMs).toISOString(),
   });
-}
-
-export function providerHealthAgeMs(snapshot: ProviderHealthSnapshot, nowMs: number = Date.now()): number | null {
-  const now = normalizeObservationClock(nowMs);
-  if (!now.valid) return null;
-  const checkedAtMs = Date.parse(snapshot.health.checkedAt);
-  if (!Number.isFinite(checkedAtMs)) return null;
-  return Math.max(0, now.nowMs - checkedAtMs);
-}
-
-export function providerLastDataAgeMs(
-  snapshot: ProviderHealthSnapshot,
-  nowMs: number = Date.now(),
-): number | null {
-  const now = normalizeObservationClock(nowMs);
-  if (!now.valid) return null;
-  const candidates = [
-    snapshot.health.lastQuoteAt,
-    snapshot.health.lastBarAt,
-    snapshot.health.lastSuccessfulFetchAt,
-  ]
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => Date.parse(value))
-    .filter((value) => Number.isFinite(value));
-  if (candidates.length === 0) return null;
-  return Math.max(0, now.nowMs - Math.max(...candidates));
-}
-
-export function providerRateLimitResetMs(
-  snapshot: ProviderHealthSnapshot,
-  nowMs: number = Date.now(),
-): number | null {
-  const now = normalizeObservationClock(nowMs);
-  if (!now.valid || !snapshot.health.rateLimitResetAt) return null;
-  const resetAtMs = Date.parse(snapshot.health.rateLimitResetAt);
-  if (!Number.isFinite(resetAtMs)) return null;
-  return Math.max(0, resetAtMs - now.nowMs);
-}
-
-export function providerLatencyMs(snapshot: ProviderHealthSnapshot): number | null {
-  return normalizeNonNegativeFinite(snapshot.health.latencyMs);
-}
-
-export function providerFailureCount(snapshot: ProviderHealthSnapshot): number | null {
-  const value = normalizeInteger(snapshot.health.consecutiveFailures);
-  return value !== null && value >= 0 ? value : null;
-}
-
-export function providerRateLimitRemaining(snapshot: ProviderHealthSnapshot): number | null {
-  const value = normalizeInteger(snapshot.health.rateLimitRemaining);
-  return value !== null && value >= 0 ? value : null;
-}
-
-export function providerSupportsRealtime(snapshot: ProviderHealthSnapshot): boolean {
-  return snapshot.metadata.supportsRealtime && snapshot.metadata.mode === 'REALTIME';
-}
-
-export function providerIsPaid(snapshot: ProviderHealthSnapshot): boolean {
-  return snapshot.metadata.isPaid;
-}
-
-export function providerContractValid(snapshot: ProviderHealthSnapshot): boolean {
-  return snapshot.contractValid && snapshot.observationClockValid;
-}
-
-export function providerHealthy(snapshot: ProviderHealthSnapshot): boolean {
-  return providerContractValid(snapshot) && snapshot.health.status === 'HEALTHY';
-}
-
-export function providerUsable(snapshot: ProviderHealthSnapshot): boolean {
-  return providerContractValid(snapshot) && ['HEALTHY', 'DEGRADED'].includes(snapshot.health.status);
-}
-
-export function providerHasMarket(snapshot: ProviderHealthSnapshot, market: string): boolean {
-  return snapshot.metadata.markets.includes(market);
-}
-
-export function providerSource(snapshot: ProviderHealthSnapshot): MarketDataSource {
-  return snapshot.metadata.source;
-}
-
-export function providerMode(snapshot: ProviderHealthSnapshot): ProviderMode {
-  return snapshot.metadata.mode;
-}
-
-export function providerStatus(snapshot: ProviderHealthSnapshot): ProviderHealthStatus {
-  return snapshot.health.status;
-}
-
-export function providerName(snapshot: ProviderHealthSnapshot): string {
-  return snapshot.metadata.name;
-}
-
-export function providerId(snapshot: ProviderHealthSnapshot): string {
-  return snapshot.metadata.id;
-}
-
-export function providerMessage(snapshot: ProviderHealthSnapshot): string | null {
-  return normalizeString(snapshot.health.message);
-}
-
-export function providerHealthCheckedAt(snapshot: ProviderHealthSnapshot): string {
-  return snapshot.health.checkedAt;
-}
-
-export function providerObservedAt(snapshot: ProviderHealthSnapshot): string {
-  return snapshot.observedAt;
-}
-
-export function providerHealthContractIssues(snapshot: ProviderHealthSnapshot): readonly string[] {
-  return snapshot.contractIssues;
-}
-
-export function providerHealthSnapshotSummary(snapshot: ProviderHealthSnapshot): string {
-  const issueSuffix = snapshot.contractIssues.length > 0 ? `; issues=${snapshot.contractIssues.join(', ')}` : '';
-  return `${snapshot.metadata.id}:${snapshot.health.status}:${snapshot.metadata.mode}${issueSuffix}`;
-}
-
-export function providerHealthFreshWithin(
-  snapshot: ProviderHealthSnapshot,
-  maxAgeMs: number,
-  nowMs: number = Date.now(),
-): boolean {
-  const threshold = normalizePositiveFinite(maxAgeMs);
-  const age = providerHealthAgeMs(snapshot, nowMs);
-  return threshold !== null && age !== null && age <= threshold;
-}
-
-export function providerDataFreshWithin(
-  snapshot: ProviderHealthSnapshot,
-  maxAgeMs: number,
-  nowMs: number = Date.now(),
-): boolean {
-  const threshold = normalizePositiveFinite(maxAgeMs);
-  const age = providerLastDataAgeMs(snapshot, nowMs);
-  return threshold !== null && age !== null && age <= threshold;
 }
