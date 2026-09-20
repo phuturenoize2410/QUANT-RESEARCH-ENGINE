@@ -4,6 +4,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SRC = path.join(ROOT, 'src');
 const UI_ROOTS = [
+  path.join(SRC, 'main.tsx'),
   path.join(SRC, 'App.tsx'),
   ...['components', 'pages', 'views'].map((name) => path.join(SRC, name)),
 ];
@@ -56,5 +57,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI provider boundary smoke: PASS (${uiFiles.length} UI source files including the application shell; no direct concrete provider/health imports)`,
+  `UI provider boundary smoke: PASS (${uiFiles.length} UI source files including bootstrap/application shells; no direct concrete provider/health imports)`,
 );
