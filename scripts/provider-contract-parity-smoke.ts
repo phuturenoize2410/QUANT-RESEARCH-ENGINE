@@ -19,7 +19,10 @@ for (const name of sharedContracts) {
     throw new Error(`providerContracts.ts must remain the authoritative owner of ${name}.`);
   }
 
-  const duplicateDeclaration = new RegExp(`export\\s+(?:type|interface)\\s+${name}\\b`);
+  // A private/local duplicate is just as dangerous as an exported duplicate: it
+  // lets concrete adapters drift from the canonical provenance/health vocabulary
+  // while appearing compliant at the module boundary. Forbid either form.
+  const duplicateDeclaration = new RegExp(`(?:^|\\n)\\s*(?:export\\s+)?(?:type|interface)\\s+${name}\\b`);
   if (duplicateDeclaration.test(providers)) {
     throw new Error(
       `Concrete DataProvider boundary redeclared ${name}. Import/re-export provider-neutral contracts from providerContracts.ts instead of creating a second vocabulary.`,
@@ -68,4 +71,4 @@ for (const name of sharedContracts) {
   }
 }
 
-console.log('Provider contract ownership passed: providerContracts.ts is authoritative and remains type-only, while dataProviders.ts consumes/re-exports the complete shared provenance, capability and health vocabulary through type-only boundaries.');
+console.log('Provider contract ownership passed: providerContracts.ts is authoritative and remains type-only, while dataProviders.ts consumes/re-exports the complete shared provenance, capability and health vocabulary through type-only boundaries without local duplicate declarations.');
