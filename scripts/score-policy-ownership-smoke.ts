@@ -31,6 +31,10 @@ for (const path of sourceFiles) {
     [/Math\.max\(\s*0\s*,\s*Math\.min\(\s*100\s*,/g, 'inline 0-100 score clamp'],
     [/Math\.min\(\s*99\s*,\s*Math\.max\(\s*1\s*,/g, 'inline overnight score clamp'],
     [/Math\.max\(\s*1\s*,\s*Math\.min\(\s*99\s*,/g, 'inline overnight score clamp'],
+    [/Math\.min\(\s*100\s*,\s*Math\.max\(\s*5\s*,/g, 'inline established score clamp'],
+    [/Math\.max\(\s*5\s*,\s*Math\.min\(\s*100\s*,/g, 'inline established score clamp'],
+    [/Math\.min\(\s*100\s*,\s*Math\.max\(\s*10\s*,/g, 'inline research robustness score clamp'],
+    [/Math\.max\(\s*10\s*,\s*Math\.min\(\s*100\s*,/g, 'inline research robustness score clamp'],
   ];
 
   for (const [pattern, label] of forbiddenPatterns) {
