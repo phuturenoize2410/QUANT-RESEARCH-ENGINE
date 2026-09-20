@@ -1,4 +1,4 @@
-import { MarketId } from './market/marketAdapter';
+import type { MarketId } from './market/marketAdapter';
 
 /**
  * Provider-neutral evidence contracts shared across engine stages.
