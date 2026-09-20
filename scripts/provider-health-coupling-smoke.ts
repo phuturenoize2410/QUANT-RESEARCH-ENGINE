@@ -6,25 +6,43 @@ const HEALTH_PATH = path.join(ROOT, 'src', 'engine', 'providerHealth.ts');
 const source = fs.readFileSync(HEALTH_PATH, 'utf8');
 
 // providerHealth is a vendor-neutral normalization/status boundary. It should
-// ultimately depend only on providerContracts, not concrete market-data adapters.
+// ultimately depend only on providerContracts, not concrete provider machinery.
 // One legacy import from dataProviders currently remains; freeze that debt so it
 // cannot spread while the contract seam is migrated incrementally.
-const concreteProviderRefs = [
-  ...source.matchAll(/(?:from\s+['"]\.\/dataProviders['"]|import\s*\(\s*['"]\.\/dataProviders['"]\s*\)|require\s*\(\s*['"]\.\/dataProviders['"]\s*\))/g),
-];
+const CONCRETE_PROVIDER_MODULES = [
+  'dataProviders',
+  'providerPolicy',
+  'providerGate',
+  'providerCache',
+] as const;
 
-const LEGACY_COUPLING_BUDGET = 1;
-if (concreteProviderRefs.length > LEGACY_COUPLING_BUDGET) {
+function moduleRefs(moduleName: string): RegExpMatchArray[] {
+  const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `(?:from\\s+['\"]\\./${escaped}['\"]|import\\s*\\(\\s*['\"]\\./${escaped}['\"]\\s*\\)|require\\s*\\(\\s*['\"]\\./${escaped}['\"]\\s*\\))`,
+    'g',
+  );
+  return [...source.matchAll(pattern)];
+}
+
+const refsByModule = new Map(
+  CONCRETE_PROVIDER_MODULES.map((moduleName) => [moduleName, moduleRefs(moduleName)]),
+);
+const dataProviderRefs = refsByModule.get('dataProviders') ?? [];
+const LEGACY_DATA_PROVIDER_COUPLING_BUDGET = 1;
+
+if (dataProviderRefs.length > LEGACY_DATA_PROVIDER_COUPLING_BUDGET) {
   throw new Error(
-    `providerHealth.ts concrete-provider coupling increased: ${concreteProviderRefs.length} references (budget ${LEGACY_COUPLING_BUDGET}). ` +
-      'Provider health/status logic must not accumulate dependencies on concrete adapters.',
+    `providerHealth.ts dataProviders coupling increased: ${dataProviderRefs.length} references ` +
+      `(budget ${LEGACY_DATA_PROVIDER_COUPLING_BUDGET}). Provider health/status logic must not accumulate ` +
+      'dependencies on concrete adapters.',
   );
 }
 
-if (concreteProviderRefs.length < LEGACY_COUPLING_BUDGET) {
+if (dataProviderRefs.length < LEGACY_DATA_PROVIDER_COUPLING_BUDGET) {
   throw new Error(
-    `providerHealth.ts concrete-provider coupling debt fell to ${concreteProviderRefs.length}; ` +
-      'remove or lower LEGACY_COUPLING_BUDGET so the architecture ratchet cannot regress.',
+    `providerHealth.ts dataProviders coupling debt fell to ${dataProviderRefs.length}; ` +
+      'lower the legacy budget so the architecture ratchet cannot regress.',
   );
 }
 
@@ -34,4 +52,17 @@ if (!source.includes("from './dataProviders'")) {
   );
 }
 
-console.log('provider health coupling smoke: PASS (legacy concrete-provider debt locked at 1)');
+for (const moduleName of CONCRETE_PROVIDER_MODULES) {
+  if (moduleName === 'dataProviders') continue;
+  const refs = refsByModule.get(moduleName) ?? [];
+  if (refs.length > 0) {
+    throw new Error(
+      `providerHealth.ts must not depend on concrete ${moduleName} machinery; found ${refs.length} reference(s). ` +
+        'Keep health normalization provider-neutral and move adapter/readiness behavior behind its owning boundary.',
+    );
+  }
+}
+
+console.log(
+  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; other concrete provider coupling forbidden)',
+);
