@@ -20,10 +20,10 @@ const CONCRETE_PROVIDER_MODULES = [
 function moduleRefs(moduleName: string): RegExpMatchArray[] {
   const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Treat explicit TypeScript/JavaScript extensions as the same architectural
-  // dependency. Cover local, parent-traversal and common src/engine alias forms,
-  // plus side-effect imports and re-exports, so path spelling cannot bypass the
-  // provider-health architecture boundary.
-  const moduleSpecifier = `(?:\\./${escaped}|\\.\\./engine/${escaped}|@/engine/${escaped}|src/engine/${escaped})(?:\\.(?:ts|tsx|js|jsx))?`;
+  // dependency. Cover local, parent-traversal and the alias forms used by common
+  // Vite/TypeScript configurations so path spelling cannot bypass the neutral
+  // provider-health boundary. Side-effect imports and re-exports are included too.
+  const moduleSpecifier = `(?:\\./${escaped}|\\.\\./engine/${escaped}|@/engine/${escaped}|@engine/${escaped}|~/engine/${escaped}|src/engine/${escaped}|/src/engine/${escaped})(?:\\.(?:ts|tsx|js|jsx))?`;
   const pattern = new RegExp(
     `(?:from\\s+['\"]${moduleSpecifier}['\"]|import\\s+['\"]${moduleSpecifier}['\"]|import\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\)|require\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\))`,
     'g',
@@ -70,5 +70,5 @@ for (const moduleName of CONCRETE_PROVIDER_MODULES) {
 }
 
 console.log(
-  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; policy/readiness/gate/cache coupling forbidden across local, traversal and alias paths plus static, side-effect, re-export, dynamic and require forms)',
+  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; policy/readiness/gate/cache coupling forbidden across local, traversal and common alias paths plus static, side-effect, re-export, dynamic and require forms)',
 );
