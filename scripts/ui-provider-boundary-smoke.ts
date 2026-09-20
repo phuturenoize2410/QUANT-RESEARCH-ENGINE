@@ -3,7 +3,10 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const SRC = path.join(ROOT, 'src');
-const UI_ROOTS = ['components', 'pages', 'views'].map((name) => path.join(SRC, name));
+const UI_ROOTS = [
+  path.join(SRC, 'App.tsx'),
+  ...['components', 'pages', 'views'].map((name) => path.join(SRC, name)),
+];
 
 const FORBIDDEN_ENGINE_MODULES = [
   'dataProviders',
@@ -15,10 +18,13 @@ const FORBIDDEN_ENGINE_MODULES = [
   'providerCache',
 ] as const;
 
-function sourceFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
+function sourceFiles(target: string): string[] {
+  if (!fs.existsSync(target)) return [];
+  const stat = fs.statSync(target);
+  if (stat.isFile()) return /\.(?:ts|tsx|js|jsx)$/.test(target) ? [target] : [];
+
+  return fs.readdirSync(target, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(target, entry.name);
     if (entry.isDirectory()) return sourceFiles(full);
     return /\.(?:ts|tsx|js|jsx)$/.test(entry.name) ? [full] : [];
   });
@@ -50,5 +56,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI provider boundary smoke: PASS (${uiFiles.length} UI source files; no direct concrete provider/health imports)`,
+  `UI provider boundary smoke: PASS (${uiFiles.length} UI source files including the application shell; no direct concrete provider/health imports)`,
 );
