@@ -4,37 +4,42 @@ import { resolve } from 'node:path';
 const contracts = readFileSync(resolve(process.cwd(), 'src/engine/providerContracts.ts'), 'utf8');
 const providers = readFileSync(resolve(process.cwd(), 'src/engine/dataProviders.ts'), 'utf8');
 
-const sharedTypeAliases = ['MarketDataSource', 'ProviderMode', 'ProviderHealthStatus'] as const;
-const sharedInterfaces = ['ProviderMetadata', 'ProviderHealth', 'HealthCheckedProvider'] as const;
+const sharedContracts = [
+  'MarketDataSource',
+  'ProviderMode',
+  'ProviderHealthStatus',
+  'ProviderMetadata',
+  'ProviderHealth',
+  'HealthCheckedProvider',
+] as const;
 
-function normalize(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '').replace(/\s+/g, ' ').trim();
+for (const name of sharedContracts) {
+  const authoritativeDeclaration = new RegExp(`export\\s+(?:type|interface)\\s+${name}\\b`);
+  if (!authoritativeDeclaration.test(contracts)) {
+    throw new Error(`providerContracts.ts must remain the authoritative owner of ${name}.`);
+  }
+
+  const duplicateDeclaration = new RegExp(`export\\s+(?:type|interface)\\s+${name}\\b`);
+  if (duplicateDeclaration.test(providers)) {
+    throw new Error(
+      `Concrete DataProvider boundary redeclared ${name}. Import/re-export provider-neutral contracts from providerContracts.ts instead of creating a second vocabulary.`,
+    );
+  }
 }
 
-function typeAlias(source: string, name: string): string {
-  const match = source.match(new RegExp(`export\\s+type\\s+${name}\\s*=([\\s\\S]*?);`));
-  if (!match) throw new Error(`Provider contract parity cannot find type ${name}.`);
-  return normalize(match[1]);
+if (!/from\s+['"]\.\/providerContracts['"]/.test(providers)) {
+  throw new Error('dataProviders.ts must consume provider-neutral contracts from providerContracts.ts.');
 }
 
-function interfaceBody(source: string, name: string): string {
-  const match = source.match(new RegExp(`export\\s+interface\\s+${name}(?:\\s+extends\\s+[^\\{]+)?\\s*\\{([\\s\\S]*?)\\n\\}`));
-  if (!match) throw new Error(`Provider contract parity cannot find interface ${name}.`);
-  return normalize(match[1]);
+const reexportBlock = providers.match(/export\s+type\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/providerContracts['"]/);
+if (!reexportBlock) {
+  throw new Error('dataProviders.ts must retain a type-only compatibility re-export from providerContracts.ts while downstream imports migrate.');
 }
 
-const drift: string[] = [];
-for (const name of sharedTypeAliases) {
-  if (typeAlias(contracts, name) !== typeAlias(providers, name)) drift.push(name);
-}
-for (const name of sharedInterfaces) {
-  if (interfaceBody(contracts, name) !== interfaceBody(providers, name)) drift.push(name);
+for (const name of sharedContracts) {
+  if (!new RegExp(`\\b${name}\\b`).test(reexportBlock[1])) {
+    throw new Error(`Compatibility re-export is missing ${name}.`);
+  }
 }
 
-if (drift.length > 0) {
-  throw new Error(
-    `Provider-neutral contracts drifted from the concrete DataProvider boundary: ${drift.join(', ')}. Keep provenance/health semantics identical while the legacy declarations are migrated to imports/re-exports from providerContracts.ts. Future Google Finance/free/paid adapters must not create a second contract vocabulary.`,
-  );
-}
-
-console.log('Provider contract parity passed: shared provider provenance and health contracts remain identical across the neutral contract seam and concrete DataProvider boundary.');
+console.log('Provider contract ownership passed: providerContracts.ts is authoritative and dataProviders.ts only consumes/re-exports the shared provenance and health vocabulary.');
