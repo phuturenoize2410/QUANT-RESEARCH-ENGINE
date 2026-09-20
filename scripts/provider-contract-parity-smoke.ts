@@ -49,9 +49,11 @@ if (valueImportFromContracts || runtimeContractLoad) {
   );
 }
 
-for (const name of ['HealthCheckedProvider', 'MarketDataSource', 'ProviderHealth', 'ProviderMetadata'] as const) {
+for (const name of sharedContracts) {
   if (!new RegExp(`\\b${name}\\b`).test(typeImportBlock[1])) {
-    throw new Error(`Concrete DataProvider type import is missing ${name}.`);
+    throw new Error(
+      `Concrete DataProvider type import is missing ${name}. All provider-neutral provenance, capability and health contracts must be consumed from providerContracts.ts so future adapters share one authoritative vocabulary.`,
+    );
   }
 }
 
@@ -66,4 +68,4 @@ for (const name of sharedContracts) {
   }
 }
 
-console.log('Provider contract ownership passed: providerContracts.ts is authoritative and remains type-only, while dataProviders.ts consumes/re-exports the shared provenance and health vocabulary through type-only boundaries.');
+console.log('Provider contract ownership passed: providerContracts.ts is authoritative and remains type-only, while dataProviders.ts consumes/re-exports the complete shared provenance, capability and health vocabulary through type-only boundaries.');
