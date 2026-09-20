@@ -9,7 +9,7 @@ const UI_ROOTS = [
   ...['components', 'pages', 'views'].map((name) => path.join(SRC, name)),
 ];
 
-const FORBIDDEN_ENGINE_MODULES = [
+const FORBIDDEN_ENGINE_MODULES = new Set([
   'dataProviders',
   'providerContracts',
   'providerHealth',
@@ -17,7 +17,7 @@ const FORBIDDEN_ENGINE_MODULES = [
   'providerHealthPolicy',
   'providerGate',
   'providerCache',
-] as const;
+]);
 
 function sourceFiles(target: string): string[] {
   if (!fs.existsSync(target)) return [];
@@ -31,20 +31,39 @@ function sourceFiles(target: string): string[] {
   });
 }
 
+function importSpecifiers(source: string): string[] {
+  const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(
+    (match) => match[1],
+  );
+  const dynamicSpecifiers = [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(
+    (match) => match[1],
+  );
+  const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(
+    (match) => match[1],
+  );
+  return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
+}
+
+function forbiddenProviderModule(specifier: string): string | null {
+  const cleanSpecifier = specifier.split(/[?#]/, 1)[0].replace(/\\/g, '/');
+  const withoutExtension = cleanSpecifier.replace(/\.(?:ts|tsx|js|jsx)$/, '');
+  const segments = withoutExtension.split('/').filter(Boolean);
+  const engineIndex = segments.lastIndexOf('engine');
+  if (engineIndex < 0 || engineIndex === segments.length - 1) return null;
+
+  const moduleName = segments[engineIndex + 1];
+  return FORBIDDEN_ENGINE_MODULES.has(moduleName) ? moduleName : null;
+}
+
 const uiFiles = UI_ROOTS.flatMap(sourceFiles);
 const violations: string[] = [];
 
 for (const file of uiFiles) {
   const source = fs.readFileSync(file, 'utf8');
-  for (const moduleName of FORBIDDEN_ENGINE_MODULES) {
-    const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const moduleSpecifier = `(?:[^'\"]*/engine/${escaped}|@/engine/${escaped}|@engine/${escaped}|~/engine/${escaped}|src/engine/${escaped}|/src/engine/${escaped})(?:\\.(?:ts|tsx|js|jsx))?`;
-    const pattern = new RegExp(
-      `(?:from\\s+['\"]${moduleSpecifier}['\"]|import\\s+['\"]${moduleSpecifier}['\"]|import\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\)|require\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\))`,
-      'g',
-    );
-    if (pattern.test(source)) {
-      violations.push(`${path.relative(ROOT, file)} -> ${moduleName}`);
+  for (const specifier of importSpecifiers(source)) {
+    const moduleName = forbiddenProviderModule(specifier);
+    if (moduleName) {
+      violations.push(`${path.relative(ROOT, file)} -> ${specifier} (${moduleName})`);
     }
   }
 }
