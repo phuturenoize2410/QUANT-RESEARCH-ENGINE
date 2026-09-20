@@ -20,11 +20,12 @@ const CONCRETE_PROVIDER_MODULES = [
 function moduleRefs(moduleName: string): RegExpMatchArray[] {
   const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Treat explicit TypeScript/JavaScript extensions as the same architectural
-  // dependency. Without this, a future adapter could bypass the ratchet simply by
-  // changing `./providerGate` to `./providerGate.ts` (or the emitted `.js` form).
+  // dependency. Also cover side-effect imports and re-exports so a concrete
+  // provider cannot be pulled into this neutral boundary through syntax that does
+  // not use a conventional `from` import.
   const moduleSpecifier = `\\./${escaped}(?:\\.(?:ts|tsx|js|jsx))?`;
   const pattern = new RegExp(
-    `(?:from\\s+['\"]${moduleSpecifier}['\"]|import\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\)|require\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\))`,
+    `(?:from\\s+['\"]${moduleSpecifier}['\"]|import\\s+['\"]${moduleSpecifier}['\"]|import\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\)|require\\s*\\(\\s*['\"]${moduleSpecifier}['\"]\\s*\\))`,
     'g',
   );
   return [...source.matchAll(pattern)];
@@ -69,5 +70,5 @@ for (const moduleName of CONCRETE_PROVIDER_MODULES) {
 }
 
 console.log(
-  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; policy/readiness/gate/cache coupling forbidden, including explicit source extensions)',
+  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; policy/readiness/gate/cache coupling forbidden across static, side-effect, re-export, dynamic and require forms)',
 );
