@@ -27,6 +27,15 @@ for (const name of sharedContracts) {
   }
 }
 
+const marketTypeImport = /import\s+type\s*\{[^}]*\bMarketId\b[^}]*\}\s*from\s*['"]\.\/market\/marketAdapter['"]/.test(contracts);
+const marketValueImport = /import\s+(?!type\b)(?:[\s\S]*?\s+from\s+)?['"]\.\/market\/marketAdapter['"]/.test(contracts);
+const marketRuntimeLoad = /(?:\bimport\s*\(|\brequire\s*\()\s*['"]\.\/market\/marketAdapter['"]\s*\)/.test(contracts);
+if (!marketTypeImport || marketValueImport || marketRuntimeLoad) {
+  throw new Error(
+    'providerContracts.ts must consume MarketId through import type only. Provider contracts are evidence/schema declarations and must not create a runtime dependency on the market adapter implementation.',
+  );
+}
+
 const typeImportBlock = providers.match(/import\s+type\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/providerContracts['"]/);
 if (!typeImportBlock) {
   throw new Error('dataProviders.ts must consume provider-neutral contracts through an explicit type-only import from providerContracts.ts.');
@@ -57,4 +66,4 @@ for (const name of sharedContracts) {
   }
 }
 
-console.log('Provider contract ownership passed: providerContracts.ts is authoritative and dataProviders.ts consumes/re-exports the shared provenance and health vocabulary through type-only boundaries.');
+console.log('Provider contract ownership passed: providerContracts.ts is authoritative and remains type-only, while dataProviders.ts consumes/re-exports the shared provenance and health vocabulary through type-only boundaries.');
