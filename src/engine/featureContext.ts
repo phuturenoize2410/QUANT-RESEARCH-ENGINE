@@ -1,5 +1,5 @@
 import { StockData } from '../types';
-import { ProviderMode } from './dataProviders';
+import { ProviderMode } from './providerContracts';
 
 export type FeatureContextSource =
   | 'SIMULATED'
@@ -9,17 +9,9 @@ export type FeatureContextSource =
   | 'DERIVED';
 
 export interface MarketFeatureContext {
-  /**
-   * Canonical market-agnostic regime label consumed by feature/ML layers.
-   * Market adapters/providers may derive it from an IDX, US or future-market
-   * benchmark without coupling Quant Core to a benchmark name.
-   */
+  /** Canonical market-agnostic regime label consumed by feature/ML layers. */
   marketRegime: string;
-  /**
-   * @deprecated IDX compatibility alias. New providers and core consumers should
-   * use marketRegime. Kept temporarily so existing prototype/UI code can migrate
-   * incrementally without a big-bang rewrite.
-   */
+  /** @deprecated IDX compatibility alias. Prefer marketRegime. */
   ihsgRegime?: string;
   marketBreadthPctAboveMa20: number;
   marketVolatilityIndex: number;
@@ -59,22 +51,14 @@ const DEFAULT_FUNDAMENTALS: FundamentalFeatureSnapshot = {
 };
 
 const FUNDAMENTAL_NUMERIC_FIELDS = [
-  'revenueGrowthYoy',
-  'netMarginPct',
-  'roePct',
-  'pbvRatio',
-  'peRatio',
+  'revenueGrowthYoy', 'netMarginPct', 'roePct', 'pbvRatio', 'peRatio',
 ] as const;
 
 export class FeatureContextCoverageError extends Error {
   readonly ticker: string;
   readonly invalidFields: readonly string[];
-
   constructor(ticker: string, invalidFields: readonly string[]) {
-    super(
-      `Feature context rejected ${ticker}: missing or invalid contextual field(s): ` +
-      `${invalidFields.join(', ')}.`,
-    );
+    super(`Feature context rejected ${ticker}: missing or invalid contextual field(s): ${invalidFields.join(', ')}.`);
     this.name = 'FeatureContextCoverageError';
     this.ticker = ticker;
     this.invalidFields = Object.freeze([...invalidFields]);
@@ -85,123 +69,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Transitional accessor for legacy consumers. Keeping alias resolution at the
- * feature-context boundary prevents benchmark-specific naming from spreading
- * further through strategy, ML, risk/execution or UI code.
- */
 export function getMarketRegime(context: FeatureContext): string {
   return context.market.marketRegime || context.market.ihsgRegime || 'UNKNOWN';
 }
 
-/**
- * Prototype-only contextual inputs. Keeping these assumptions outside FeatureStore
- * makes the feature engine provider-agnostic and prevents simulated market/fundamental
- * values from being mistaken for measurements supplied by a live data vendor.
- */
-export function createPrototypeFeatureContext(
-  universe: StockData[],
-  asOfTimestamp: string = '15:45 WIB',
-): FeatureContext {
+/** Prototype-only contextual inputs; all assumptions remain explicitly simulated. */
+export function createPrototypeFeatureContext(universe: StockData[], asOfTimestamp: string = '15:45 WIB'): FeatureContext {
   const fundamentalsByTicker: Record<string, FundamentalFeatureSnapshot> = {};
-
-  for (const stock of universe) {
-    fundamentalsByTicker[stock.ticker] = { ...DEFAULT_FUNDAMENTALS };
-  }
-
-  fundamentalsByTicker.BBCA = {
-    revenueGrowthYoy: 14.2,
-    netMarginPct: 38.0,
-    roePct: 22.1,
-    pbvRatio: 4.8,
-    peRatio: 22.5,
-  };
-  fundamentalsByTicker.BRIS = {
-    revenueGrowthYoy: 21.5,
-    netMarginPct: 24.5,
-    roePct: 17.8,
-    pbvRatio: 2.9,
-    peRatio: 19.8,
-  };
-  fundamentalsByTicker.ADRO = {
-    revenueGrowthYoy: 18.0,
-    netMarginPct: 28.0,
-    roePct: 25.4,
-    pbvRatio: 1.2,
-    peRatio: 8.5,
-  };
-
+  for (const stock of universe) fundamentalsByTicker[stock.ticker] = { ...DEFAULT_FUNDAMENTALS };
+  fundamentalsByTicker.BBCA = { revenueGrowthYoy: 14.2, netMarginPct: 38.0, roePct: 22.1, pbvRatio: 4.8, peRatio: 22.5 };
+  fundamentalsByTicker.BRIS = { revenueGrowthYoy: 21.5, netMarginPct: 24.5, roePct: 17.8, pbvRatio: 2.9, peRatio: 19.8 };
+  fundamentalsByTicker.ADRO = { revenueGrowthYoy: 18.0, netMarginPct: 28.0, roePct: 25.4, pbvRatio: 1.2, peRatio: 8.5 };
   return {
-    asOfTimestamp,
-    mode: 'MOCK',
-    isSimulated: true,
+    asOfTimestamp, mode: 'MOCK', isSimulated: true,
     market: {
-      marketRegime: 'BULLISH TREND ACCUMULATION',
-      ihsgRegime: 'BULLISH TREND ACCUMULATION',
-      marketBreadthPctAboveMa20: 68,
-      marketVolatilityIndex: 14.8,
-      sectorRelativeStrength: {
-        Banking: 82,
-        Energy: 82,
-        'Basic Materials': 76,
-      },
-      sectorMomentumRank: {
-        Banking: 1,
-        Energy: 2,
-      },
+      marketRegime: 'BULLISH TREND ACCUMULATION', ihsgRegime: 'BULLISH TREND ACCUMULATION',
+      marketBreadthPctAboveMa20: 68, marketVolatilityIndex: 14.8,
+      sectorRelativeStrength: { Banking: 82, Energy: 82, 'Basic Materials': 76 },
+      sectorMomentumRank: { Banking: 1, Energy: 2 },
     },
     fundamentalsByTicker,
-    sources: {
-      market: 'SIMULATED',
-      sector: 'SIMULATED',
-      broker: 'SIMULATED',
-      fundamental: 'SIMULATED',
-    },
+    sources: { market: 'SIMULATED', sector: 'SIMULATED', broker: 'SIMULATED', fundamental: 'SIMULATED' },
   };
 }
 
-/**
- * Fundamental context is allowed to use prototype defaults only in explicit MOCK
- * mode. Real/free/paid provider paths must provide ticker-level coverage instead of
- * silently inheriting simulated assumptions that could contaminate a backtest.
- *
- * FeatureContextFactory implementations are external/runtime boundaries despite
- * their TypeScript types. Validate the fundamentals root and ticker snapshot here
- * so malformed adapters fail with a deterministic contract error rather than a raw
- * property-access TypeError inside the Feature Engine.
- */
-export function getFundamentalSnapshot(
-  context: FeatureContext,
-  ticker: string,
-): FundamentalFeatureSnapshot {
-  const fundamentalsRoot = (context as unknown as { fundamentalsByTicker?: unknown })
-    .fundamentalsByTicker;
-
-  if (!isRecord(fundamentalsRoot)) {
-    throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker(root)']);
-  }
-
+export function getFundamentalSnapshot(context: FeatureContext, ticker: string): FundamentalFeatureSnapshot {
+  const fundamentalsRoot = (context as unknown as { fundamentalsByTicker?: unknown }).fundamentalsByTicker;
+  if (!isRecord(fundamentalsRoot)) throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker(root)']);
   const snapshot: unknown = fundamentalsRoot[ticker];
-
   if (snapshot === undefined) {
     if (context.mode === 'MOCK') return DEFAULT_FUNDAMENTALS;
     throw new FeatureContextCoverageError(ticker, ['fundamentalsByTicker']);
   }
-
-  if (!isRecord(snapshot)) {
-    throw new FeatureContextCoverageError(ticker, [`fundamentalsByTicker.${ticker}(root)`]);
-  }
-
-  const invalidFields = FUNDAMENTAL_NUMERIC_FIELDS.filter(
-    field => typeof snapshot[field] !== 'number' || !Number.isFinite(snapshot[field]),
-  );
-
-  if (invalidFields.length > 0) {
-    throw new FeatureContextCoverageError(
-      ticker,
-      invalidFields.map(field => `fundamentalsByTicker.${ticker}.${field}`),
-    );
-  }
-
+  if (!isRecord(snapshot)) throw new FeatureContextCoverageError(ticker, [`fundamentalsByTicker.${ticker}(root)`]);
+  const invalidFields = FUNDAMENTAL_NUMERIC_FIELDS.filter(field => typeof snapshot[field] !== 'number' || !Number.isFinite(snapshot[field]));
+  if (invalidFields.length > 0) throw new FeatureContextCoverageError(ticker, invalidFields.map(field => `fundamentalsByTicker.${ticker}.${field}`));
   return snapshot as unknown as FundamentalFeatureSnapshot;
 }
