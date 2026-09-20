@@ -12,6 +12,7 @@ const source = fs.readFileSync(HEALTH_PATH, 'utf8');
 const CONCRETE_PROVIDER_MODULES = [
   'dataProviders',
   'providerPolicy',
+  'providerHealthPolicy',
   'providerGate',
   'providerCache',
 ] as const;
@@ -58,11 +59,11 @@ for (const moduleName of CONCRETE_PROVIDER_MODULES) {
   if (refs.length > 0) {
     throw new Error(
       `providerHealth.ts must not depend on concrete ${moduleName} machinery; found ${refs.length} reference(s). ` +
-        'Keep health normalization provider-neutral and move adapter/readiness behavior behind its owning boundary.',
+        'Keep health normalization provider-neutral and keep readiness/policy/cache behavior behind its owning boundary.',
     );
   }
 }
 
 console.log(
-  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; other concrete provider coupling forbidden)',
+  'provider health coupling smoke: PASS (legacy dataProviders debt locked at 1; policy/readiness/gate/cache coupling forbidden)',
 );
