@@ -27,8 +27,23 @@ for (const name of sharedContracts) {
   }
 }
 
-if (!/from\s+['"]\.\/providerContracts['"]/.test(providers)) {
-  throw new Error('dataProviders.ts must consume provider-neutral contracts from providerContracts.ts.');
+const typeImportBlock = providers.match(/import\s+type\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/providerContracts['"]/);
+if (!typeImportBlock) {
+  throw new Error('dataProviders.ts must consume provider-neutral contracts through an explicit type-only import from providerContracts.ts.');
+}
+
+const valueImportFromContracts = /import\s+(?!type\b)(?:[\s\S]*?\s+from\s+)?['"]\.\/providerContracts['"]/.test(providers);
+const runtimeContractLoad = /(?:\bimport\s*\(|\brequire\s*\()\s*['"]\.\/providerContracts['"]\s*\)/.test(providers);
+if (valueImportFromContracts || runtimeContractLoad) {
+  throw new Error(
+    'providerContracts.ts is a contract-only seam. Concrete providers must not create a runtime dependency on it; use import type so future provider adapters remain implementation-neutral.',
+  );
+}
+
+for (const name of ['HealthCheckedProvider', 'MarketDataSource', 'ProviderHealth', 'ProviderMetadata'] as const) {
+  if (!new RegExp(`\\b${name}\\b`).test(typeImportBlock[1])) {
+    throw new Error(`Concrete DataProvider type import is missing ${name}.`);
+  }
 }
 
 const reexportBlock = providers.match(/export\s+type\s*\{([\s\S]*?)\}\s*from\s*['"]\.\/providerContracts['"]/);
@@ -42,4 +57,4 @@ for (const name of sharedContracts) {
   }
 }
 
-console.log('Provider contract ownership passed: providerContracts.ts is authoritative and dataProviders.ts only consumes/re-exports the shared provenance and health vocabulary.');
+console.log('Provider contract ownership passed: providerContracts.ts is authoritative and dataProviders.ts consumes/re-exports the shared provenance and health vocabulary through type-only boundaries.');
