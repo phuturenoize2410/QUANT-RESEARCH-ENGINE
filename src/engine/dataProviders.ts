@@ -4,49 +4,24 @@ import { normalizeSymbol } from './market/instrumentIdentity';
 import { MarketRegime } from './market/marketRegime';
 import { normalizeProviderQuote } from './providerQuote';
 import { normalizeProviderBars } from './providerBars';
+import type {
+  HealthCheckedProvider,
+  MarketDataSource,
+  ProviderHealth,
+  ProviderMetadata,
+} from './providerContracts';
 
-export type MarketDataSource = 'MOCK_ENGINE' | 'GOOGLE_FINANCE' | 'FREE_API' | 'IDX_FEED' | 'BROKER_API';
-export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
-export type ProviderHealthStatus = 'HEALTHY' | 'DEGRADED' | 'STALE' | 'UNAVAILABLE';
-
-/**
- * Data capabilities are provider concerns, while market identity is carried
- * separately. Keeping them orthogonal avoids encoding vendor, delivery mode and
- * exchange assumptions into one enum as additional markets/providers are added.
- * Metadata is configuration evidence and must not be rewritten downstream after
- * an adapter is constructed.
- */
-export interface ProviderMetadata {
-  readonly id: string;
-  readonly name: string;
-  readonly source: MarketDataSource;
-  readonly mode: ProviderMode;
-  readonly isPaid: boolean;
-  readonly supportedMarkets: readonly MarketId[];
-  readonly supportsHistorical: boolean;
-  readonly supportsIntraday: boolean;
-  readonly supportsRealtime: boolean;
-  readonly notes?: string;
-}
-
-/**
- * Health is an observation captured at one instant, not mutable provider state.
- * Readonly fields plus frozen runtime snapshots prevent downstream application/UI
- * code from rewriting provider status evidence after the adapter boundary.
- */
-export interface ProviderHealth {
-  readonly status: ProviderHealthStatus;
-  readonly checkedAt: string;
-  readonly lastSuccessfulSyncAt?: string;
-  readonly latencyMs?: number;
-  readonly staleAfterSeconds?: number;
-  readonly message?: string;
-}
-
-export interface HealthCheckedProvider {
-  readonly metadata: ProviderMetadata;
-  getHealth(): Promise<ProviderHealth>;
-}
+// Compatibility re-export: providerContracts is the single authoritative owner.
+// Existing consumers can migrate imports incrementally without duplicating the
+// contract declarations inside concrete provider implementations.
+export type {
+  HealthCheckedProvider,
+  MarketDataSource,
+  ProviderHealth,
+  ProviderHealthStatus,
+  ProviderMetadata,
+  ProviderMode,
+} from './providerContracts';
 
 export interface MarketQuote {
   ticker: string;
