@@ -1,7 +1,7 @@
-import { StockData, DailyBar, BandarmologyData } from '../types';
-import { MarketId } from './market/marketAdapter';
+import type { StockData, DailyBar, BandarmologyData } from '../types';
+import type { MarketId } from './market/marketAdapter';
 import { normalizeSymbol } from './market/instrumentIdentity';
-import { MarketRegime } from './market/marketRegime';
+import type { MarketRegime } from './market/marketRegime';
 import { normalizeProviderQuote } from './providerQuote';
 import { normalizeProviderBars } from './providerBars';
 import type {
