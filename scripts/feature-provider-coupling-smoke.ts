@@ -11,8 +11,13 @@ function collectTypeScriptFiles(path: string): string[] {
 }
 
 function importSpecifiers(source: string): string[] {
-  return [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)]
+  const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)]
     .map(match => match[1]);
+  const dynamicSpecifiers = [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)]
+    .map(match => match[1]);
+  const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)]
+    .map(match => match[1]);
+  return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
 const featureFiles = collectTypeScriptFiles(engineRoot).filter(file => {
@@ -81,5 +86,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Feature/provider coupling smoke passed: concrete provider infrastructure is default-denied from Feature Engine; ${observedLegacyDebt.size} pre-existing type dependency/dependencies remain explicit migration debt and may only shrink.`,
+  `Feature/provider coupling smoke passed: static, dynamic and require-based concrete provider infrastructure is default-denied from Feature Engine; ${observedLegacyDebt.size} pre-existing type dependency/dependencies remain explicit migration debt and may only shrink.`,
 );
