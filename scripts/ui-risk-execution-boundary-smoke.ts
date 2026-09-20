@@ -1,12 +1,17 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const srcRoot = join(repoRoot, 'src');
-const uiRoots = [join(srcRoot, 'App.tsx'), join(srcRoot, 'components')];
+const uiRoots = [
+  join(srcRoot, 'main.tsx'),
+  join(srcRoot, 'App.tsx'),
+  ...['components', 'pages', 'views'].map(name => join(srcRoot, name)),
+];
 const applicationFacade = join(srcRoot, 'application', 'researchApplication.ts');
 
 function collectTypeScriptFiles(path: string): string[] {
+  if (!existsSync(path)) return [];
   const stat = statSync(path);
   if (stat.isFile()) return /\.(ts|tsx)$/.test(path) ? [path] : [];
 
@@ -84,5 +89,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI application-boundary smoke passed: React surfaces cannot directly import provider adapters/health policy, researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
+  `UI application-boundary smoke passed: bootstrap/application shells plus components/pages/views cannot directly import provider adapters/health policy, researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
 );
