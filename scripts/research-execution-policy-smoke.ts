@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { ProviderHealth } from '../src/engine/providerContracts';
 import { evaluateResearchExecutionEligibility } from '../src/engine/researchExecutionPolicy';
 import { assertExecutionEligible } from '../src/engine/researchPipelineStagePolicy';
 
@@ -38,6 +39,48 @@ const invalidHealthObservation = evaluateResearchExecutionEligibility({
 assert.equal(invalidHealthObservation.status, 'BLOCKED');
 assert.equal(invalidHealthObservation.executable, false);
 assert.match(invalidHealthObservation.reason, /checkedAt timestamp/);
+
+// Provider health ultimately comes from external/runtime adapters. Execution must
+// remain fail-closed even when JSON/schema drift violates the compile-time contract.
+for (const malformedProviderHealth of [null, [], 'HEALTHY'] as const) {
+  const malformedHealth = evaluateResearchExecutionEligibility({
+    ...baseEvidence,
+    providerHealth: malformedProviderHealth as unknown as ProviderHealth,
+  });
+  assert.equal(malformedHealth.status, 'BLOCKED');
+  assert.equal(malformedHealth.executable, false);
+  assert.match(malformedHealth.reason, /malformed; expected an object/);
+}
+
+const invalidRuntimeStatus = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: {
+    ...baseEvidence.providerHealth,
+    status: 'READY',
+  } as unknown as ProviderHealth,
+});
+assert.equal(invalidRuntimeStatus.status, 'BLOCKED');
+assert.match(invalidRuntimeStatus.reason, /invalid status/);
+
+const invalidRuntimeLatency = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: {
+    ...baseEvidence.providerHealth,
+    latencyMs: Number.NaN,
+  },
+});
+assert.equal(invalidRuntimeLatency.status, 'BLOCKED');
+assert.match(invalidRuntimeLatency.reason, /latencyMs must be a non-negative finite number/);
+
+const blankRuntimeMessage = evaluateResearchExecutionEligibility({
+  ...baseEvidence,
+  providerHealth: {
+    ...baseEvidence.providerHealth,
+    message: '   ',
+  },
+});
+assert.equal(blankRuntimeMessage.status, 'BLOCKED');
+assert.match(blankRuntimeMessage.reason, /message must be a non-empty string/);
 
 const missingLastSync = evaluateResearchExecutionEligibility({
   ...baseEvidence,
