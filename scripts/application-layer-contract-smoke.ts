@@ -32,21 +32,25 @@ function normalizeModuleSpecifier(specifier: string): string {
     .replace(/\.(?:ts|tsx|js|jsx)$/, '');
 }
 
+/** Match an architecture-owned path segment even when it is the first segment. */
+function hasPathSegment(specifier: string, segment: string): boolean {
+  return specifier === segment
+    || specifier.startsWith(`${segment}/`)
+    || specifier.includes(`/${segment}/`)
+    || specifier.endsWith(`/${segment}`);
+}
+
 function isPresentationDependency(specifier: string): boolean {
   const normalized = normalizeModuleSpecifier(specifier);
-  return normalized.includes('/components/')
-    || normalized.endsWith('/components')
-    || normalized.includes('/pages/')
-    || normalized.endsWith('/pages')
-    || normalized.includes('/views/')
-    || normalized.endsWith('/views')
+  return hasPathSegment(normalized, 'components')
+    || hasPathSegment(normalized, 'pages')
+    || hasPathSegment(normalized, 'views')
     || /(?:^|\/)App$/.test(normalized)
     || /(?:^|\/)main$/.test(normalized);
 }
 
 function isPrototypeDataDependency(specifier: string): boolean {
-  const normalized = normalizeModuleSpecifier(specifier);
-  return normalized.includes('/data/') || normalized.endsWith('/data');
+  return hasPathSegment(normalizeModuleSpecifier(specifier), 'data');
 }
 
 const violations: string[] = [];
@@ -67,4 +71,4 @@ if (violations.length > 0) {
   throw new Error(`Application-layer contract violations:\n- ${violations.join('\n- ')}`);
 }
 
-console.log('Application-layer contract smoke passed: application orchestration is independent from bootstrap/React presentation and direct prototype/static data modules across normalized static, re-export, dynamic and CommonJS imports; provider-backed data must enter through engine provider contracts.');
+console.log('Application-layer contract smoke passed: application orchestration is independent from bootstrap/React presentation and direct prototype/static data modules across normalized static, re-export, dynamic and CommonJS imports, including bare/root aliases; provider-backed data must enter through engine provider contracts.');
