@@ -1,5 +1,5 @@
+import type { ResearchExecutionEligibility } from '../engine/researchPipelineStagePolicy';
 import {
-  ResearchExecutionEligibility,
   assertNextResearchPipelineStage,
   createUnevaluatedExecutionEligibility,
 } from '../engine/researchPipelineStagePolicy';
