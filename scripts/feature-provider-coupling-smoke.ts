@@ -10,6 +10,15 @@ function importSpecifiers(source: string): string[] {
   const requireSpecifiers = [...source.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map(match => match[1]);
   return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
+function normalizeModuleSpecifier(specifier: string): string {
+  return specifier
+    .replaceAll('\\', '/')
+    .split(/[?#]/, 1)[0]
+    .replace(/\.(?:[cm]?[jt]sx?)$/i, '');
+}
+function hasModuleSegment(specifier: string, segment: string): boolean {
+  return normalizeModuleSpecifier(specifier).split('/').includes(segment);
+}
 const featureFiles = collectTypeScriptFiles(engineRoot).filter(file => { const normalized = file.replaceAll('\\', '/'); const name = basename(file); return /^feature.*\.ts$/i.test(name) || normalized.endsWith('/ml/featureStore.ts'); });
 
 /**
@@ -17,13 +26,21 @@ const featureFiles = collectTypeScriptFiles(engineRoot).filter(file => { const n
  * but concrete provider implementation/policy/health/cache modules are now fully
  * default-denied. Migration debt reached zero and must stay at zero.
  */
+const forbiddenProviderModules = new Set([
+  'dataProviders',
+  'providerPolicy',
+  'providerGate',
+  'providerCache',
+  'providerHealth',
+  'providerHealthPolicy',
+]);
 const violations: string[] = [];
 for (const file of featureFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
-    const isConcreteProviderImport = specifier.includes('dataProviders') || specifier.includes('providerPolicy') || specifier.includes('providerGate') || specifier.includes('providerCache') || specifier.includes('providerHealth');
+    const isConcreteProviderImport = [...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName));
     if (isConcreteProviderImport) violations.push(`${filePath} imports ${specifier}; Feature Engine must consume provider-neutral contracts/evidence instead of concrete provider infrastructure.`);
   }
 }
 if (violations.length > 0) throw new Error(`Feature/provider coupling violations:\n- ${violations.join('\n- ')}`);
-console.log('Feature/provider coupling smoke passed: static, dynamic and require-based concrete provider infrastructure is default-denied from Feature Engine; migration debt is zero.');
+console.log('Feature/provider coupling smoke passed: normalized static, dynamic and require-based concrete provider infrastructure is default-denied from Feature Engine; migration debt is zero.');
