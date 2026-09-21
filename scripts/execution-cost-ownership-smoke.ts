@@ -15,7 +15,21 @@ function collectTypeScriptFiles(path: string): string[] {
 // defaults/assumptions must have exactly one owner. This prevents a UI, strategy,
 // backtest or future provider adapter from silently creating a second execution-
 // cost truth that diverges from executionPolicy.ts.
-const numericCostAssignment = /\b(buyFeePct|sellFeePct|slippagePct)\s*:\s*(-?\d+(?:\.\d+)?)(?![\w.])/g;
+//
+// Cover both object-property literals (`buyFeePct: 0.15`) and assignment/default
+// forms (`buyFeePct = 0.15`). The latter matters because a consumer could otherwise
+// bypass the ownership gate simply by moving the same hardcoded assumption into a
+// local variable, function parameter default, or destructuring default.
+const numericCostLiteralPatterns: Array<[RegExp, string]> = [
+  [
+    /\b(buyFeePct|sellFeePct|slippagePct)\s*:\s*(-?\d+(?:\.\d+)?)(?![\w.])/g,
+    'numeric property literal',
+  ],
+  [
+    /\b(buyFeePct|sellFeePct|slippagePct)\s*=\s*(-?\d+(?:\.\d+)?)(?![\w.])/g,
+    'numeric assignment/default',
+  ],
+];
 const violations: string[] = [];
 
 for (const file of collectTypeScriptFiles(srcRoot)) {
@@ -23,10 +37,12 @@ for (const file of collectTypeScriptFiles(srcRoot)) {
   if (filePath === canonicalPolicy) continue;
 
   const source = readFileSync(file, 'utf8');
-  for (const match of source.matchAll(numericCostAssignment)) {
-    violations.push(
-      `${filePath} hardcodes ${match[1]}: ${match[2]}; execution-cost defaults belong only in ${canonicalPolicy}. Consume DEFAULT_EXECUTION_COSTS, normalizeExecutionCosts, executionCostsFromSettings, totalFrictionPct, netReturnAfterCosts, or calculateExecutionFriction instead.`,
-    );
+  for (const [pattern, label] of numericCostLiteralPatterns) {
+    for (const match of source.matchAll(pattern)) {
+      violations.push(
+        `${filePath} hardcodes ${match[1]} ${label}: ${match[2]}; execution-cost defaults belong only in ${canonicalPolicy}. Consume DEFAULT_EXECUTION_COSTS, normalizeExecutionCosts, executionCostsFromSettings, totalFrictionPct, netReturnAfterCosts, or calculateExecutionFriction instead.`,
+      );
+    }
   }
 }
 
@@ -35,5 +51,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Execution-cost ownership smoke passed: numeric buy-fee, sell-fee and slippage assumptions have one canonical owner in ${canonicalPolicy}; UI/strategy/backtest/provider code cannot introduce duplicate hardcoded cost defaults.`,
+  `Execution-cost ownership smoke passed: numeric buy-fee, sell-fee and slippage assumptions have one canonical owner in ${canonicalPolicy}; UI/strategy/backtest/provider code cannot introduce duplicate hardcoded cost defaults through object literals, assignments, or defaults.`,
 );
