@@ -1,7 +1,7 @@
 import type { ProviderHealth } from './providerContracts';
 import { providerHealthReadinessError } from './providerHealthPolicy';
+import type { ResearchExecutionEligibility } from './researchPipelineStagePolicy';
 import {
-  ResearchExecutionEligibility,
   createApprovedExecutionEligibility,
   createBlockedExecutionEligibility,
 } from './researchPipelineStagePolicy';
