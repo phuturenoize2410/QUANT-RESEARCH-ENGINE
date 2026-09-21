@@ -1,9 +1,15 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const srcRoot = join(repoRoot, 'src');
-const uiRoots = [join(srcRoot, 'App.tsx'), join(srcRoot, 'components')];
+const uiRoots = [
+  join(srcRoot, 'main.tsx'),
+  join(srcRoot, 'App.tsx'),
+  join(srcRoot, 'components'),
+  join(srcRoot, 'pages'),
+  join(srcRoot, 'views'),
+].filter(existsSync);
 const engineRoot = join(srcRoot, 'engine');
 
 function collectTypeScriptFiles(path: string): string[] {
@@ -142,4 +148,4 @@ for (const file of collectTypeScriptFiles(engineRoot)) {
 }
 
 if (violations.length > 0) throw new Error(`Architecture boundary violations:\n- ${violations.join('\n- ')}`);
-console.log(`Architecture-boundary smoke passed: UI default-denies direct engine and prototype/static data imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET}, may only shrink, and must already be owned by a declared application migration seam; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
+console.log(`Architecture-boundary smoke passed: all bootstrap/application/presentation surfaces default-deny direct engine and prototype/static data imports; legacy UI -> engine migration debt is capped at ${LEGACY_UI_ENGINE_IMPORT_DEBT_BUDGET}, may only shrink, and must already be owned by a declared application migration seam; provider modules remain the first executable layer; Feature remains upstream of Strategy/Risk/Execution; Strategy remains upstream of Risk/Execution; Risk/Execution cannot bypass into providers/features/UI/mock data; engine code cannot depend on application orchestration or React/UI.`);
