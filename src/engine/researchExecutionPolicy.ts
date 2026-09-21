@@ -1,4 +1,4 @@
-import { ProviderHealth } from './dataProviders';
+import type { ProviderHealth } from './providerContracts';
 import { providerHealthReadinessError } from './providerHealthPolicy';
 import {
   ResearchExecutionEligibility,
