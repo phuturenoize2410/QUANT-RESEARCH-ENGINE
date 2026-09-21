@@ -1,4 +1,4 @@
-import { ProviderHealth } from './dataProviders';
+import type { ProviderHealth } from './providerContracts';
 
 // Keep boundary validation consistent with provider-health normalization: small
 // timestamp differences can occur when provider systems stamp sync/check events
