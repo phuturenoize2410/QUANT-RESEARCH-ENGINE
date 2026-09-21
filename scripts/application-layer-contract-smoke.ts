@@ -17,14 +17,48 @@ function importSpecifiers(source: string): string[] {
   return [...new Set([...staticSpecifiers, ...dynamicSpecifiers, ...requireSpecifiers])];
 }
 
-const forbidden = ['/components/', '../components/', '/data/', '../data/', '/App', '../App'];
+/**
+ * Normalize module spelling before classifying architecture ownership.
+ *
+ * Boundary enforcement must not depend on one relative-path spelling: aliases,
+ * explicit TS/TSX extensions, Windows separators, or Vite query/hash suffixes
+ * must not create an accidental route from application orchestration back into
+ * React or prototype/static datasets.
+ */
+function normalizeModuleSpecifier(specifier: string): string {
+  return specifier
+    .replaceAll('\\', '/')
+    .replace(/[?#].*$/, '')
+    .replace(/\.(?:ts|tsx|js|jsx)$/, '');
+}
+
+function isPresentationDependency(specifier: string): boolean {
+  const normalized = normalizeModuleSpecifier(specifier);
+  return normalized.includes('/components/')
+    || normalized.endsWith('/components')
+    || normalized.includes('/pages/')
+    || normalized.endsWith('/pages')
+    || normalized.includes('/views/')
+    || normalized.endsWith('/views')
+    || /(?:^|\/)App$/.test(normalized)
+    || /(?:^|\/)main$/.test(normalized);
+}
+
+function isPrototypeDataDependency(specifier: string): boolean {
+  const normalized = normalizeModuleSpecifier(specifier);
+  return normalized.includes('/data/') || normalized.endsWith('/data');
+}
+
 const violations: string[] = [];
 
 for (const file of collectTypeScriptFiles(applicationRoot)) {
   const source = readFileSync(file, 'utf8');
   for (const specifier of importSpecifiers(source)) {
-    if (forbidden.some(boundary => specifier.includes(boundary))) {
-      violations.push(`${relative(repoRoot, file)} imports ${specifier}; application orchestration must remain presentation-independent and cannot bypass DataProvider contracts by reaching into React/UI or prototype/static data modules.`);
+    if (isPresentationDependency(specifier)) {
+      violations.push(`${relative(repoRoot, file)} imports ${specifier}; application orchestration must remain presentation-independent and cannot depend on bootstrap, App, component, page, or view modules.`);
+    }
+    if (isPrototypeDataDependency(specifier)) {
+      violations.push(`${relative(repoRoot, file)} imports ${specifier}; application orchestration cannot bypass DataProvider contracts by reaching into prototype/static data modules directly.`);
     }
   }
 }
@@ -33,4 +67,4 @@ if (violations.length > 0) {
   throw new Error(`Application-layer contract violations:\n- ${violations.join('\n- ')}`);
 }
 
-console.log('Application-layer contract smoke passed: application orchestration is independent from React/App and direct prototype/static data modules across static, dynamic and CommonJS imports; provider-backed data must enter through engine provider contracts.');
+console.log('Application-layer contract smoke passed: application orchestration is independent from bootstrap/React presentation and direct prototype/static data modules across normalized static, re-export, dynamic and CommonJS imports; provider-backed data must enter through engine provider contracts.');
