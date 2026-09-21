@@ -37,8 +37,27 @@ for (const specifier of imports) {
 const stagePolicyImports = imports.filter(
   (specifier) => normalizedSegments(specifier).at(-1) === 'researchPipelineStagePolicy',
 );
-if (stagePolicyImports.length !== 1) {
-  throw new Error(`${target} must delegate pipeline transition and fail-closed eligibility semantics to the canonical researchPipelineStagePolicy exactly once.`);
+if (stagePolicyImports.length !== 2) {
+  throw new Error(`${target} must use exactly one type-only and one runtime import from the canonical researchPipelineStagePolicy.`);
+}
+
+const eligibilityTypeImport = /import\s+type\s*\{\s*ResearchExecutionEligibility\s*\}\s*from\s*['"][^'"]*researchPipelineStagePolicy(?:\.[cm]?[jt]sx?)?(?:[?#][^'"]*)?['"]/;
+if (!eligibilityTypeImport.test(source)) {
+  throw new Error(`${target} must import ResearchExecutionEligibility as a type-only contract so presentation envelopes do not create an unnecessary runtime dependency.`);
+}
+
+const runtimeStagePolicyImport = /import\s*\{([^}]*)\}\s*from\s*['"][^'"]*researchPipelineStagePolicy(?:\.[cm]?[jt]sx?)?(?:[?#][^'"]*)?['"]/s;
+const runtimeMatch = source.match(runtimeStagePolicyImport);
+if (!runtimeMatch) {
+  throw new Error(`${target} must retain a runtime import from researchPipelineStagePolicy for canonical transition and fail-closed factories.`);
+}
+if (/\bResearchExecutionEligibility\b/.test(runtimeMatch[1])) {
+  throw new Error(`${target} must not import ResearchExecutionEligibility through the runtime import.`);
+}
+for (const requiredRuntimeSymbol of ['assertNextResearchPipelineStage', 'createUnevaluatedExecutionEligibility']) {
+  if (!new RegExp(`\\b${requiredRuntimeSymbol}\\b`).test(runtimeMatch[1])) {
+    throw new Error(`${target} must delegate ${requiredRuntimeSymbol} to the canonical researchPipelineStagePolicy runtime.`);
+  }
 }
 
 if (!source.includes("assertNextResearchPipelineStage('STRATEGY_ENGINE', 'RISK_EXECUTION')")) {
@@ -51,4 +70,4 @@ if (!source.includes('createUnevaluatedExecutionEligibility()')) {
   throw new Error(`${target} must keep presentation exposure fail-closed until canonical Risk/Execution evaluation occurs.`);
 }
 
-console.log('Research execution boundary smoke passed: application transition seam preserves Strategy -> Risk/Execution -> UI order without concrete provider/strategy/UI coupling.');
+console.log('Research execution boundary smoke passed: application transition seam preserves Strategy -> Risk/Execution -> UI order, type-only eligibility, and no concrete provider/strategy/UI coupling.');
