@@ -24,17 +24,26 @@ for (const path of sourceFiles) {
   // Score-domain ownership belongs to scorePolicy.ts. Domain consumers should use
   // semantic helpers instead of recreating clamp/round contracts locally. Keep the
   // patterns intentionally narrow so ordinary numeric UI layout/math is unaffected.
+  // Numeric score boundaries accept decimal-equivalent literals (for example 100.0)
+  // so formatting a hardcoded boundary cannot bypass canonical score ownership.
+  const zero = '0(?:\\.0+)?';
+  const one = '1(?:\\.0+)?';
+  const five = '5(?:\\.0+)?';
+  const ten = '10(?:\\.0+)?';
+  const ninetyNine = '99(?:\\.0+)?';
+  const hundred = '100(?:\\.0+)?';
+  const clamp = (outer: string, inner: string) => [
+    new RegExp(`Math\\.min\\(\\s*${outer}\\s*,\\s*Math\\.max\\(\\s*${inner}\\s*,`, 'g'),
+    new RegExp(`Math\\.max\\(\\s*${inner}\\s*,\\s*Math\\.min\\(\\s*${outer}\\s*,`, 'g'),
+  ];
+
   const forbiddenPatterns: Array<[RegExp, string]> = [
     [/\b(?:NORMALIZED|OVERNIGHT_EDGE|ESTABLISHED|RESEARCH_ROBUSTNESS)_SCORE_BOUNDS\s*=/g, 'score bounds declaration'],
     [/\b(?:SCORE_MIN|MIN_SCORE|SCORE_MAX|MAX_SCORE)\s*=/g, 'local score boundary constant'],
-    [/Math\.min\(\s*100\s*,\s*Math\.max\(\s*0\s*,/g, 'inline 0-100 score clamp'],
-    [/Math\.max\(\s*0\s*,\s*Math\.min\(\s*100\s*,/g, 'inline 0-100 score clamp'],
-    [/Math\.min\(\s*99\s*,\s*Math\.max\(\s*1\s*,/g, 'inline overnight score clamp'],
-    [/Math\.max\(\s*1\s*,\s*Math\.min\(\s*99\s*,/g, 'inline overnight score clamp'],
-    [/Math\.min\(\s*100\s*,\s*Math\.max\(\s*5\s*,/g, 'inline established score clamp'],
-    [/Math\.max\(\s*5\s*,\s*Math\.min\(\s*100\s*,/g, 'inline established score clamp'],
-    [/Math\.min\(\s*100\s*,\s*Math\.max\(\s*10\s*,/g, 'inline research robustness score clamp'],
-    [/Math\.max\(\s*10\s*,\s*Math\.min\(\s*100\s*,/g, 'inline research robustness score clamp'],
+    ...clamp(hundred, zero).map((pattern): [RegExp, string] => [pattern, 'inline 0-100 score clamp']),
+    ...clamp(ninetyNine, one).map((pattern): [RegExp, string] => [pattern, 'inline overnight score clamp']),
+    ...clamp(hundred, five).map((pattern): [RegExp, string] => [pattern, 'inline established score clamp']),
+    ...clamp(hundred, ten).map((pattern): [RegExp, string] => [pattern, 'inline research robustness score clamp']),
   ];
 
   for (const [pattern, label] of forbiddenPatterns) {
