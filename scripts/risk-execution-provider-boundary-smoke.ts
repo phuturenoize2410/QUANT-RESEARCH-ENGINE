@@ -25,9 +25,10 @@ function hasModuleSegment(specifier: string, segment: string): boolean {
 }
 
 /**
- * Risk/Execution may consume provider-neutral evidence types, but must never reach
- * into concrete provider implementations, acquisition/gating policy, caches, raw
- * bars/quotes, or health orchestration. This preserves the enforced direction:
+ * Risk/Execution may consume provider-neutral evidence contracts and the canonical
+ * pure readiness evaluator, but must never reach into concrete provider adapters,
+ * acquisition/gating policy, caches, raw bars/quotes, or health orchestration.
+ * This preserves the enforced direction:
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> Application/UI.
  */
 const forbiddenProviderModules = new Set([
@@ -36,7 +37,6 @@ const forbiddenProviderModules = new Set([
   'providerGate',
   'providerCache',
   'providerHealth',
-  'providerHealthPolicy',
   'providerBars',
   'providerQuote',
 ]);
@@ -51,12 +51,16 @@ for (const file of riskExecutionFiles) {
   }
 }
 
-// researchExecutionPolicy intentionally consumes ProviderHealth as a type-only,
-// provider-neutral evidence contract. Prevent regression back to a concrete provider.
+// researchExecutionPolicy intentionally consumes ProviderHealth as type-only neutral
+// evidence plus the canonical pure readiness evaluator. Keep the evidence contract
+// decoupled from concrete providers while avoiding duplicated freshness/status logic.
 const researchExecutionSource = readFileSync(join(engineRoot, 'researchExecutionPolicy.ts'), 'utf8');
 if (!/import\s+type\s*\{[^}]*ProviderHealth[^}]*\}\s+from\s+['"][^'"]*providerContracts['"]/.test(researchExecutionSource)) {
   violations.push(`${basename(join(engineRoot, 'researchExecutionPolicy.ts'))} must source ProviderHealth as a type-only import from providerContracts.`);
 }
+if (!/import\s*\{[^}]*providerHealthReadinessError[^}]*\}\s+from\s+['"][^'"]*providerHealthPolicy['"]/.test(researchExecutionSource)) {
+  violations.push(`${basename(join(engineRoot, 'researchExecutionPolicy.ts'))} must reuse the canonical providerHealthReadinessError policy rather than duplicate provider readiness logic.`);
+}
 
 if (violations.length > 0) throw new Error(`Risk/Execution provider boundary violations:\n- ${violations.join('\n- ')}`);
-console.log('Risk/Execution provider boundary smoke passed: execution surfaces are isolated from concrete provider machinery and consume only upstream/provider-neutral evidence contracts.');
+console.log('Risk/Execution provider boundary smoke passed: execution surfaces are isolated from provider machinery, use provider-neutral evidence, and reuse canonical readiness policy.');
