@@ -1,11 +1,11 @@
-import {
-  MarketDataProvider,
+import type {
+  HealthCheckedProvider,
   MarketDataSource,
   ProviderHealth,
   ProviderMetadata,
   ProviderMode,
-} from './dataProviders';
-import { MarketId } from './market/marketAdapter';
+} from './providerContracts';
+import type { MarketId } from './market/marketAdapter';
 import {
   captureProviderHealth,
   getProviderHealthSnapshot,
@@ -90,10 +90,6 @@ export function providerSupportsMarket(metadata: ProviderMetadata, marketId: Mar
 }
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
-  // Provider metadata can originate in external adapter configuration. Treat the
-  // runtime root as untrusted even when TypeScript callers advertise the static
-  // ProviderMetadata contract; null/arrays/primitives must fail closed rather
-  // than throwing before readiness can produce diagnostics.
   if (!isMetadataObject(metadata)) {
     return ['Provider capability contract is invalid: metadata must be an object.'];
   }
@@ -191,13 +187,13 @@ export function evaluateProviderReadiness(metadata: ProviderMetadata, health: Pr
   return evaluateNormalizedProviderReadiness(metadata, normalizeProviderHealth(health), useCase, targetMarket);
 }
 
-export async function getProviderReadinessMatrix(provider: MarketDataProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<Record<ResearchUseCase, ProviderReadiness>> {
+export async function getProviderReadinessMatrix(provider: HealthCheckedProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<Record<ResearchUseCase, ProviderReadiness>> {
   const rawContractIssues = validateProviderMetadata(provider.metadata);
   const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   return buildReadinessMatrix(providerHealth.metadata, providerHealth.health, targetMarket, rawContractIssues);
 }
 
-export async function getProviderStatusSnapshot(provider: MarketDataProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<ProviderStatusSnapshot> {
+export async function getProviderStatusSnapshot(provider: HealthCheckedProvider, healthSnapshot?: ProviderHealth, nowMs: number = Date.now(), targetMarket?: MarketId): Promise<ProviderStatusSnapshot> {
   const rawContractIssues = validateProviderMetadata(provider.metadata);
   const providerHealth = await getProviderHealthSnapshot(provider, healthSnapshot, nowMs);
   return snapshotProviderStatus({
