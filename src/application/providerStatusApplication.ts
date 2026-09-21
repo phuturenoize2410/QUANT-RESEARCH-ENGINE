@@ -1,4 +1,4 @@
-import type { HealthCheckedProvider, ProviderHealth } from '../engine/dataProviders';
+import type { HealthCheckedProvider, ProviderHealth } from '../engine/providerContracts';
 import type { MarketId } from '../engine/market/marketAdapter';
 import { getProviderHealthSnapshot } from '../engine/providerHealth';
 import { providerHealthEvidenceError } from '../engine/providerHealthPolicy';
