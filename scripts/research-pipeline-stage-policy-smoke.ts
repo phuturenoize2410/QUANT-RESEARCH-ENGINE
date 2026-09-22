@@ -50,10 +50,12 @@ const invalidTransitions: Array<[unknown, unknown]> = [
 ];
 for (const [from, to] of invalidTransitions) {
   assert.equal(isNextResearchPipelineStage(from, to), false, 'Non-canonical or skipped pipeline transitions must fail closed.');
+  assert.throws(
+    () => assertNextResearchPipelineStage(from, to),
+    ResearchPipelineStageOrderError,
+    'The runtime assertion boundary must reject every malformed, skipped, backward, or non-canonical transition.',
+  );
 }
-assert.throws(() => assertNextResearchPipelineStage('DATA_PROVIDER', 'STRATEGY_ENGINE'), ResearchPipelineStageOrderError);
-assert.throws(() => assertNextResearchPipelineStage('STRATEGY_ENGINE', 'APPLICATION_UI'), ResearchPipelineStageOrderError);
-assert.throws(() => assertNextResearchPipelineStage('APPLICATION_UI', 'RISK_EXECUTION'), ResearchPipelineStageOrderError);
 
 const unevaluated = createUnevaluatedExecutionEligibility();
 assert.equal(isResearchExecutionEligibility(unevaluated), true);
