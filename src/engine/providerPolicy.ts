@@ -16,11 +16,14 @@ import {
 
 export { captureProviderHealth, normalizeProviderHealth } from './providerHealth';
 
-export type ResearchUseCase =
-  | 'HISTORICAL_BACKTEST'
-  | 'EOD_RESEARCH'
-  | 'PRECLOSE_SCREENING'
-  | 'LIVE_EXECUTION';
+export const RESEARCH_USE_CASES = [
+  'HISTORICAL_BACKTEST',
+  'EOD_RESEARCH',
+  'PRECLOSE_SCREENING',
+  'LIVE_EXECUTION',
+] as const;
+
+export type ResearchUseCase = (typeof RESEARCH_USE_CASES)[number];
 
 export interface ProviderReadiness {
   useCase: ResearchUseCase;
@@ -37,13 +40,6 @@ export interface ProviderStatusSnapshot {
   marketCompatible: boolean;
   capturedAt: string;
 }
-
-export const RESEARCH_USE_CASES: readonly ResearchUseCase[] = [
-  'HISTORICAL_BACKTEST',
-  'EOD_RESEARCH',
-  'PRECLOSE_SCREENING',
-  'LIVE_EXECUTION',
-];
 
 const snapshotReadiness = (readiness: ProviderReadiness): ProviderReadiness => Object.freeze({
   useCase: readiness.useCase,
