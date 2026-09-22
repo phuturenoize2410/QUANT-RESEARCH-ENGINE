@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   RESEARCH_PIPELINE_STAGE_ORDER,
   ResearchPipelineStageOrderError,
+  isResearchPipelineStage,
   assertNextResearchPipelineStage,
   createUnevaluatedExecutionEligibility,
   createApprovedExecutionEligibility,
@@ -16,6 +17,22 @@ assert.deepEqual(RESEARCH_PIPELINE_STAGE_ORDER, [
   'RISK_EXECUTION',
   'APPLICATION_UI',
 ]);
+
+assert.equal(
+  new Set(RESEARCH_PIPELINE_STAGE_ORDER).size,
+  RESEARCH_PIPELINE_STAGE_ORDER.length,
+  'Canonical pipeline stage vocabulary must not contain duplicates.',
+);
+for (const stage of RESEARCH_PIPELINE_STAGE_ORDER) {
+  assert.equal(isResearchPipelineStage(stage), true, `Canonical stage ${stage} must pass its runtime guard.`);
+}
+for (const invalidStage of [undefined, null, '', 'PROVIDER', 'UI', 'DATA_PROVIDER ']) {
+  assert.equal(
+    isResearchPipelineStage(invalidStage),
+    false,
+    `Non-canonical stage ${String(invalidStage)} must fail closed at the runtime boundary.`,
+  );
+}
 
 for (let index = 0; index < RESEARCH_PIPELINE_STAGE_ORDER.length - 1; index += 1) {
   assert.doesNotThrow(() => assertNextResearchPipelineStage(
