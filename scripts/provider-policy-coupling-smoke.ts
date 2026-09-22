@@ -69,10 +69,31 @@ for (const pattern of FORBIDDEN_LOCAL_VOCABULARY) {
   }
 }
 
-if (!/export\s+const\s+RESEARCH_USE_CASES\s*=\s*\[[\s\S]*?\]\s+as\s+const\s*;/.test(source)) {
+const researchUseCaseMatch = source.match(/export\s+const\s+RESEARCH_USE_CASES\s*=\s*\[([\s\S]*?)\]\s+as\s+const\s*;/);
+if (!researchUseCaseMatch) {
   throw new Error(
     'providerPolicy.ts must expose RESEARCH_USE_CASES as the canonical readonly policy vocabulary.',
   );
+}
+
+const researchUseCases = [...researchUseCaseMatch[1].matchAll(/['\"]([^'\"]+)['\"]/g)].map(match => match[1]);
+if (researchUseCases.length === 0) {
+  throw new Error('RESEARCH_USE_CASES must contain at least one canonical research use case.');
+}
+if (new Set(researchUseCases).size !== researchUseCases.length) {
+  throw new Error('RESEARCH_USE_CASES must not contain duplicate policy vocabulary entries.');
+}
+
+const requiredResearchUseCases = [
+  'HISTORICAL_BACKTEST',
+  'EOD_RESEARCH',
+  'PRECLOSE_SCREENING',
+  'LIVE_EXECUTION',
+] as const;
+for (const useCase of requiredResearchUseCases) {
+  if (!researchUseCases.includes(useCase)) {
+    throw new Error(`RESEARCH_USE_CASES must retain ${useCase}; provider readiness must cover the full research-to-execution lifecycle.`);
+  }
 }
 
 if (!/export\s+type\s+ResearchUseCase\s*=\s*\(typeof\s+RESEARCH_USE_CASES\)\[number\]\s*;/.test(source)) {
@@ -82,5 +103,5 @@ if (!/export\s+type\s+ResearchUseCase\s*=\s*\(typeof\s+RESEARCH_USE_CASES\)\[num
 }
 
 console.log(
-  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider guards and research use-case vocabulary enforced)',
+  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider guards and research use-case lifecycle vocabulary enforced)',
 );
