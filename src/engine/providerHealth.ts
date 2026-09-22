@@ -1,28 +1,18 @@
+import {
+  isMarketDataSource,
+  isProviderHealthStatus,
+  isProviderMode,
+} from './providerContracts';
 import type {
   HealthCheckedProvider,
   MarketDataSource,
   ProviderHealth,
-  ProviderHealthStatus,
   ProviderMetadata,
   ProviderMode,
 } from './providerContracts';
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_DATE_MS = 8.64e15;
-const PROVIDER_HEALTH_STATUSES: readonly ProviderHealthStatus[] = [
-  'HEALTHY',
-  'DEGRADED',
-  'STALE',
-  'UNAVAILABLE',
-];
-const MARKET_DATA_SOURCES: readonly MarketDataSource[] = [
-  'MOCK_ENGINE',
-  'GOOGLE_FINANCE',
-  'FREE_API',
-  'IDX_FEED',
-  'BROKER_API',
-];
-const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'DELAYED', 'EOD', 'REALTIME'];
 
 function normalizeObservationClock(value: unknown): { nowMs: number; valid: boolean } {
   if (
@@ -60,18 +50,6 @@ function canonicalHealthMessage(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed || undefined;
-}
-
-function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
-  return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
-}
-
-function isMarketDataSource(value: unknown): value is MarketDataSource {
-  return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource);
-}
-
-function isProviderMode(value: unknown): value is ProviderMode {
-  return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode);
 }
 
 function appendMessage(base: string | undefined, detail: string): string {
