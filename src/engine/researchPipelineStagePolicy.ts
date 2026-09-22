@@ -119,11 +119,15 @@ export function createBlockedExecutionEligibility(reason: string): ResearchExecu
   });
 }
 
-export function assertExecutionEligible(eligibility: ResearchExecutionEligibility): void {
+export function assertExecutionEligible(eligibility: unknown): asserts eligibility is ResearchExecutionEligibility {
+  if (!isResearchExecutionEligibility(eligibility)) {
+    throw new Error('Execution blocked: malformed Risk/Execution eligibility payload.');
+  }
+
   if (
-    eligibility.status !== 'APPROVED' ||
-    eligibility.executable !== true ||
-    !CANONICAL_EXECUTION_APPROVALS.has(eligibility)
+    eligibility.status !== 'APPROVED'
+    || eligibility.executable !== true
+    || !CANONICAL_EXECUTION_APPROVALS.has(eligibility)
   ) {
     throw new Error(`Execution blocked: ${eligibility.reason}`);
   }
