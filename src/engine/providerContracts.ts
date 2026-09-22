@@ -8,15 +8,20 @@ import type { MarketId } from './market/marketAdapter';
  * without depending on adapter code. Future Google Finance, free API, paid IDX,
  * or broker adapters should implement these contracts at the DataProvider edge.
  */
-export type MarketDataSource =
-  | 'MOCK_ENGINE'
-  | 'GOOGLE_FINANCE'
-  | 'FREE_API'
-  | 'IDX_FEED'
-  | 'BROKER_API';
+export const MARKET_DATA_SOURCES = [
+  'MOCK_ENGINE',
+  'GOOGLE_FINANCE',
+  'FREE_API',
+  'IDX_FEED',
+  'BROKER_API',
+] as const;
 
-export type ProviderMode = 'MOCK' | 'DELAYED' | 'EOD' | 'REALTIME';
-export type ProviderHealthStatus = 'HEALTHY' | 'DEGRADED' | 'STALE' | 'UNAVAILABLE';
+export const PROVIDER_MODES = ['MOCK', 'DELAYED', 'EOD', 'REALTIME'] as const;
+export const PROVIDER_HEALTH_STATUSES = ['HEALTHY', 'DEGRADED', 'STALE', 'UNAVAILABLE'] as const;
+
+export type MarketDataSource = (typeof MARKET_DATA_SOURCES)[number];
+export type ProviderMode = (typeof PROVIDER_MODES)[number];
+export type ProviderHealthStatus = (typeof PROVIDER_HEALTH_STATUSES)[number];
 
 export interface ProviderMetadata {
   readonly id: string;
