@@ -39,12 +39,20 @@ export class ResearchPipelineStageOrderError extends Error {
   }
 }
 
+/**
+ * Assertion boundary for stage metadata received from adapters/application code.
+ * Accept unknown input so runtime callers cannot bypass canonical stage validation by
+ * relying on compile-time ResearchPipelineStage typing.
+ */
 export function assertNextResearchPipelineStage(
-  from: ResearchPipelineStage,
-  to: ResearchPipelineStage,
-): void {
+  from: unknown,
+  to: unknown,
+): asserts from is ResearchPipelineStage {
   if (!isNextResearchPipelineStage(from, to)) {
-    throw new ResearchPipelineStageOrderError(from, to);
+    throw new ResearchPipelineStageOrderError(
+      from as ResearchPipelineStage,
+      to as ResearchPipelineStage,
+    );
   }
 }
 
