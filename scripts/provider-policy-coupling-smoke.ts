@@ -69,6 +69,18 @@ for (const pattern of FORBIDDEN_LOCAL_VOCABULARY) {
   }
 }
 
+if (!/export\s+const\s+RESEARCH_USE_CASES\s*=\s*\[[\s\S]*?\]\s+as\s+const\s*;/.test(source)) {
+  throw new Error(
+    'providerPolicy.ts must expose RESEARCH_USE_CASES as the canonical readonly policy vocabulary.',
+  );
+}
+
+if (!/export\s+type\s+ResearchUseCase\s*=\s*\(typeof\s+RESEARCH_USE_CASES\)\[number\]\s*;/.test(source)) {
+  throw new Error(
+    'ResearchUseCase must be derived from RESEARCH_USE_CASES so compile-time and runtime policy vocabulary cannot drift.',
+  );
+}
+
 console.log(
-  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider source/mode guards enforced)',
+  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider guards and research use-case vocabulary enforced)',
 );
