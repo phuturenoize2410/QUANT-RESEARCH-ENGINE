@@ -23,6 +23,19 @@ export type MarketDataSource = (typeof MARKET_DATA_SOURCES)[number];
 export type ProviderMode = (typeof PROVIDER_MODES)[number];
 export type ProviderHealthStatus = (typeof PROVIDER_HEALTH_STATUSES)[number];
 
+/** Runtime guards share the same canonical vocabulary as the compile-time unions. */
+export function isMarketDataSource(value: unknown): value is MarketDataSource {
+  return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource);
+}
+
+export function isProviderMode(value: unknown): value is ProviderMode {
+  return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode);
+}
+
+export function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
+  return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
+}
+
 export interface ProviderMetadata {
   readonly id: string;
   readonly name: string;
