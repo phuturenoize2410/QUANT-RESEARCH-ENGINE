@@ -18,6 +18,17 @@ const STAGE_INDEX = new Map<ResearchPipelineStage, number>(
   RESEARCH_PIPELINE_STAGE_ORDER.map((stage, index) => [stage, index]),
 );
 
+/**
+ * Canonical runtime transition guard for values crossing adapter/application boundaries.
+ * A transition is valid only when both stages are canonical and advance exactly one boundary.
+ */
+export function isNextResearchPipelineStage(from: unknown, to: unknown): boolean {
+  if (!isResearchPipelineStage(from) || !isResearchPipelineStage(to)) return false;
+  const fromIndex = STAGE_INDEX.get(from);
+  const toIndex = STAGE_INDEX.get(to);
+  return fromIndex !== undefined && toIndex !== undefined && toIndex === fromIndex + 1;
+}
+
 export class ResearchPipelineStageOrderError extends Error {
   constructor(
     readonly from: ResearchPipelineStage,
@@ -32,10 +43,7 @@ export function assertNextResearchPipelineStage(
   from: ResearchPipelineStage,
   to: ResearchPipelineStage,
 ): void {
-  const fromIndex = STAGE_INDEX.get(from);
-  const toIndex = STAGE_INDEX.get(to);
-
-  if (fromIndex === undefined || toIndex === undefined || toIndex !== fromIndex + 1) {
+  if (!isNextResearchPipelineStage(from, to)) {
     throw new ResearchPipelineStageOrderError(from, to);
   }
 }
