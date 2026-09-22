@@ -8,6 +8,12 @@ export const RESEARCH_PIPELINE_STAGE_ORDER = [
 
 export type ResearchPipelineStage = typeof RESEARCH_PIPELINE_STAGE_ORDER[number];
 
+/** Canonical runtime guard for stage values crossing adapter/application boundaries. */
+export function isResearchPipelineStage(value: unknown): value is ResearchPipelineStage {
+  return typeof value === 'string'
+    && (RESEARCH_PIPELINE_STAGE_ORDER as readonly string[]).includes(value);
+}
+
 const STAGE_INDEX = new Map<ResearchPipelineStage, number>(
   RESEARCH_PIPELINE_STAGE_ORDER.map((stage, index) => [stage, index]),
 );
