@@ -102,6 +102,19 @@ if (!/export\s+type\s+ResearchUseCase\s*=\s*\(typeof\s+RESEARCH_USE_CASES\)\[num
   );
 }
 
+if (!/export\s+function\s+isResearchUseCase\s*\(\s*value\s*:\s*unknown\s*\)\s*:\s*value\s+is\s+ResearchUseCase/.test(source)) {
+  throw new Error(
+    'providerPolicy.ts must export isResearchUseCase as the canonical runtime guard for research lifecycle vocabulary.',
+  );
+}
+
+const researchUseCaseGuardMatch = source.match(/export\s+function\s+isResearchUseCase[\s\S]*?\{([\s\S]*?)\n\}/);
+if (!researchUseCaseGuardMatch || !/RESEARCH_USE_CASES\.includes\s*\(/.test(researchUseCaseGuardMatch[1])) {
+  throw new Error(
+    'isResearchUseCase must validate against canonical RESEARCH_USE_CASES rather than redeclaring lifecycle vocabulary.',
+  );
+}
+
 console.log(
-  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider guards and research use-case lifecycle vocabulary enforced)',
+  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider guards and research use-case lifecycle vocabulary/guard enforced)',
 );
