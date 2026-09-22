@@ -1,9 +1,11 @@
-import type {
-  HealthCheckedProvider,
-  MarketDataSource,
-  ProviderHealth,
-  ProviderMetadata,
-  ProviderMode,
+import {
+  isMarketDataSource,
+  isProviderMode,
+  type HealthCheckedProvider,
+  type MarketDataSource,
+  type ProviderHealth,
+  type ProviderMetadata,
+  type ProviderMode,
 } from './providerContracts';
 import type { MarketId } from './market/marketAdapter';
 import {
@@ -69,14 +71,10 @@ export function snapshotProviderStatus(status: ProviderStatusSnapshot): Provider
 }
 
 const MODE_RANK: Record<ProviderMode, number> = { MOCK: 0, EOD: 1, DELAYED: 2, REALTIME: 3 };
-const PROVIDER_MODES: readonly ProviderMode[] = ['MOCK', 'EOD', 'DELAYED', 'REALTIME'];
-const MARKET_DATA_SOURCES: readonly MarketDataSource[] = ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API', 'IDX_FEED', 'BROKER_API'];
 const INHERENTLY_FREE_SOURCES: readonly MarketDataSource[] = ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API'];
 
 function pushUnique(target: string[], message: string): void { if (!target.includes(message)) target.push(message); }
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
-function isProviderMode(value: unknown): value is ProviderMode { return typeof value === 'string' && PROVIDER_MODES.includes(value as ProviderMode); }
-function isMarketDataSource(value: unknown): value is MarketDataSource { return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource); }
 function isResearchUseCase(value: unknown): value is ResearchUseCase { return typeof value === 'string' && RESEARCH_USE_CASES.includes(value as ResearchUseCase); }
 function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
 function isMetadataObject(value: unknown): value is Record<string, unknown> {
