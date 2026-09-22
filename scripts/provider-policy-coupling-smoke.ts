@@ -46,6 +46,29 @@ if (!/HealthCheckedProvider/.test(source)) {
   );
 }
 
+for (const guard of ['isMarketDataSource', 'isProviderMode'] as const) {
+  if (!new RegExp(`\\b${guard}\\b`).test(source)) {
+    throw new Error(
+      `providerPolicy.ts must consume canonical ${guard} from providerContracts instead of owning provider vocabulary validation.`,
+    );
+  }
+}
+
+const FORBIDDEN_LOCAL_VOCABULARY = [
+  /const\s+PROVIDER_MODES\b/,
+  /const\s+MARKET_DATA_SOURCES\b/,
+  /function\s+isProviderMode\s*\(/,
+  /function\s+isMarketDataSource\s*\(/,
+] as const;
+
+for (const pattern of FORBIDDEN_LOCAL_VOCABULARY) {
+  if (pattern.test(source)) {
+    throw new Error(
+      'providerPolicy.ts must not redeclare provider source/mode vocabulary or guards; use providerContracts as the single source of truth.',
+    );
+  }
+}
+
 console.log(
-  'provider policy coupling smoke: PASS (concrete provider coupling locked at zero; readiness/status policy stays provider-neutral)',
+  'provider policy coupling smoke: PASS (concrete coupling locked at zero; canonical provider source/mode guards enforced)',
 );
