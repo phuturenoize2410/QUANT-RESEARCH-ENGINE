@@ -6,8 +6,8 @@ const POLICY_PATH = path.join(ROOT, 'src', 'engine', 'providerHealthPolicy.ts');
 const source = fs.readFileSync(POLICY_PATH, 'utf8');
 
 // providerHealthPolicy is the canonical, provider-neutral evidence/readiness policy.
-// It may consume only the shared ProviderHealth contract; concrete provider
-// implementations and acquisition/runtime machinery belong upstream.
+// It may consume only the shared provider contract and canonical runtime guards;
+// concrete provider/acquisition machinery belongs upstream.
 const FORBIDDEN_PROVIDER_MODULES = [
   'dataProviders',
   'providerHealth',
@@ -60,12 +60,18 @@ if (contractRefs.length !== 1) {
   );
 }
 
-if (!/import\s+type\s+\{[^}]*\bProviderHealth\b[^}]*\}\s+from\s+['"][^'"]*providerContracts(?:\.(?:ts|tsx|js|jsx|mjs|cjs))?(?:[?#][^'"]*)?['"]/.test(source)) {
+if (!/import\s+\{[^}]*\bisProviderHealthStatus\b[^}]*\btype\s+ProviderHealth\b[^}]*\}\s+from\s+['"][^'"]*providerContracts(?:\.(?:ts|tsx|js|jsx|mjs|cjs))?(?:[?#][^'"]*)?['"]/.test(source)) {
   throw new Error(
-    'providerHealthPolicy.ts must consume ProviderHealth through a type-only providerContracts import.',
+    'providerHealthPolicy.ts must consume canonical isProviderHealthStatus and type-only ProviderHealth from providerContracts.',
+  );
+}
+
+if (/\b(?:const|let|var)\s+PROVIDER_HEALTH_STATUSES\b/.test(source)) {
+  throw new Error(
+    'providerHealthPolicy.ts must not redeclare provider health status vocabulary; use providerContracts isProviderHealthStatus.',
   );
 }
 
 console.log(
-  'provider health policy coupling smoke: PASS (canonical readiness policy depends only on type-only providerContracts vocabulary)',
+  'provider health policy coupling smoke: PASS (canonical readiness policy consumes providerContracts type plus canonical runtime status guard)',
 );
