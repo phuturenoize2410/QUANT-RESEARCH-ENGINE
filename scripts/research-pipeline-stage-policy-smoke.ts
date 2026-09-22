@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   RESEARCH_PIPELINE_STAGE_ORDER,
+  RESEARCH_EXECUTION_ELIGIBILITY_STATUSES,
   ResearchPipelineStageOrderError,
   isResearchPipelineStage,
+  isResearchExecutionEligibilityStatus,
   assertNextResearchPipelineStage,
   createUnevaluatedExecutionEligibility,
   createApprovedExecutionEligibility,
@@ -31,6 +33,31 @@ for (const invalidStage of [undefined, null, '', 'PROVIDER', 'UI', 'DATA_PROVIDE
     isResearchPipelineStage(invalidStage),
     false,
     `Non-canonical stage ${String(invalidStage)} must fail closed at the runtime boundary.`,
+  );
+}
+
+assert.deepEqual(RESEARCH_EXECUTION_ELIGIBILITY_STATUSES, [
+  'NOT_EVALUATED',
+  'APPROVED',
+  'BLOCKED',
+]);
+assert.equal(
+  new Set(RESEARCH_EXECUTION_ELIGIBILITY_STATUSES).size,
+  RESEARCH_EXECUTION_ELIGIBILITY_STATUSES.length,
+  'Canonical execution-eligibility status vocabulary must not contain duplicates.',
+);
+for (const status of RESEARCH_EXECUTION_ELIGIBILITY_STATUSES) {
+  assert.equal(
+    isResearchExecutionEligibilityStatus(status),
+    true,
+    `Canonical execution-eligibility status ${status} must pass its runtime guard.`,
+  );
+}
+for (const invalidStatus of [undefined, null, '', 'PENDING', 'EXECUTABLE', 'APPROVED ']) {
+  assert.equal(
+    isResearchExecutionEligibilityStatus(invalidStatus),
+    false,
+    `Non-canonical execution-eligibility status ${String(invalidStatus)} must fail closed at the runtime boundary.`,
   );
 }
 
