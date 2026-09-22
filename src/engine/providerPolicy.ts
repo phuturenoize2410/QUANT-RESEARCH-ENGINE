@@ -25,6 +25,10 @@ export const RESEARCH_USE_CASES = [
 
 export type ResearchUseCase = (typeof RESEARCH_USE_CASES)[number];
 
+export function isResearchUseCase(value: unknown): value is ResearchUseCase {
+  return typeof value === 'string' && RESEARCH_USE_CASES.includes(value as ResearchUseCase);
+}
+
 export interface ProviderReadiness {
   useCase: ResearchUseCase;
   allowed: boolean;
@@ -71,7 +75,6 @@ const INHERENTLY_FREE_SOURCES: readonly MarketDataSource[] = ['MOCK_ENGINE', 'GO
 
 function pushUnique(target: string[], message: string): void { if (!target.includes(message)) target.push(message); }
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0; }
-function isResearchUseCase(value: unknown): value is ResearchUseCase { return typeof value === 'string' && RESEARCH_USE_CASES.includes(value as ResearchUseCase); }
 function canonicalMarketId(value: string): string { return value.trim().toUpperCase(); }
 function isMetadataObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
