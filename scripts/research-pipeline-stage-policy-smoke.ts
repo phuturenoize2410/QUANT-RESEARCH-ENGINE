@@ -4,6 +4,7 @@ import {
   RESEARCH_EXECUTION_ELIGIBILITY_STATUSES,
   ResearchPipelineStageOrderError,
   isResearchPipelineStage,
+  isNextResearchPipelineStage,
   isResearchExecutionEligibilityStatus,
   isResearchExecutionEligibility,
   assertNextResearchPipelineStage,
@@ -30,7 +31,25 @@ for (const invalidStatus of [undefined, null, '', 'PENDING', 'EXECUTABLE', 'APPR
 }
 
 for (let index = 0; index < RESEARCH_PIPELINE_STAGE_ORDER.length - 1; index += 1) {
-  assert.doesNotThrow(() => assertNextResearchPipelineStage(RESEARCH_PIPELINE_STAGE_ORDER[index], RESEARCH_PIPELINE_STAGE_ORDER[index + 1]));
+  const from = RESEARCH_PIPELINE_STAGE_ORDER[index];
+  const to = RESEARCH_PIPELINE_STAGE_ORDER[index + 1];
+  assert.equal(isNextResearchPipelineStage(from, to), true, `${from} -> ${to} must be the canonical next boundary.`);
+  assert.doesNotThrow(() => assertNextResearchPipelineStage(from, to));
+}
+
+const invalidTransitions: Array<[unknown, unknown]> = [
+  ['DATA_PROVIDER', 'STRATEGY_ENGINE'],
+  ['STRATEGY_ENGINE', 'APPLICATION_UI'],
+  ['APPLICATION_UI', 'RISK_EXECUTION'],
+  ['DATA_PROVIDER', 'DATA_PROVIDER'],
+  ['APPLICATION_UI', 'APPLICATION_UI'],
+  ['PROVIDER', 'FEATURE_ENGINE'],
+  ['DATA_PROVIDER', 'UI'],
+  [null, 'FEATURE_ENGINE'],
+  ['DATA_PROVIDER', undefined],
+];
+for (const [from, to] of invalidTransitions) {
+  assert.equal(isNextResearchPipelineStage(from, to), false, 'Non-canonical or skipped pipeline transitions must fail closed.');
 }
 assert.throws(() => assertNextResearchPipelineStage('DATA_PROVIDER', 'STRATEGY_ENGINE'), ResearchPipelineStageOrderError);
 assert.throws(() => assertNextResearchPipelineStage('STRATEGY_ENGINE', 'APPLICATION_UI'), ResearchPipelineStageOrderError);
