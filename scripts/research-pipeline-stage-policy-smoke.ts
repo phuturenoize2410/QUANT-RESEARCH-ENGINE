@@ -53,7 +53,7 @@ const forgedApproval = Object.freeze({
 assert.equal(isResearchExecutionEligibility(forgedApproval), true, 'Structural guard may parse an approval-shaped boundary value.');
 assert.throws(() => assertExecutionEligible(forgedApproval), /Execution blocked/, 'Structural validity must not establish canonical approval provenance.');
 
-for (const malformed of [
+const malformedEligibilityPayloads: unknown[] = [
   null,
   {},
   { stage: 'APPLICATION_UI', status: 'BLOCKED', executable: false, reason: 'wrong stage' },
@@ -61,7 +61,15 @@ for (const malformed of [
   { stage: 'RISK_EXECUTION', status: 'BLOCKED', executable: true, reason: 'inconsistent block' },
   { stage: 'RISK_EXECUTION', status: 'PENDING', executable: false, reason: 'unknown status' },
   { stage: 'RISK_EXECUTION', status: 'BLOCKED', executable: false, reason: '   ' },
-]) assert.equal(isResearchExecutionEligibility(malformed), false, 'Malformed execution eligibility must fail closed.');
+];
+for (const malformed of malformedEligibilityPayloads) {
+  assert.equal(isResearchExecutionEligibility(malformed), false, 'Malformed execution eligibility must fail closed.');
+  assert.throws(
+    () => assertExecutionEligible(malformed),
+    /Execution blocked: malformed Risk\/Execution eligibility payload/,
+    'Execution assertion must fail closed before reading malformed application/UI payload fields.',
+  );
+}
 
 assert.throws(() => createApprovedExecutionEligibility('   '), /requires a canonical Risk\/Execution policy reason/);
 const approved = createApprovedExecutionEligibility('Canonical risk and execution policy approved the candidate.');
