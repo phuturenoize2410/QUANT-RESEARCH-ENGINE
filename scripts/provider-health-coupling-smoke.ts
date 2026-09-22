@@ -42,6 +42,42 @@ if (!source.includes("from './providerContracts'")) {
   );
 }
 
+const CANONICAL_GUARDS = [
+  'isMarketDataSource',
+  'isProviderHealthStatus',
+  'isProviderMode',
+] as const;
+
+for (const guard of CANONICAL_GUARDS) {
+  if (!source.includes(guard)) {
+    throw new Error(
+      `providerHealth.ts must consume canonical ${guard} from providerContracts; do not recreate provider vocabulary locally.`,
+    );
+  }
+
+  const localDeclaration = new RegExp(
+    `(?:function\\s+${guard}\\s*\\(|(?:const|let|var)\\s+${guard}\\s*=)`,
+  );
+  if (localDeclaration.test(source)) {
+    throw new Error(
+      `providerHealth.ts redeclares ${guard}; provider vocabulary guards must remain owned by providerContracts.`,
+    );
+  }
+}
+
+const LOCAL_VOCABULARY_ARRAYS = [
+  'PROVIDER_HEALTH_STATUSES',
+  'MARKET_DATA_SOURCES',
+  'PROVIDER_MODES',
+] as const;
+for (const symbol of LOCAL_VOCABULARY_ARRAYS) {
+  if (new RegExp(`(?:const|let|var)\\s+${symbol}\\b`).test(source)) {
+    throw new Error(
+      `providerHealth.ts redeclares ${symbol}; canonical provider vocabulary must remain single-source in providerContracts.`,
+    );
+  }
+}
+
 console.log(
-  'provider health coupling smoke: PASS (concrete provider coupling locked at zero; canonical vocabulary comes from providerContracts)',
+  'provider health coupling smoke: PASS (concrete provider coupling and local vocabulary guards locked at zero; canonical guards come from providerContracts)',
 );
