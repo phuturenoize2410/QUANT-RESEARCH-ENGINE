@@ -48,6 +48,22 @@ export function assertNextResearchPipelineStage(
   }
 }
 
+export const RESEARCH_EXECUTION_ELIGIBILITY_STATUSES = [
+  'NOT_EVALUATED',
+  'APPROVED',
+  'BLOCKED',
+] as const;
+
+export type ResearchExecutionEligibilityStatus = typeof RESEARCH_EXECUTION_ELIGIBILITY_STATUSES[number];
+
+/** Canonical runtime guard for execution-eligibility status crossing application boundaries. */
+export function isResearchExecutionEligibilityStatus(
+  value: unknown,
+): value is ResearchExecutionEligibilityStatus {
+  return typeof value === 'string'
+    && (RESEARCH_EXECUTION_ELIGIBILITY_STATUSES as readonly string[]).includes(value);
+}
+
 /**
  * Fail-closed execution eligibility used while the current research pipeline is
  * still provider/feature/strategy oriented. A shortlist is research output, not
@@ -56,7 +72,7 @@ export function assertNextResearchPipelineStage(
 export interface ResearchExecutionEligibility {
   readonly stage: 'RISK_EXECUTION';
   readonly executable: boolean;
-  readonly status: 'NOT_EVALUATED' | 'APPROVED' | 'BLOCKED';
+  readonly status: ResearchExecutionEligibilityStatus;
   readonly reason: string;
 }
 
