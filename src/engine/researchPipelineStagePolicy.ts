@@ -28,14 +28,6 @@ export class ResearchPipelineStageOrderError extends Error {
   }
 }
 
-/**
- * Canonical architecture policy for the research path.
- *
- * The policy deliberately forbids skipping boundaries (for example Provider -> UI
- * or Strategy -> UI). Future real-data adapters must therefore enter through the
- * provider boundary and execution-capable presentation must pass through the
- * risk/execution boundary first.
- */
 export function assertNextResearchPipelineStage(
   from: ResearchPipelineStage,
   to: ResearchPipelineStage,
@@ -56,7 +48,6 @@ export const RESEARCH_EXECUTION_ELIGIBILITY_STATUSES = [
 
 export type ResearchExecutionEligibilityStatus = typeof RESEARCH_EXECUTION_ELIGIBILITY_STATUSES[number];
 
-/** Canonical runtime guard for execution-eligibility status crossing application boundaries. */
 export function isResearchExecutionEligibilityStatus(
   value: unknown,
 ): value is ResearchExecutionEligibilityStatus {
@@ -64,11 +55,6 @@ export function isResearchExecutionEligibilityStatus(
     && (RESEARCH_EXECUTION_ELIGIBILITY_STATUSES as readonly string[]).includes(value);
 }
 
-/**
- * Fail-closed execution eligibility used while the current research pipeline is
- * still provider/feature/strategy oriented. A shortlist is research output, not
- * an executable order, until the Risk/Execution boundary explicitly approves it.
- */
 export interface ResearchExecutionEligibility {
   readonly stage: 'RISK_EXECUTION';
   readonly executable: boolean;
@@ -76,10 +62,26 @@ export interface ResearchExecutionEligibility {
   readonly reason: string;
 }
 
-// Runtime provenance for canonical approvals. TypeScript interfaces are structural,
-// so a presentation/application consumer could otherwise forge an APPROVED-shaped
-// object. WeakSet membership makes assertExecutionEligible fail closed unless the
-// approval was actually issued by this Risk/Execution policy boundary.
+/**
+ * Structural guard for execution eligibility crossing application/UI boundaries.
+ * Approval provenance is intentionally NOT established here; assertExecutionEligible
+ * remains the authority for executable approval.
+ */
+export function isResearchExecutionEligibility(value: unknown): value is ResearchExecutionEligibility {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.stage !== 'RISK_EXECUTION'
+    || !isResearchExecutionEligibilityStatus(candidate.status)
+    || typeof candidate.executable !== 'boolean'
+    || typeof candidate.reason !== 'string'
+    || candidate.reason.trim().length === 0
+  ) return false;
+
+  if (candidate.status === 'APPROVED') return candidate.executable === true;
+  return candidate.executable === false;
+}
+
 const CANONICAL_EXECUTION_APPROVALS = new WeakSet<object>();
 
 export function createUnevaluatedExecutionEligibility(): ResearchExecutionEligibility {
@@ -91,12 +93,6 @@ export function createUnevaluatedExecutionEligibility(): ResearchExecutionEligib
   });
 }
 
-/**
- * Issue execution approval from the canonical Risk/Execution boundary.
- * Callers must supply a non-empty policy reason so approval remains auditable.
- * This does not itself implement portfolio/risk rules; those evaluators must call
- * this only after their checks pass.
- */
 export function createApprovedExecutionEligibility(reason: string): ResearchExecutionEligibility {
   const normalizedReason = reason.trim();
   if (!normalizedReason) {
