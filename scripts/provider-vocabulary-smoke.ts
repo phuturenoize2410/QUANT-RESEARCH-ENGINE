@@ -4,6 +4,7 @@ import {
   MARKET_DATA_SOURCES,
   PROVIDER_HEALTH_STATUSES,
   PROVIDER_MODES,
+  canonicalProviderMarketId,
   isInherentlyFreeMarketDataSource,
   isMarketDataSource,
   isProviderHealthStatus,
@@ -58,6 +59,27 @@ for (const mode of PROVIDER_MODES) {
 }
 for (const status of PROVIDER_HEALTH_STATUSES) {
   assert.equal(isProviderHealthStatus(status), true, `Canonical provider health status ${status} must pass its runtime guard.`);
+}
+
+for (const [value, expected] of [
+  ['IDX', 'IDX'],
+  [' idx ', 'IDX'],
+  ['us', 'US'],
+  ['  Us  ', 'US'],
+  ['future_market', 'FUTURE_MARKET'],
+] as const) {
+  assert.equal(
+    canonicalProviderMarketId(value),
+    expected,
+    `Provider market identity ${JSON.stringify(value)} must canonicalize to ${expected}.`,
+  );
+}
+for (const value of ['', '   ', null, undefined, 1, {}, []]) {
+  assert.equal(
+    canonicalProviderMarketId(value),
+    undefined,
+    `Invalid provider market identity ${String(value)} must fail closed.`,
+  );
 }
 
 for (const value of ['GOOGLE', 'MOCK_ENGINE ', '', null, undefined, 1]) {
