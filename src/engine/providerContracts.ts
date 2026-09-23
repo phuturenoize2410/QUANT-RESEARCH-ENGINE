@@ -23,6 +23,13 @@ export type MarketDataSource = (typeof MARKET_DATA_SOURCES)[number];
 export type ProviderMode = (typeof PROVIDER_MODES)[number];
 export type ProviderHealthStatus = (typeof PROVIDER_HEALTH_STATUSES)[number];
 
+/** Sources whose canonical contract is explicitly free/synthetic, never paid. */
+export const INHERENTLY_FREE_MARKET_DATA_SOURCES = [
+  'MOCK_ENGINE',
+  'GOOGLE_FINANCE',
+  'FREE_API',
+] as const satisfies readonly MarketDataSource[];
+
 /** Runtime guards share the same canonical vocabulary as the compile-time unions. */
 export function isMarketDataSource(value: unknown): value is MarketDataSource {
   return typeof value === 'string' && MARKET_DATA_SOURCES.includes(value as MarketDataSource);
@@ -34,6 +41,16 @@ export function isProviderMode(value: unknown): value is ProviderMode {
 
 export function isProviderHealthStatus(value: unknown): value is ProviderHealthStatus {
   return typeof value === 'string' && PROVIDER_HEALTH_STATUSES.includes(value as ProviderHealthStatus);
+}
+
+/**
+ * Central cost-classification guard for provider metadata validation and status
+ * boundaries. Keeping this next to the source vocabulary prevents adapters/UI
+ * from inventing conflicting paid/free semantics as real providers are added.
+ */
+export function isInherentlyFreeMarketDataSource(value: unknown): value is (typeof INHERENTLY_FREE_MARKET_DATA_SOURCES)[number] {
+  return isMarketDataSource(value)
+    && INHERENTLY_FREE_MARKET_DATA_SOURCES.includes(value as (typeof INHERENTLY_FREE_MARKET_DATA_SOURCES)[number]);
 }
 
 export interface ProviderMetadata {
