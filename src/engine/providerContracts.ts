@@ -55,6 +55,30 @@ export function canonicalProviderMarketId(value: unknown): MarketId | undefined 
 }
 
 /**
+ * Canonicalize a provider market list without silently repairing malformed
+ * contracts. Callers receive both the canonical identities and validity flags,
+ * so health/policy boundaries can fail closed on invalid or duplicate markets.
+ */
+export function canonicalProviderMarketIds(value: unknown): {
+  readonly markets: readonly MarketId[];
+  readonly isArray: boolean;
+  readonly hasInvalid: boolean;
+  readonly hasDuplicates: boolean;
+} {
+  if (!Array.isArray(value)) {
+    return { markets: Object.freeze([]), isArray: false, hasInvalid: false, hasDuplicates: false };
+  }
+  const canonical = value.map(canonicalProviderMarketId);
+  const markets = canonical.filter((market): market is MarketId => Boolean(market));
+  return {
+    markets: Object.freeze([...new Set(markets)]),
+    isArray: true,
+    hasInvalid: markets.length !== value.length,
+    hasDuplicates: new Set(markets).size !== markets.length,
+  };
+}
+
+/**
  * Central cost-classification guard for provider metadata validation and status
  * boundaries. Keeping this next to the source vocabulary prevents adapters/UI
  * from inventing conflicting paid/free semantics as real providers are added.
