@@ -19,12 +19,18 @@ function normalizeModuleSpecifier(specifier: string): string {
 function hasModuleSegment(specifier: string, segment: string): boolean {
   return normalizeModuleSpecifier(specifier).split('/').includes(segment);
 }
+function isConcreteProviderNamespaceImport(specifier: string): boolean {
+  const segments = normalizeModuleSpecifier(specifier).split('/').filter(Boolean);
+  return segments.some(segment => /^provider$/i.test(segment));
+}
 const featureFiles = collectTypeScriptFiles(engineRoot).filter(file => { const normalized = file.replaceAll('\\', '/'); const name = basename(file); return /^feature.*\.ts$/i.test(name) || normalized.endsWith('/ml/featureStore.ts'); });
 
 /**
  * Feature Engine may consume provider-neutral evidence from providerContracts,
- * but concrete provider implementation/policy/health/cache modules are now fully
- * default-denied. Migration debt reached zero and must stay at zero.
+ * but concrete provider implementation/policy/health/cache modules are fully
+ * default-denied. This includes future nested adapter namespaces such as
+ * engine/provider/googleFinance/* or engine/provider/idx/*; reorganizing an
+ * adapter must never create a coupling escape hatch. Migration debt is zero.
  */
 const forbiddenProviderModules = new Set([
   'dataProviders',
@@ -38,9 +44,10 @@ const violations: string[] = [];
 for (const file of featureFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
-    const isConcreteProviderImport = [...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName));
+    const isConcreteProviderImport = isConcreteProviderNamespaceImport(specifier)
+      || [...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName));
     if (isConcreteProviderImport) violations.push(`${filePath} imports ${specifier}; Feature Engine must consume provider-neutral contracts/evidence instead of concrete provider infrastructure.`);
   }
 }
 if (violations.length > 0) throw new Error(`Feature/provider coupling violations:\n- ${violations.join('\n- ')}`);
-console.log('Feature/provider coupling smoke passed: normalized static, dynamic and require-based concrete provider infrastructure is default-denied from Feature Engine; migration debt is zero.');
+console.log('Feature/provider coupling smoke passed: normalized static, dynamic and require-based concrete provider infrastructure, including future nested provider adapter namespaces, is default-denied from Feature Engine; migration debt is zero.');
