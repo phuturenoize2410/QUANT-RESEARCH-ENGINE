@@ -59,12 +59,14 @@ export interface CanonicalProviderMarketIds {
   readonly isArray: boolean;
   readonly hasInvalid: boolean;
   readonly hasDuplicates: boolean;
+  readonly isValid: boolean;
 }
 
 /**
  * Canonicalize a provider market list without silently repairing malformed
- * contracts. Callers receive immutable canonical evidence and validity flags,
- * so health/policy boundaries can fail closed without downstream mutation.
+ * contracts. Callers receive immutable canonical evidence and a shared validity
+ * decision, so health/policy boundaries cannot drift on what constitutes a
+ * usable provider market declaration.
  */
 export function canonicalProviderMarketIds(value: unknown): CanonicalProviderMarketIds {
   if (!Array.isArray(value)) {
@@ -73,15 +75,20 @@ export function canonicalProviderMarketIds(value: unknown): CanonicalProviderMar
       isArray: false,
       hasInvalid: false,
       hasDuplicates: false,
+      isValid: false,
     });
   }
   const canonical = value.map(canonicalProviderMarketId);
   const markets = canonical.filter((market): market is MarketId => Boolean(market));
+  const uniqueMarkets = Object.freeze([...new Set(markets)]);
+  const hasInvalid = markets.length !== value.length;
+  const hasDuplicates = uniqueMarkets.length !== markets.length;
   return Object.freeze({
-    markets: Object.freeze([...new Set(markets)]),
+    markets: uniqueMarkets,
     isArray: true,
-    hasInvalid: markets.length !== value.length,
-    hasDuplicates: new Set(markets).size !== markets.length,
+    hasInvalid,
+    hasDuplicates,
+    isValid: uniqueMarkets.length > 0 && !hasInvalid && !hasDuplicates,
   });
 }
 
