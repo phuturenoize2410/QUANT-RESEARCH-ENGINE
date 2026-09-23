@@ -39,55 +39,29 @@ for (const [label, values] of [
   ['provider modes', PROVIDER_MODES],
   ['provider health statuses', PROVIDER_HEALTH_STATUSES],
 ] as const) {
-  assert.equal(
-    new Set(values).size,
-    values.length,
-    `${label} must not contain duplicate canonical values.`,
-  );
+  assert.equal(new Set(values).size, values.length, `${label} must not contain duplicate canonical values.`);
 }
 
-for (const source of MARKET_DATA_SOURCES) {
-  assert.equal(isMarketDataSource(source), true, `Canonical provider source ${source} must pass its runtime guard.`);
-}
-for (const source of INHERENTLY_FREE_MARKET_DATA_SOURCES) {
-  assert.equal(isInherentlyFreeMarketDataSource(source), true, `Canonical free provider source ${source} must pass its cost guard.`);
-}
-for (const source of ['IDX_FEED', 'BROKER_API', 'GOOGLE', 'FREE_API ', '', null, undefined, 1]) {
-  assert.equal(isInherentlyFreeMarketDataSource(source), false, `Non-free/non-canonical source ${String(source)} must fail the cost guard.`);
-}
-for (const mode of PROVIDER_MODES) {
-  assert.equal(isProviderMode(mode), true, `Canonical provider mode ${mode} must pass its runtime guard.`);
-}
-for (const status of PROVIDER_HEALTH_STATUSES) {
-  assert.equal(isProviderHealthStatus(status), true, `Canonical provider health status ${status} must pass its runtime guard.`);
-}
+for (const source of MARKET_DATA_SOURCES) assert.equal(isMarketDataSource(source), true, `Canonical provider source ${source} must pass its runtime guard.`);
+for (const source of INHERENTLY_FREE_MARKET_DATA_SOURCES) assert.equal(isInherentlyFreeMarketDataSource(source), true, `Canonical free provider source ${source} must pass its cost guard.`);
+for (const source of ['IDX_FEED', 'BROKER_API', 'GOOGLE', 'FREE_API ', '', null, undefined, 1]) assert.equal(isInherentlyFreeMarketDataSource(source), false, `Non-free/non-canonical source ${String(source)} must fail the cost guard.`);
+for (const mode of PROVIDER_MODES) assert.equal(isProviderMode(mode), true, `Canonical provider mode ${mode} must pass its runtime guard.`);
+for (const status of PROVIDER_HEALTH_STATUSES) assert.equal(isProviderHealthStatus(status), true, `Canonical provider health status ${status} must pass its runtime guard.`);
 
 for (const [value, expected] of [
-  ['IDX', 'IDX'],
-  [' idx ', 'IDX'],
-  ['us', 'US'],
-  ['  Us  ', 'US'],
-  ['future_market', 'FUTURE_MARKET'],
+  ['IDX', 'IDX'], [' idx ', 'IDX'], ['us', 'US'], ['  Us  ', 'US'], ['future_market', 'FUTURE_MARKET'],
 ] as const) {
-  assert.equal(
-    canonicalProviderMarketId(value),
-    expected,
-    `Provider market identity ${JSON.stringify(value)} must canonicalize to ${expected}.`,
-  );
+  assert.equal(canonicalProviderMarketId(value), expected, `Provider market identity ${JSON.stringify(value)} must canonicalize to ${expected}.`);
 }
-for (const value of ['', '   ', null, undefined, 1, {}, []]) {
-  assert.equal(
-    canonicalProviderMarketId(value),
-    undefined,
-    `Invalid provider market identity ${String(value)} must fail closed.`,
-  );
-}
+for (const value of ['', '   ', null, undefined, 1, {}, []]) assert.equal(canonicalProviderMarketId(value), undefined, `Invalid provider market identity ${String(value)} must fail closed.`);
 
 const validMarkets = canonicalProviderMarketIds([' idx ', 'us', 'FUTURE_MARKET']);
 assert.deepEqual(validMarkets.markets, ['IDX', 'US', 'FUTURE_MARKET']);
 assert.equal(validMarkets.isArray, true);
 assert.equal(validMarkets.hasInvalid, false);
 assert.equal(validMarkets.hasDuplicates, false);
+assert.equal(validMarkets.isValid, true, 'A non-empty canonical market list without malformed or duplicate identities must be valid.');
+assert.equal(Object.isFrozen(validMarkets), true, 'Canonical provider market evidence must be immutable.');
 assert.equal(Object.isFrozen(validMarkets.markets), true, 'Canonical provider market lists must be immutable snapshots.');
 
 const duplicateMarkets = canonicalProviderMarketIds(['IDX', ' idx ', 'US']);
@@ -95,12 +69,21 @@ assert.deepEqual(duplicateMarkets.markets, ['IDX', 'US']);
 assert.equal(duplicateMarkets.isArray, true);
 assert.equal(duplicateMarkets.hasInvalid, false);
 assert.equal(duplicateMarkets.hasDuplicates, true, 'Canonical duplicates must remain explicit contract evidence.');
+assert.equal(duplicateMarkets.isValid, false, 'Canonical duplicates must make the provider market declaration invalid.');
 
 const malformedMarkets = canonicalProviderMarketIds(['IDX', '', null, 1]);
 assert.deepEqual(malformedMarkets.markets, ['IDX']);
 assert.equal(malformedMarkets.isArray, true);
 assert.equal(malformedMarkets.hasInvalid, true, 'Malformed market entries must remain explicit contract evidence.');
 assert.equal(malformedMarkets.hasDuplicates, false);
+assert.equal(malformedMarkets.isValid, false, 'Malformed market entries must make the provider market declaration invalid.');
+
+const emptyMarkets = canonicalProviderMarketIds([]);
+assert.deepEqual(emptyMarkets.markets, []);
+assert.equal(emptyMarkets.isArray, true);
+assert.equal(emptyMarkets.hasInvalid, false);
+assert.equal(emptyMarkets.hasDuplicates, false);
+assert.equal(emptyMarkets.isValid, false, 'An empty supported-market declaration must fail closed.');
 
 for (const value of [undefined, null, 'IDX', {}, 1]) {
   const result = canonicalProviderMarketIds(value);
@@ -108,16 +91,11 @@ for (const value of [undefined, null, 'IDX', {}, 1]) {
   assert.equal(result.isArray, false, 'Non-array market lists must fail closed at the canonical boundary.');
   assert.equal(result.hasInvalid, false);
   assert.equal(result.hasDuplicates, false);
+  assert.equal(result.isValid, false, 'Non-array market declarations must never be valid.');
 }
 
-for (const value of ['GOOGLE', 'MOCK_ENGINE ', '', null, undefined, 1]) {
-  assert.equal(isMarketDataSource(value), false, `Non-canonical provider source ${String(value)} must fail closed.`);
-}
-for (const value of ['LIVE', 'REALTIME ', '', null, undefined, 1]) {
-  assert.equal(isProviderMode(value), false, `Non-canonical provider mode ${String(value)} must fail closed.`);
-}
-for (const value of ['OK', 'HEALTHY ', '', null, undefined, 1]) {
-  assert.equal(isProviderHealthStatus(value), false, `Non-canonical provider health status ${String(value)} must fail closed.`);
-}
+for (const value of ['GOOGLE', 'MOCK_ENGINE ', '', null, undefined, 1]) assert.equal(isMarketDataSource(value), false, `Non-canonical provider source ${String(value)} must fail closed.`);
+for (const value of ['LIVE', 'REALTIME ', '', null, undefined, 1]) assert.equal(isProviderMode(value), false, `Non-canonical provider mode ${String(value)} must fail closed.`);
+for (const value of ['OK', 'HEALTHY ', '', null, undefined, 1]) assert.equal(isProviderHealthStatus(value), false, `Non-canonical provider health status ${String(value)} must fail closed.`);
 
 console.log('provider-vocabulary-smoke: ok');
