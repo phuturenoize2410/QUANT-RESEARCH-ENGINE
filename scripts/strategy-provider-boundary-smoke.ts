@@ -26,10 +26,17 @@ function hasModuleSegment(specifier: string, segment: string): boolean {
   return normalizeModuleSpecifier(specifier).split('/').includes(segment);
 }
 
+function isConcreteProviderNamespaceImport(specifier: string): boolean {
+  const segments = normalizeModuleSpecifier(specifier).split('/').filter(Boolean);
+  return segments.some(segment => /^provider$/i.test(segment));
+}
+
 /**
  * Strategy Engine must consume feature/strategy contracts, never provider machinery
  * or provider-neutral raw contracts directly. This keeps the enforced direction:
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> Application/UI.
+ * Future nested provider adapters (for example provider/googleFinance/* or provider/idx/*)
+ * are default-denied as well, so reorganizing adapters cannot bypass this boundary.
  */
 const forbiddenProviderModules = new Set([
   'dataProviders',
@@ -48,11 +55,13 @@ const violations: string[] = [];
 for (const file of strategyFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
-    if ([...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName))) {
+    const isProviderImport = isConcreteProviderNamespaceImport(specifier)
+      || [...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName));
+    if (isProviderImport) {
       violations.push(`${filePath} imports ${specifier}; Strategy Engine must consume Feature Engine outputs/contracts rather than provider modules.`);
     }
   }
 }
 
 if (violations.length > 0) throw new Error(`Strategy/provider boundary violations:\n- ${violations.join('\n- ')}`);
-console.log('Strategy/provider boundary smoke passed: both strategy surfaces are default-denied from provider modules and must consume feature-layer evidence instead.');
+console.log('Strategy/provider boundary smoke passed: both strategy surfaces are default-denied from provider modules, including future nested provider adapter namespaces, and must consume feature-layer evidence instead.');
