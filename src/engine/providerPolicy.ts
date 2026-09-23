@@ -84,7 +84,7 @@ export function providerSupportsMarket(metadata: ProviderMetadata, marketId: Mar
   if (!isMetadataObject(metadata)) return false;
   const supportedMarkets = canonicalProviderMarketIds(metadata.supportedMarkets);
   const canonicalTargetMarket = canonicalProviderMarketId(marketId);
-  if (!canonicalTargetMarket || !supportedMarkets.isArray || supportedMarkets.hasInvalid || supportedMarkets.hasDuplicates) return false;
+  if (!canonicalTargetMarket || !supportedMarkets.isValid) return false;
   return supportedMarkets.markets.includes(canonicalTargetMarket);
 }
 
