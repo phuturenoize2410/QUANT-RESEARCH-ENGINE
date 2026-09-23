@@ -1,5 +1,5 @@
 import {
-  canonicalProviderMarketId,
+  canonicalProviderMarketIds,
   isInherentlyFreeMarketDataSource,
   isMarketDataSource,
   isProviderHealthStatus,
@@ -76,10 +76,10 @@ function snapshotProviderMetadata(metadata: ProviderMetadata): { metadata: Provi
   if (hasValidRealtimeCapability && hasValidIntradayCapability && runtimeMetadata.supportsRealtime && !runtimeMetadata.supportsIntraday) issues.push('supportsRealtime/supportsIntraday');
   if (hasValidMode && hasValidIntradayCapability && runtimeMetadata.mode === 'EOD' && runtimeMetadata.supportsIntraday) issues.push('mode/supportsIntraday');
   if (hasValidSource && hasValidMode && (runtimeMetadata.source === 'MOCK_ENGINE') !== (runtimeMetadata.mode === 'MOCK')) issues.push('source/mode');
-  const rawSupportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets) ? runtimeMetadata.supportedMarkets : []; const canonicalSupportedMarkets = rawSupportedMarkets.map(canonicalProviderMarketId).filter((market): market is NonNullable<ReturnType<typeof canonicalProviderMarketId>> => Boolean(market)); const supportedMarkets = [...new Set(canonicalSupportedMarkets)];
-  if (!Array.isArray(runtimeMetadata.supportedMarkets) || canonicalSupportedMarkets.length !== rawSupportedMarkets.length || supportedMarkets.length === 0 || supportedMarkets.length !== canonicalSupportedMarkets.length) issues.push('supportedMarkets');
+  const supportedMarkets = canonicalProviderMarketIds(runtimeMetadata.supportedMarkets);
+  if (!supportedMarkets.isArray || supportedMarkets.hasInvalid || supportedMarkets.markets.length === 0 || supportedMarkets.hasDuplicates) issues.push('supportedMarkets');
   const hasMalformedContract = issues.length > 0;
-  const safeMetadata: ProviderMetadata = isMetadataObject ? { ...metadata, id: id ?? '', name: name ?? '', source: hasMalformedContract ? 'MOCK_ENGINE' : runtimeMetadata.source as MarketDataSource, mode: hasMalformedContract ? 'MOCK' : runtimeMetadata.mode as ProviderMode, isPaid: hasMalformedContract ? false : runtimeMetadata.isPaid as boolean, notes, supportedMarkets: Object.freeze([...supportedMarkets]), supportsHistorical: hasMalformedContract ? false : runtimeMetadata.supportsHistorical as boolean, supportsIntraday: hasMalformedContract ? false : runtimeMetadata.supportsIntraday as boolean, supportsRealtime: hasMalformedContract ? false : runtimeMetadata.supportsRealtime as boolean } : { id: '', name: '', source: 'MOCK_ENGINE', mode: 'MOCK', isPaid: false, supportedMarkets: Object.freeze([]), supportsHistorical: false, supportsIntraday: false, supportsRealtime: false };
+  const safeMetadata: ProviderMetadata = isMetadataObject ? { ...metadata, id: id ?? '', name: name ?? '', source: hasMalformedContract ? 'MOCK_ENGINE' : runtimeMetadata.source as MarketDataSource, mode: hasMalformedContract ? 'MOCK' : runtimeMetadata.mode as ProviderMode, isPaid: hasMalformedContract ? false : runtimeMetadata.isPaid as boolean, notes, supportedMarkets: Object.freeze([...supportedMarkets.markets]), supportsHistorical: hasMalformedContract ? false : runtimeMetadata.supportsHistorical as boolean, supportsIntraday: hasMalformedContract ? false : runtimeMetadata.supportsIntraday as boolean, supportsRealtime: hasMalformedContract ? false : runtimeMetadata.supportsRealtime as boolean } : { id: '', name: '', source: 'MOCK_ENGINE', mode: 'MOCK', isPaid: false, supportedMarkets: Object.freeze([]), supportsHistorical: false, supportsIntraday: false, supportsRealtime: false };
   return { metadata: Object.freeze(safeMetadata), issues };
 }
 function snapshotProviderHealth(health: ProviderHealth): ProviderHealth { return Object.freeze({ ...health }); }
