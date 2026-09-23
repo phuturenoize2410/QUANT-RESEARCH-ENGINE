@@ -1,5 +1,6 @@
 import {
   canonicalProviderMarketId,
+  canonicalProviderMarketIds,
   isInherentlyFreeMarketDataSource,
   isMarketDataSource,
   isProviderMode,
@@ -80,10 +81,11 @@ function isMetadataObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function providerSupportsMarket(metadata: ProviderMetadata, marketId: MarketId): boolean {
-  if (!isMetadataObject(metadata) || !Array.isArray(metadata.supportedMarkets)) return false;
+  if (!isMetadataObject(metadata)) return false;
+  const supportedMarkets = canonicalProviderMarketIds(metadata.supportedMarkets);
   const canonicalTargetMarket = canonicalProviderMarketId(marketId);
-  if (!canonicalTargetMarket) return false;
-  return metadata.supportedMarkets.some(market => canonicalProviderMarketId(market) === canonicalTargetMarket);
+  if (!canonicalTargetMarket || !supportedMarkets.isArray || supportedMarkets.hasInvalid || supportedMarkets.hasDuplicates) return false;
+  return supportedMarkets.markets.includes(canonicalTargetMarket);
 }
 
 export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
@@ -112,12 +114,11 @@ export function validateProviderMetadata(metadata: ProviderMetadata): string[] {
   if (!hasValidHistoricalCapability) issues.push('Provider capability contract is invalid: supportsHistorical must be boolean.');
   if (!hasValidIntradayCapability) issues.push('Provider capability contract is invalid: supportsIntraday must be boolean.');
   if (!hasValidRealtimeCapability) issues.push('Provider capability contract is invalid: supportsRealtime must be boolean.');
-  const supportedMarkets = Array.isArray(runtimeMetadata.supportedMarkets) ? runtimeMetadata.supportedMarkets : [];
-  if (!Array.isArray(runtimeMetadata.supportedMarkets)) issues.push('Provider capability contract is invalid: supportedMarkets must be an array.');
-  if (supportedMarkets.length === 0) issues.push('Provider capability contract is invalid: at least one supported market must be declared.');
-  const canonicalMarkets = supportedMarkets.map(canonicalProviderMarketId).filter((market): market is MarketId => Boolean(market));
-  if (canonicalMarkets.length !== supportedMarkets.length) issues.push('Provider capability contract is invalid: supported market identifiers must be non-empty strings.');
-  if (new Set(canonicalMarkets).size !== canonicalMarkets.length) issues.push('Provider capability contract is invalid: supported markets must not contain canonical duplicates.');
+  const supportedMarkets = canonicalProviderMarketIds(runtimeMetadata.supportedMarkets);
+  if (!supportedMarkets.isArray) issues.push('Provider capability contract is invalid: supportedMarkets must be an array.');
+  if (supportedMarkets.markets.length === 0) issues.push('Provider capability contract is invalid: at least one supported market must be declared.');
+  if (supportedMarkets.hasInvalid) issues.push('Provider capability contract is invalid: supported market identifiers must be non-empty strings.');
+  if (supportedMarkets.hasDuplicates) issues.push('Provider capability contract is invalid: supported markets must not contain canonical duplicates.');
   if (hasValidRealtimeCapability && hasValidIntradayCapability && runtimeMetadata.supportsRealtime && !runtimeMetadata.supportsIntraday) issues.push('Provider capability contract is invalid: real-time support requires intraday support.');
   if (hasValidRealtimeCapability && hasValidMode && runtimeMetadata.supportsRealtime && runtimeMetadata.mode !== 'REALTIME') issues.push('Provider capability contract is invalid: real-time support requires REALTIME mode.');
   if (hasValidMode && hasValidRealtimeCapability && runtimeMetadata.mode === 'REALTIME' && !runtimeMetadata.supportsRealtime) issues.push('Provider capability contract is invalid: REALTIME mode requires real-time support.');
