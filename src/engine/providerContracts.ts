@@ -54,28 +54,35 @@ export function canonicalProviderMarketId(value: unknown): MarketId | undefined 
   return canonical ? canonical as MarketId : undefined;
 }
 
-/**
- * Canonicalize a provider market list without silently repairing malformed
- * contracts. Callers receive both the canonical identities and validity flags,
- * so health/policy boundaries can fail closed on invalid or duplicate markets.
- */
-export function canonicalProviderMarketIds(value: unknown): {
+export interface CanonicalProviderMarketIds {
   readonly markets: readonly MarketId[];
   readonly isArray: boolean;
   readonly hasInvalid: boolean;
   readonly hasDuplicates: boolean;
-} {
+}
+
+/**
+ * Canonicalize a provider market list without silently repairing malformed
+ * contracts. Callers receive immutable canonical evidence and validity flags,
+ * so health/policy boundaries can fail closed without downstream mutation.
+ */
+export function canonicalProviderMarketIds(value: unknown): CanonicalProviderMarketIds {
   if (!Array.isArray(value)) {
-    return { markets: Object.freeze([]), isArray: false, hasInvalid: false, hasDuplicates: false };
+    return Object.freeze({
+      markets: Object.freeze([]) as readonly MarketId[],
+      isArray: false,
+      hasInvalid: false,
+      hasDuplicates: false,
+    });
   }
   const canonical = value.map(canonicalProviderMarketId);
   const markets = canonical.filter((market): market is MarketId => Boolean(market));
-  return {
+  return Object.freeze({
     markets: Object.freeze([...new Set(markets)]),
     isArray: true,
     hasInvalid: markets.length !== value.length,
     hasDuplicates: new Set(markets).size !== markets.length,
-  };
+  });
 }
 
 /**
