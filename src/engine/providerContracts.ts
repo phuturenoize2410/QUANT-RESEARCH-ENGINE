@@ -44,6 +44,17 @@ export function isProviderHealthStatus(value: unknown): value is ProviderHealthS
 }
 
 /**
+ * Canonicalize market identities only at provider-contract boundaries. This is
+ * deliberately provider-neutral: adapters may emit IDX, US, or future markets,
+ * while downstream layers compare one stable identity representation.
+ */
+export function canonicalProviderMarketId(value: unknown): MarketId | undefined {
+  if (typeof value !== 'string') return undefined;
+  const canonical = value.trim().toUpperCase();
+  return canonical ? canonical as MarketId : undefined;
+}
+
+/**
  * Central cost-classification guard for provider metadata validation and status
  * boundaries. Keeping this next to the source vocabulary prevents adapters/UI
  * from inventing conflicting paid/free semantics as real providers are added.
