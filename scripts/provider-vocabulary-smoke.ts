@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
+  INHERENTLY_FREE_MARKET_DATA_SOURCES,
   MARKET_DATA_SOURCES,
   PROVIDER_HEALTH_STATUSES,
   PROVIDER_MODES,
+  isInherentlyFreeMarketDataSource,
   isMarketDataSource,
   isProviderHealthStatus,
   isProviderMode,
@@ -12,6 +14,11 @@ assert.deepEqual(
   MARKET_DATA_SOURCES,
   ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API', 'IDX_FEED', 'BROKER_API'],
   'Provider source vocabulary must remain centralized and explicit.',
+);
+assert.deepEqual(
+  INHERENTLY_FREE_MARKET_DATA_SOURCES,
+  ['MOCK_ENGINE', 'GOOGLE_FINANCE', 'FREE_API'],
+  'Free/synthetic provider cost semantics must remain centralized and explicit.',
 );
 assert.deepEqual(
   PROVIDER_MODES,
@@ -26,6 +33,7 @@ assert.deepEqual(
 
 for (const [label, values] of [
   ['market data sources', MARKET_DATA_SOURCES],
+  ['inherently free market data sources', INHERENTLY_FREE_MARKET_DATA_SOURCES],
   ['provider modes', PROVIDER_MODES],
   ['provider health statuses', PROVIDER_HEALTH_STATUSES],
 ] as const) {
@@ -38,6 +46,12 @@ for (const [label, values] of [
 
 for (const source of MARKET_DATA_SOURCES) {
   assert.equal(isMarketDataSource(source), true, `Canonical provider source ${source} must pass its runtime guard.`);
+}
+for (const source of INHERENTLY_FREE_MARKET_DATA_SOURCES) {
+  assert.equal(isInherentlyFreeMarketDataSource(source), true, `Canonical free provider source ${source} must pass its cost guard.`);
+}
+for (const source of ['IDX_FEED', 'BROKER_API', 'GOOGLE', 'FREE_API ', '', null, undefined, 1]) {
+  assert.equal(isInherentlyFreeMarketDataSource(source), false, `Non-free/non-canonical source ${String(source)} must fail the cost guard.`);
 }
 for (const mode of PROVIDER_MODES) {
   assert.equal(isProviderMode(mode), true, `Canonical provider mode ${mode} must pass its runtime guard.`);
