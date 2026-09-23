@@ -30,10 +30,15 @@ function importSpecifiers(source: string): string[] {
  * Risk/Execution policy, re-apply canonical score bounds, depend directly on the
  * concrete research-pipeline contract, inspect provider adapters/health policy,
  * or bypass the application facade by importing engine implementations directly.
+ *
+ * Provider modules are intentionally matched as a namespace, not only as today's
+ * flat provider*.ts files. A future Google Finance, free/paid IDX, broker, or
+ * other adapter may live under engine/provider/*; moving it into a subdirectory
+ * must never become an accidental escape hatch around this boundary.
  */
 function isDirectDecisionPolicyImport(specifier: string): boolean {
   const normalized = specifier.replaceAll('\\', '/');
-  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*|scorePolicy|researchPipeline|researchApplication|dataProviders|provider[^/]*)$/i.test(normalized);
+  return /(?:^|\/)engine\/(?:(?:risk|execution)[^/]*(?:\/.*)?|scorePolicy|researchPipeline|researchApplication|dataProviders|provider(?:[^/]*|\/.*))$/i.test(normalized);
 }
 
 /**
@@ -89,5 +94,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI application-boundary smoke passed: bootstrap/application shells plus components/pages/views cannot directly import provider adapters/health policy, researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
+  `UI application-boundary smoke passed: bootstrap/application shells plus components/pages/views cannot directly import provider modules (including future nested adapter namespaces), researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
 );
