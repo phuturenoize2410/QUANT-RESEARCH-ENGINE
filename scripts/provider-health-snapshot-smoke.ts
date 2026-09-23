@@ -88,7 +88,7 @@ const canonicalMetadata = canonicalMetadataProvider.metadata as unknown as {
 canonicalMetadata.id = '  future-idx-adapter  ';
 canonicalMetadata.name = '  Future IDX Adapter  ';
 canonicalMetadata.notes = '  Vendor-neutral test adapter  ';
-canonicalMetadata.supportedMarkets = [' idx ', 'IDX', ' us '];
+canonicalMetadata.supportedMarkets = [' idx ', ' us '];
 const canonicalMetadataSnapshot = await getProviderHealthSnapshot(
   canonicalMetadataProvider,
   {
@@ -111,7 +111,25 @@ if (canonicalMetadataSnapshot.metadata.notes !== 'Vendor-neutral test adapter') 
   throw new Error('provider notes must be trimmed before downstream status/UI consumption.');
 }
 if (canonicalMetadataSnapshot.metadata.supportedMarkets.join(',') !== 'IDX,US') {
-  throw new Error('supported market identities must be trimmed, uppercased and deduplicated at the provider boundary.');
+  throw new Error('supported market identities must be trimmed and uppercased at the provider boundary.');
+}
+
+const duplicateMarketProvider = new MockMarketDataProvider();
+const duplicateMarketMetadata = duplicateMarketProvider.metadata as unknown as { supportedMarkets: string[] };
+duplicateMarketMetadata.supportedMarkets = [' idx ', 'IDX', ' us '];
+const duplicateMarketSnapshot = await getProviderHealthSnapshot(
+  duplicateMarketProvider,
+  {
+    status: 'HEALTHY',
+    checkedAt: '2026-09-11T12:00:00.000Z',
+  },
+  nowMs,
+);
+if (duplicateMarketSnapshot.health.status !== 'UNAVAILABLE') {
+  throw new Error('canonical duplicate market identities must fail closed at the shared provider-health boundary.');
+}
+if (!duplicateMarketSnapshot.health.message?.includes('supportedMarkets')) {
+  throw new Error('duplicate supported-market failures must preserve actionable metadata context.');
 }
 
 const malformedMetadataProvider = new MockMarketDataProvider();
@@ -213,4 +231,4 @@ if (failedSnapshot.capturedAt !== '2026-09-11T12:00:00.000Z') {
   throw new Error('failed health captures must retain the same canonical capture instant.');
 }
 
-console.log('Provider-health snapshot smoke passed: market and broker adapters emit immutable raw health observations and share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, contradictory mode/realtime and mock/source capability claims fail closed, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
+console.log('Provider-health snapshot smoke passed: market and broker adapters emit immutable raw health observations and share one immutable point-in-time metadata/health/capture envelope, provider identity/capabilities are canonicalized before downstream use, canonical duplicate market identities and contradictory capability claims fail closed, malformed metadata fails closed, and adapter failures are contained as canonical UNAVAILABLE state.');
