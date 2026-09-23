@@ -55,8 +55,13 @@ for (const [value, expected] of [
 }
 for (const value of ['', '   ', null, undefined, 1, {}, []]) assert.equal(canonicalProviderMarketId(value), undefined, `Invalid provider market identity ${String(value)} must fail closed.`);
 
-const validMarkets = canonicalProviderMarketIds([' idx ', 'us', 'FUTURE_MARKET']);
+const providerOwnedMarkets = [' idx ', 'us', 'FUTURE_MARKET'];
+const providerOwnedMarketsBefore = [...providerOwnedMarkets];
+const validMarkets = canonicalProviderMarketIds(providerOwnedMarkets);
 assert.deepEqual(validMarkets.markets, ['IDX', 'US', 'FUTURE_MARKET']);
+assert.deepEqual(providerOwnedMarkets, providerOwnedMarketsBefore, 'Canonicalization must not mutate provider-owned market metadata.');
+assert.equal(Object.isFrozen(providerOwnedMarkets), false, 'Canonicalization must snapshot provider metadata rather than freezing caller-owned arrays.');
+assert.notEqual(validMarkets.markets, providerOwnedMarkets, 'Canonical market evidence must not alias provider-owned arrays.');
 assert.equal(validMarkets.isArray, true);
 assert.equal(validMarkets.hasInvalid, false);
 assert.equal(validMarkets.hasDuplicates, false);
