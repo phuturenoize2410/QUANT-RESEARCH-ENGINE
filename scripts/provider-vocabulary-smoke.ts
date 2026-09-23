@@ -5,6 +5,7 @@ import {
   PROVIDER_HEALTH_STATUSES,
   PROVIDER_MODES,
   canonicalProviderMarketId,
+  canonicalProviderMarketIds,
   isInherentlyFreeMarketDataSource,
   isMarketDataSource,
   isProviderHealthStatus,
@@ -80,6 +81,33 @@ for (const value of ['', '   ', null, undefined, 1, {}, []]) {
     undefined,
     `Invalid provider market identity ${String(value)} must fail closed.`,
   );
+}
+
+const validMarkets = canonicalProviderMarketIds([' idx ', 'us', 'FUTURE_MARKET']);
+assert.deepEqual(validMarkets.markets, ['IDX', 'US', 'FUTURE_MARKET']);
+assert.equal(validMarkets.isArray, true);
+assert.equal(validMarkets.hasInvalid, false);
+assert.equal(validMarkets.hasDuplicates, false);
+assert.equal(Object.isFrozen(validMarkets.markets), true, 'Canonical provider market lists must be immutable snapshots.');
+
+const duplicateMarkets = canonicalProviderMarketIds(['IDX', ' idx ', 'US']);
+assert.deepEqual(duplicateMarkets.markets, ['IDX', 'US']);
+assert.equal(duplicateMarkets.isArray, true);
+assert.equal(duplicateMarkets.hasInvalid, false);
+assert.equal(duplicateMarkets.hasDuplicates, true, 'Canonical duplicates must remain explicit contract evidence.');
+
+const malformedMarkets = canonicalProviderMarketIds(['IDX', '', null, 1]);
+assert.deepEqual(malformedMarkets.markets, ['IDX']);
+assert.equal(malformedMarkets.isArray, true);
+assert.equal(malformedMarkets.hasInvalid, true, 'Malformed market entries must remain explicit contract evidence.');
+assert.equal(malformedMarkets.hasDuplicates, false);
+
+for (const value of [undefined, null, 'IDX', {}, 1]) {
+  const result = canonicalProviderMarketIds(value);
+  assert.deepEqual(result.markets, []);
+  assert.equal(result.isArray, false, 'Non-array market lists must fail closed at the canonical boundary.');
+  assert.equal(result.hasInvalid, false);
+  assert.equal(result.hasDuplicates, false);
 }
 
 for (const value of ['GOOGLE', 'MOCK_ENGINE ', '', null, undefined, 1]) {
