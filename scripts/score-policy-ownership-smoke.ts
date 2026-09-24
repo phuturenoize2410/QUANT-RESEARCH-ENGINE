@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const ROOT = join(process.cwd(), 'src');
 const CANONICAL_POLICY = 'engine/scorePolicy.ts';
+const canonicalPolicyPath = join(ROOT, ...CANONICAL_POLICY.split('/'));
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -12,13 +13,26 @@ function walk(dir: string): string[] {
   });
 }
 
-const sourceFiles = walk(ROOT).filter((path) => /\.(ts|tsx)$/.test(path));
+assert.ok(
+  existsSync(canonicalPolicyPath),
+  `Score policy ownership discovery regression: canonical policy missing at src/${CANONICAL_POLICY}`,
+);
+
+const sourceFiles = [...new Set(walk(ROOT).filter((path) => /\.(ts|tsx)$/.test(path)))].sort();
+const consumerFiles = sourceFiles.filter((path) => {
+  const repoPath = relative(ROOT, path).split(sep).join('/');
+  return repoPath !== CANONICAL_POLICY;
+});
+
+assert.ok(
+  consumerFiles.length > 0,
+  'Score policy ownership discovery regression: no score-policy consumer surfaces were discovered',
+);
+
 const violations: string[] = [];
 
-for (const path of sourceFiles) {
+for (const path of consumerFiles) {
   const repoPath = relative(ROOT, path).split(sep).join('/');
-  if (repoPath === CANONICAL_POLICY) continue;
-
   const source = readFileSync(path, 'utf8');
 
   // Score-domain ownership belongs to scorePolicy.ts. Domain consumers should use
