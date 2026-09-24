@@ -52,10 +52,18 @@ function forbiddenProviderModule(specifier: string): string | null {
   if (engineIndex < 0 || engineIndex === segments.length - 1) return null;
 
   const moduleName = segments[engineIndex + 1];
+  if (moduleName === 'provider') return 'provider/*';
   return FORBIDDEN_ENGINE_MODULES.has(moduleName) ? moduleName : null;
 }
 
-const uiFiles = UI_ROOTS.flatMap(sourceFiles);
+const uiFiles = [...new Set(UI_ROOTS.flatMap(sourceFiles))].sort();
+
+if (uiFiles.length === 0) {
+  throw new Error(
+    'UI provider boundary smoke discovered zero UI source files. Fail closed so a future layout/refactor cannot silently disable DataProvider -> Feature -> Strategy -> Risk/Execution -> UI enforcement.',
+  );
+}
+
 const violations: string[] = [];
 
 for (const file of uiFiles) {
