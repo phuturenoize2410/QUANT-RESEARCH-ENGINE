@@ -23,7 +23,15 @@ function isConcreteProviderNamespaceImport(specifier: string): boolean {
   const segments = normalizeModuleSpecifier(specifier).split('/').filter(Boolean);
   return segments.some(segment => /^provider$/i.test(segment));
 }
-const featureFiles = collectTypeScriptFiles(engineRoot).filter(file => { const normalized = file.replaceAll('\\', '/'); const name = basename(file); return /^feature.*\.ts$/i.test(name) || normalized.endsWith('/ml/featureStore.ts'); });
+const featureFiles = [...new Set(collectTypeScriptFiles(engineRoot).filter(file => {
+  const normalized = file.replaceAll('\\', '/');
+  const name = basename(file);
+  return /^feature.*\.tsx?$/i.test(name) || normalized.endsWith('/ml/featureStore.ts');
+}))].sort();
+
+if (featureFiles.length === 0) {
+  throw new Error('Feature/provider coupling gate discovered zero Feature Engine surfaces; fail closed so a future layout/refactor cannot silently disable provider-isolation enforcement.');
+}
 
 /**
  * Feature Engine may consume provider-neutral evidence from providerContracts,
@@ -50,4 +58,4 @@ for (const file of featureFiles) {
   }
 }
 if (violations.length > 0) throw new Error(`Feature/provider coupling violations:\n- ${violations.join('\n- ')}`);
-console.log('Feature/provider coupling smoke passed: normalized static, dynamic and require-based concrete provider infrastructure, including future nested provider adapter namespaces, is default-denied from Feature Engine; migration debt is zero.');
+console.log(`Feature/provider coupling smoke passed across ${featureFiles.length} discovered Feature Engine surface(s): normalized static, dynamic and require-based concrete provider infrastructure, including future nested provider adapter namespaces, is default-denied; migration debt is zero.`);
