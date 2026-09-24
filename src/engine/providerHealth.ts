@@ -16,6 +16,7 @@ import type {
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_DATE_MS = 8.64e15;
 const MAX_PROVIDER_HEALTH_MESSAGE_LENGTH = 240;
+const MAX_PROVIDER_METADATA_TEXT_LENGTH = 240;
 
 function normalizeObservationClock(value: unknown): { nowMs: number; valid: boolean } {
   if (typeof value === 'number' && Number.isFinite(value) && value >= -MAX_DATE_MS && value <= MAX_DATE_MS) return { nowMs: value, valid: true };
@@ -73,7 +74,12 @@ export async function captureProviderHealth(provider: HealthCheckedProvider, now
   const observationClock = normalizeObservationClock(nowMs);
   try { return normalizeProviderHealth(await provider.getHealth(), nowMs); } catch (error) { const baseMessage = `Provider health check failed: ${providerErrorMessage(error)}`; return { status: 'UNAVAILABLE', checkedAt: new Date(observationClock.nowMs).toISOString(), message: appendMessage(undefined, observationClock.valid ? baseMessage : appendMessage(baseMessage, 'Provider observation clock is invalid.')) }; }
 }
-function canonicalMetadataText(value: unknown): string | undefined { if (typeof value !== 'string') return undefined; const trimmed = value.trim(); return trimmed || undefined; }
+function canonicalMetadataText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const canonical = value.replace(/[\r\n\t\0-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!canonical) return undefined;
+  return canonical.length <= MAX_PROVIDER_METADATA_TEXT_LENGTH ? canonical : `${canonical.slice(0, MAX_PROVIDER_METADATA_TEXT_LENGTH - 1)}…`;
+}
 
 function snapshotProviderMetadata(metadata: ProviderMetadata): { metadata: ProviderMetadata; issues: string[] } {
   const isMetadataObject = Boolean(metadata) && typeof metadata === 'object' && !Array.isArray(metadata);
