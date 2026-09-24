@@ -15,7 +15,7 @@ import type {
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const MAX_DATE_MS = 8.64e15;
-const MAX_PROVIDER_ERROR_CONTEXT_LENGTH = 240;
+const MAX_PROVIDER_HEALTH_MESSAGE_LENGTH = 240;
 
 function normalizeObservationClock(value: unknown): { nowMs: number; valid: boolean } {
   if (typeof value === 'number' && Number.isFinite(value) && value >= -MAX_DATE_MS && value <= MAX_DATE_MS) return { nowMs: value, valid: true };
@@ -24,15 +24,19 @@ function normalizeObservationClock(value: unknown): { nowMs: number; valid: bool
 function parseTimestamp(value: unknown): number | undefined { if (typeof value !== 'string' || !value.trim()) return undefined; const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : undefined; }
 function canonicalTimestamp(value: unknown): string | undefined { const parsed = parseTimestamp(value); return parsed === undefined ? undefined : new Date(parsed).toISOString(); }
 function normalizeNonNegativeFinite(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined; }
-function canonicalHealthMessage(value: unknown): string | undefined { if (typeof value !== 'string') return undefined; const trimmed = value.trim(); return trimmed || undefined; }
-function appendMessage(base: string | undefined, detail: string): string { return base ? `${base} ${detail}` : detail; }
+function canonicalBoundedText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const canonical = value.replace(/[\r\n\t\0-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!canonical) return undefined;
+  return canonical.length <= MAX_PROVIDER_HEALTH_MESSAGE_LENGTH ? canonical : `${canonical.slice(0, MAX_PROVIDER_HEALTH_MESSAGE_LENGTH - 1)}…`;
+}
+function canonicalHealthMessage(value: unknown): string | undefined { return canonicalBoundedText(value); }
+function appendMessage(base: string | undefined, detail: string): string { return canonicalBoundedText(base ? `${base} ${detail}` : detail) ?? detail; }
 function degradeHealth(health: ProviderHealth, detail: string): ProviderHealth { return health.status === 'UNAVAILABLE' || health.status === 'STALE' ? { ...health, message: appendMessage(health.message, detail) } : { ...health, status: 'DEGRADED', message: appendMessage(health.message, detail) }; }
 function failHealthClosed(health: ProviderHealth, detail: string): ProviderHealth { return { ...health, status: 'UNAVAILABLE', message: appendMessage(health.message, detail) }; }
 function providerErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const canonical = raw.replace(/[\r\n\t\0-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!canonical) return 'Unknown provider health-check failure.';
-  return canonical.length <= MAX_PROVIDER_ERROR_CONTEXT_LENGTH ? canonical : `${canonical.slice(0, MAX_PROVIDER_ERROR_CONTEXT_LENGTH - 1)}…`;
+  return canonicalBoundedText(raw) ?? 'Unknown provider health-check failure.';
 }
 
 export function normalizeProviderHealth(health: ProviderHealth, nowMs: number = Date.now()): ProviderHealth {
@@ -67,7 +71,7 @@ export function normalizeProviderHealth(health: ProviderHealth, nowMs: number = 
 
 export async function captureProviderHealth(provider: HealthCheckedProvider, nowMs: number = Date.now()): Promise<ProviderHealth> {
   const observationClock = normalizeObservationClock(nowMs);
-  try { return normalizeProviderHealth(await provider.getHealth(), nowMs); } catch (error) { const baseMessage = `Provider health check failed: ${providerErrorMessage(error)}`; return { status: 'UNAVAILABLE', checkedAt: new Date(observationClock.nowMs).toISOString(), message: observationClock.valid ? baseMessage : appendMessage(baseMessage, 'Provider observation clock is invalid.') }; }
+  try { return normalizeProviderHealth(await provider.getHealth(), nowMs); } catch (error) { const baseMessage = `Provider health check failed: ${providerErrorMessage(error)}`; return { status: 'UNAVAILABLE', checkedAt: new Date(observationClock.nowMs).toISOString(), message: appendMessage(undefined, observationClock.valid ? baseMessage : appendMessage(baseMessage, 'Provider observation clock is invalid.')) }; }
 }
 function canonicalMetadataText(value: unknown): string | undefined { if (typeof value !== 'string') return undefined; const trimmed = value.trim(); return trimmed || undefined; }
 
