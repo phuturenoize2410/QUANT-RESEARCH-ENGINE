@@ -38,7 +38,15 @@ function crossesPresentationOrPrototypeDataBoundary(specifier: string): boolean 
 }
 
 const violations: string[] = [];
-for (const file of collectTypeScriptFiles(applicationRoot)) {
+const applicationFiles = [...new Set(collectTypeScriptFiles(applicationRoot))].sort();
+
+if (applicationFiles.length === 0) {
+  violations.push(
+    'No application TypeScript modules were discovered under src/application; fail closed because an empty discovery set would silently disable the application orchestration boundary.',
+  );
+}
+
+for (const file of applicationFiles) {
   const source = readFileSync(file, 'utf8');
   for (const specifier of importSpecifiers(source)) {
     if (crossesPresentationOrPrototypeDataBoundary(specifier)) {
@@ -54,5 +62,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Application-boundary smoke passed: ${collectTypeScriptFiles(applicationRoot).length} application modules remain independent from React/UI and direct prototype/static data imports across normalized static imports, dynamic imports and CommonJS require calls; aliases, Windows separators, extensions and query/hash suffixes cannot bypass the boundary; provider-backed data must enter through engine provider contracts.`,
+  `Application-boundary smoke passed: ${applicationFiles.length} deterministically discovered application modules remain independent from React/UI and direct prototype/static data imports across normalized static imports, dynamic imports and CommonJS require calls; aliases, Windows separators, extensions and query/hash suffixes cannot bypass the boundary; provider-backed data must enter through engine provider contracts.`,
 );
