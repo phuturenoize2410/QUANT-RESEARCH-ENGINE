@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -30,9 +31,25 @@ const numericCostLiteralPatterns: Array<[RegExp, string]> = [
     'numeric assignment/default',
   ],
 ];
+
+const sourceFiles = [...new Set(collectTypeScriptFiles(srcRoot))].sort();
+const repoPaths = sourceFiles.map(file => relative(repoRoot, file).replaceAll('\\', '/'));
+
+// This ownership gate must fail closed if a future layout/refactor removes or
+// renames the canonical execution-cost policy. Otherwise every consumer would be
+// skipped from ownership enforcement while the smoke test still reported PASS.
+assert.ok(
+  repoPaths.includes(canonicalPolicy),
+  `Execution-cost ownership gate could not discover canonical policy ${canonicalPolicy}. Update the gate deliberately if the policy moves; do not silently lose fee/slippage ownership enforcement.`,
+);
+assert.ok(
+  sourceFiles.length > 1,
+  'Execution-cost ownership gate discovered no consumer TypeScript surfaces; refusing a silent no-op PASS.',
+);
+
 const violations: string[] = [];
 
-for (const file of collectTypeScriptFiles(srcRoot)) {
+for (const file of sourceFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   if (filePath === canonicalPolicy) continue;
 
@@ -51,5 +68,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `Execution-cost ownership smoke passed: numeric buy-fee, sell-fee and slippage assumptions have one canonical owner in ${canonicalPolicy}; UI/strategy/backtest/provider code cannot introduce duplicate hardcoded cost defaults through object literals, assignments, or defaults.`,
+  `Execution-cost ownership smoke passed across ${sourceFiles.length - 1} consumer surfaces: numeric buy-fee, sell-fee and slippage assumptions have one canonical owner in ${canonicalPolicy}; UI/strategy/backtest/provider code cannot introduce duplicate hardcoded cost defaults through object literals, assignments, or defaults.`,
 );
