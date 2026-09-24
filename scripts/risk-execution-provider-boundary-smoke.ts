@@ -1,13 +1,38 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const engineRoot = join(repoRoot, 'src', 'engine');
-const riskExecutionFiles = [
-  join(engineRoot, 'execution.ts'),
-  join(engineRoot, 'executionPolicy.ts'),
-  join(engineRoot, 'researchExecutionPolicy.ts'),
-];
+
+function isRiskExecutionSurface(relativePath: string): boolean {
+  const normalized = relativePath.replaceAll('\\', '/');
+  const segments = normalized.split('/');
+  const filename = segments.at(-1) ?? '';
+  const stem = filename.replace(/\.(?:[cm]?[jt]sx?)$/i, '');
+  return segments.some(segment => /^(?:risk|execution)$/i.test(segment))
+    || /(?:^|[-_.])(?:risk|execution)(?:$|[-_.])/i.test(stem)
+    || /(?:risk|execution)(?:Policy|Engine|Service|Manager|Gate)$/i.test(stem);
+}
+
+function discoverRiskExecutionFiles(directory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...discoverRiskExecutionFiles(path));
+      continue;
+    }
+    if (!entry.isFile() || !/\.(?:[cm]?[jt]sx?)$/i.test(entry.name)) continue;
+    const relativePath = relative(engineRoot, path);
+    if (isRiskExecutionSurface(relativePath)) files.push(path);
+  }
+  return files.sort();
+}
+
+const riskExecutionFiles = discoverRiskExecutionFiles(engineRoot);
+if (riskExecutionFiles.length === 0) {
+  throw new Error('Risk/Execution provider boundary gate discovered no execution surfaces; fail closed rather than silently skipping enforcement.');
+}
 
 function importSpecifiers(source: string): string[] {
   const staticSpecifiers = [...source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)].map(match => match[1]);
@@ -35,6 +60,8 @@ function isConcreteProviderNamespaceImport(specifier: string): boolean {
  * acquisition/gating policy, caches, raw bars/quotes, or health orchestration.
  * Future nested provider adapters (for example provider/googleFinance/* or provider/idx/*)
  * are default-denied as well, so reorganizing adapters cannot bypass this boundary.
+ * Risk/Execution surfaces are discovered rather than maintained as a fixed allowlist,
+ * so adding a new execution engine/service/policy cannot silently escape enforcement.
  * This preserves the enforced direction:
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> Application/UI.
  */
@@ -72,4 +99,4 @@ if (!/import\s*\{[^}]*providerHealthReadinessError[^}]*\}\s+from\s+['"][^'"]*pro
 }
 
 if (violations.length > 0) throw new Error(`Risk/Execution provider boundary violations:\n- ${violations.join('\n- ')}`);
-console.log('Risk/Execution provider boundary smoke passed: execution surfaces are isolated from provider machinery, including future nested provider adapter namespaces, use provider-neutral evidence, and reuse canonical readiness policy.');
+console.log(`Risk/Execution provider boundary smoke passed: ${riskExecutionFiles.length} discovered execution surface(s) are isolated from provider machinery, including future nested provider adapter namespaces, use provider-neutral evidence, and reuse canonical readiness policy.`);
