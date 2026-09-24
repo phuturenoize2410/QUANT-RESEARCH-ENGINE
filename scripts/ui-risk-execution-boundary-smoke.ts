@@ -50,8 +50,21 @@ const legacyUiBoundaryExceptions = new Map<string, Set<string>>();
 
 const violations: string[] = [];
 const exercisedLegacyExceptions = new Set<string>();
+const uiFiles = [...new Set(uiRoots.flatMap(collectTypeScriptFiles))].sort();
 
-for (const file of uiRoots.flatMap(collectTypeScriptFiles)) {
+if (uiFiles.length === 0) {
+  violations.push(
+    'No UI TypeScript surfaces were discovered under src/main.tsx, src/App.tsx, src/components, src/pages, or src/views; fail closed because an empty discovery set would silently disable the UI decision-boundary gate.',
+  );
+}
+
+if (!existsSync(applicationFacade)) {
+  violations.push(
+    `${relative(repoRoot, applicationFacade)} is missing; UI decision-policy access must remain mediated by an explicit application facade.`,
+  );
+}
+
+for (const file of uiFiles) {
   const source = readFileSync(file, 'utf8');
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   const exceptions = legacyUiBoundaryExceptions.get(filePath) ?? new Set<string>();
@@ -82,11 +95,13 @@ for (const [filePath, exceptions] of legacyUiBoundaryExceptions) {
   }
 }
 
-const facadeSource = readFileSync(applicationFacade, 'utf8');
-if (/export\s+\*\s+from\s+['"][^'"]*engine\/researchApplication['"]/i.test(facadeSource)) {
-  violations.push(
-    `${relative(repoRoot, applicationFacade)} wildcard re-exports engine/researchApplication; the presentation facade must explicitly whitelist its public application contract so new engine symbols cannot leak into UI dependencies.`,
-  );
+if (existsSync(applicationFacade)) {
+  const facadeSource = readFileSync(applicationFacade, 'utf8');
+  if (/export\s+\*\s+from\s+['"][^'"]*engine\/researchApplication['"]/i.test(facadeSource)) {
+    violations.push(
+      `${relative(repoRoot, applicationFacade)} wildcard re-exports engine/researchApplication; the presentation facade must explicitly whitelist its public application contract so new engine symbols cannot leak into UI dependencies.`,
+    );
+  }
 }
 
 if (violations.length > 0) {
@@ -94,5 +109,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `UI application-boundary smoke passed: bootstrap/application shells plus components/pages/views cannot directly import provider modules (including future nested adapter namespaces), researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exposes an explicit allow-listed contract.`,
+  `UI application-boundary smoke passed: ${uiFiles.length} deterministically discovered bootstrap/application shells plus components/pages/views cannot directly import provider modules (including future nested adapter namespaces), researchPipeline, engine/researchApplication, scorePolicy, or risk/execution modules through static, dynamic, or CommonJS imports; ${exercisedLegacyExceptions.size} exact legacy presentation imports remain registered as migration debt; and the application facade exists and exposes an explicit allow-listed contract.`,
 );
