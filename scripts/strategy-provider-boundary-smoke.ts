@@ -37,6 +37,8 @@ function isConcreteProviderNamespaceImport(specifier: string): boolean {
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> Application/UI.
  * Future nested provider adapters (for example provider/googleFinance/* or provider/idx/*)
  * are default-denied as well, so reorganizing adapters cannot bypass this boundary.
+ * Discovery must also fail closed: an empty strategy surface must never turn this gate
+ * into a silently passing no-op after a future directory/layout refactor.
  */
 const forbiddenProviderModules = new Set([
   'dataProviders',
@@ -50,7 +52,11 @@ const forbiddenProviderModules = new Set([
   'providerQuote',
 ]);
 
-const strategyFiles = strategyRoots.flatMap(collectTypeScriptFiles);
+const strategyFiles = [...new Set(strategyRoots.flatMap(collectTypeScriptFiles))].sort();
+if (strategyFiles.length === 0) {
+  throw new Error('Strategy/provider boundary gate discovered no strategy surfaces; fail closed rather than silently skipping enforcement.');
+}
+
 const violations: string[] = [];
 for (const file of strategyFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
@@ -64,4 +70,4 @@ for (const file of strategyFiles) {
 }
 
 if (violations.length > 0) throw new Error(`Strategy/provider boundary violations:\n- ${violations.join('\n- ')}`);
-console.log('Strategy/provider boundary smoke passed: both strategy surfaces are default-denied from provider modules, including future nested provider adapter namespaces, and must consume feature-layer evidence instead.');
+console.log(`Strategy/provider boundary smoke passed: ${strategyFiles.length} discovered strategy surface(s) are default-denied from provider modules, including future nested provider adapter namespaces, and must consume feature-layer evidence instead.`);
