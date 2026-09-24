@@ -24,10 +24,17 @@ function hasModuleSegment(specifier: string, segment: string): boolean {
   return normalizeModuleSpecifier(specifier).split('/').includes(segment);
 }
 
+function isConcreteProviderNamespaceImport(specifier: string): boolean {
+  const segments = normalizeModuleSpecifier(specifier).split('/').filter(Boolean);
+  return segments.some(segment => /^provider$/i.test(segment));
+}
+
 /**
  * Risk/Execution may consume provider-neutral evidence contracts and the canonical
  * pure readiness evaluator, but must never reach into concrete provider adapters,
  * acquisition/gating policy, caches, raw bars/quotes, or health orchestration.
+ * Future nested provider adapters (for example provider/googleFinance/* or provider/idx/*)
+ * are default-denied as well, so reorganizing adapters cannot bypass this boundary.
  * This preserves the enforced direction:
  * DataProvider -> Feature Engine -> Strategy Engine -> Risk/Execution -> Application/UI.
  */
@@ -45,7 +52,9 @@ const violations: string[] = [];
 for (const file of riskExecutionFiles) {
   const filePath = relative(repoRoot, file).replaceAll('\\', '/');
   for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
-    if ([...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName))) {
+    const isProviderImport = isConcreteProviderNamespaceImport(specifier)
+      || [...forbiddenProviderModules].some(moduleName => hasModuleSegment(specifier, moduleName));
+    if (isProviderImport) {
       violations.push(`${filePath} imports ${specifier}; Risk/Execution must consume upstream evidence/contracts rather than provider machinery.`);
     }
   }
@@ -63,4 +72,4 @@ if (!/import\s*\{[^}]*providerHealthReadinessError[^}]*\}\s+from\s+['"][^'"]*pro
 }
 
 if (violations.length > 0) throw new Error(`Risk/Execution provider boundary violations:\n- ${violations.join('\n- ')}`);
-console.log('Risk/Execution provider boundary smoke passed: execution surfaces are isolated from provider machinery, use provider-neutral evidence, and reuse canonical readiness policy.');
+console.log('Risk/Execution provider boundary smoke passed: execution surfaces are isolated from provider machinery, including future nested provider adapter namespaces, use provider-neutral evidence, and reuse canonical readiness policy.');
