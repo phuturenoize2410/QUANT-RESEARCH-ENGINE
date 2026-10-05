@@ -7,6 +7,7 @@ import {
 } from '../strategyTypes';
 import { StockData } from '../../types';
 import { buildBacktestSummary } from './strategyBase';
+import { totalFrictionPct, DEFAULT_TOTAL_FRICTION_PCT } from '../executionPolicy';
 
 export const BreakoutStrategy: StrategyEngine = {
   id: 'strategy-breakout-highs',
@@ -99,29 +100,34 @@ export const BreakoutStrategy: StrategyEngine = {
     else if (score >= 45) signal = 'WATCH';
     else signal = 'AVOID';
 
+    const stats = stock.historicalStats;
+    const dynamicWinRate = Math.min(85, Math.max(35, Math.round((stats.greenOpenRate * 0.7 + score * 0.3) * 10) / 10));
+    const dynamicExpectedReturn = Math.round(Math.max(0.5, (stock.expectedNetGap * 2.2 + (score > 70 ? 1.5 : 0))) * 10) / 10;
+    const dynamicProfitFactor = Math.round(Math.max(1.1, (dynamicWinRate / (100 - dynamicWinRate)) * 1.2) * 100) / 100;
+
     return {
       strategyId: this.id,
       strategyName: this.name,
       ticker: stock.ticker,
       score,
       signal,
-      confidenceScore: 86,
-      winRate: 65.1,
-      expectedReturnPct: 4.9,
-      profitFactor: 1.95,
-      tailRiskScore: 71,
-      badGapProbability: 10.1,
+      confidenceScore: stats.confidenceScore || 75,
+      winRate: dynamicWinRate,
+      expectedReturnPct: dynamicExpectedReturn,
+      profitFactor: dynamicProfitFactor,
+      tailRiskScore: stock.tailRiskScore,
+      badGapProbability: stats.badGap1PctProb,
       holdingPeriod: this.holdingPeriod,
       positiveFactors,
       riskFactors,
       regimeSuitability: 89,
-      matchedSetupsCount: 44,
+      matchedSetupsCount: stats.comparableSetupsCount || 30,
     };
   },
 
   backtest(stocks: StockData[], params?: Record<string, any>): StrategyBacktestResult {
     const trades: StrategyBacktestTrade[] = [];
-    const feePct = 0.40;
+    const frictionPct = params?.settings ? totalFrictionPct(params.settings) : DEFAULT_TOTAL_FRICTION_PCT;
 
     stocks.forEach((stock, sIdx) => {
       const bars = stock.historicalBars;
@@ -136,7 +142,7 @@ export const BreakoutStrategy: StrategyEngine = {
 
         if (entryBar.close >= max20 && entryBar.volume > avgVol * 1.5) {
           const gross = ((exitBar.close - entryBar.close) / entryBar.close) * 100;
-          const net = gross - feePct;
+          const net = gross - frictionPct;
           const isWin = net > 0;
 
           const regimes: MarketRegime[] = ['BULLISH_TREND', 'SIDEWAYS_RANGE', 'HIGH_VOLATILITY', 'BEARISH_CORRECTION'];

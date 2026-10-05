@@ -158,3 +158,35 @@ export function deriveOvernightExitDecision(
 
   return Object.freeze({ cutLossLevel, takeProfitLevel, exitStatus });
 }
+
+/**
+ * Calculates optimal capital fraction using the Half-Kelly Criterion.
+ * f* = (p * b - q) / b * fraction
+ * where:
+ *   p = win rate (0 to 1)
+ *   q = 1 - p
+ *   b = payoff ratio (avgWin / avgLoss)
+ * Standard quant practice defaults to Half-Kelly (fraction = 0.5) with safety bounds (0% to 25%).
+ */
+export function calculateKellyPositionFraction(
+  winRatePct: number,
+  avgWinPct: number,
+  avgLossPct: number,
+  fraction: number = 0.5,
+  maxCapPct: number = 25.0
+): number {
+  const p = Math.max(0, Math.min(1, winRatePct / 100));
+  const q = 1 - p;
+  const absWin = Math.abs(avgWinPct);
+  const absLoss = Math.abs(avgLossPct);
+
+  if (absLoss === 0 || p === 0) return 0;
+
+  const b = absWin / absLoss; // Payoff ratio
+  const fullKelly = (p * b - q) / b;
+
+  if (fullKelly <= 0) return 0;
+
+  const scaledKelly = fullKelly * fraction * 100;
+  return Math.min(maxCapPct, Math.round(scaledKelly * 10) / 10);
+}

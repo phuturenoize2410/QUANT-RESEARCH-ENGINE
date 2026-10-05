@@ -13,7 +13,9 @@ import {
   DEFAULT_EXECUTION_COSTS,
   executionCostsFromSettings,
   netReturnAfterCosts,
+  calculateKellyPositionFraction,
 } from './executionPolicy';
+export { calculateKellyPositionFraction } from './executionPolicy';
 import {
   clampNormalizedScore,
   roundEstablishedScore,
@@ -116,8 +118,9 @@ export function computeOvernightEdgeScore(
   // Technical Quality
   const technicalComponent = stock.technicalScore * (settings.technicalQualityWeight / 100);
 
-  // Liquidity (5 Milyar IDR = 60, 50 Milyar+ = 100)
-  const liquidityNorm = Math.max(20, clampNormalizedScore(Math.log10(Math.max(1, stock.turnover)) * 12 - 30));
+  // Liquidity scaling (500 Jt = 20, 5 Milyar IDR = 60, 50 Milyar+ = 100)
+  const logTurnover = Math.log10(Math.max(1, stock.turnover));
+  const liquidityNorm = clampNormalizedScore(Math.round((logTurnover - 8.2) * 40));
   const liquidityComponent = liquidityNorm * (settings.liquidityWeight / 100);
 
   // Bandarmology
@@ -319,11 +322,14 @@ export function runBacktest(
   const executionCosts = executionCostsFromSettings(settings);
 
   stocks.forEach(stock => {
-    // Filter stocks matching candidate criteria
-    if (stock.overnightEdgeScore < minScore) return;
+    // Filter stocks matching candidate historical criteria
     if (stock.historicalStats.greenOpenRate < minGreen) return;
     if (stock.historicalStats.badGap1PctProb > maxBad) return;
-    if (!allowedDecisions.includes(stock.decision)) return;
+    
+    // Check candidate eligibility without survivorship bias
+    const passesDecision = allowedDecisions.includes(stock.decision);
+    const passesScore = stock.overnightEdgeScore >= minScore;
+    if (!passesDecision && !passesScore) return;
 
     // Simulate trades from historical matches
     stock.historicalStats.matchedTrades.forEach(match => {
@@ -338,7 +344,7 @@ export function runBacktest(
         exitPrice: match.nextOpen,
         grossReturnPct: grossPct,
         netReturnPct: netPct,
-        isWin: netPct > 0,
+        isWin: netPct > 0.0001,
         isBadGap: grossPct < -1.0,
         isSevereGap: grossPct < -2.0,
       });
@@ -376,9 +382,9 @@ export function runBacktest(
 
   const netReturns = allTrades.map(t => t.netReturnPct);
   const grossReturns = allTrades.map(t => t.grossReturnPct);
-  const wins = allTrades.filter(t => t.netReturnPct > 0).length;
-  const losses = allTrades.filter(t => t.netReturnPct < 0).length;
-  const flats = allTrades.filter(t => Math.abs(t.netReturnPct) < 0.001).length;
+  const wins = allTrades.filter(t => t.netReturnPct > 0.0001).length;
+  const losses = allTrades.filter(t => t.netReturnPct < -0.0001).length;
+  const flats = allTrades.filter(t => Math.abs(t.netReturnPct) <= 0.0001).length;
   
   const avgGross = grossReturns.reduce((a, b) => a + b, 0) / allTrades.length;
   const avgNet = netReturns.reduce((a, b) => a + b, 0) / allTrades.length;
@@ -388,7 +394,7 @@ export function runBacktest(
   const totalLoss = Math.abs(netReturns.filter(r => r < 0).reduce((a, b) => a + b, 0));
   const profitFactor = totalLoss > 0 ? totalGain / totalLoss : totalGain > 0 ? 99 : 0;
 
-  // Drawdown and equity curve
+  // Drawdown and equity curve with realistic daily capital allocation
   let currentEquity = 100.0;
   let peakEquity = 100.0;
   let maxDrawdown = 0;
@@ -396,27 +402,48 @@ export function runBacktest(
     { tradeNumber: 0, date: allTrades[0]?.entryDate || 'Start', equity: 100.0 }
   ];
 
-  let currentStreak = 0;
-  let maxConsecLosses = 0;
+  // Group trades by date to simulate realistic portfolio position sizing on concurrent signals
+  const tradesByDate = new Map<string, BacktestTrade[]>();
+  allTrades.forEach(trade => {
+    const existing = tradesByDate.get(trade.entryDate) || [];
+    existing.push(trade);
+    tradesByDate.set(trade.entryDate, existing);
+  });
 
-  allTrades.forEach((t, i) => {
-    currentEquity = currentEquity * (1 + t.netReturnPct / 100);
+  let tradeIndex = 0;
+  const sortedDates = Array.from(tradesByDate.keys()).sort((a, b) => a.localeCompare(b));
+
+  sortedDates.forEach(date => {
+    const dailyTrades = tradesByDate.get(date) || [];
+    if (dailyTrades.length === 0) return;
+
+    // Equal-weighted allocation among concurrent trades on that day
+    const avgDailyNetReturn = dailyTrades.reduce((sum, t) => sum + t.netReturnPct, 0) / dailyTrades.length;
+
+    currentEquity = currentEquity * (1 + avgDailyNetReturn / 100);
     if (currentEquity > peakEquity) {
       peakEquity = currentEquity;
     }
     const dd = ((peakEquity - currentEquity) / peakEquity) * 100;
     if (dd > maxDrawdown) maxDrawdown = dd;
 
-    equityCurve.push({
-      tradeNumber: i + 1,
-      date: t.entryDate,
-      equity: Math.round(currentEquity * 100) / 100,
+    dailyTrades.forEach(t => {
+      tradeIndex++;
+      equityCurve.push({
+        tradeNumber: tradeIndex,
+        date: t.entryDate,
+        equity: Math.round(currentEquity * 100) / 100,
+      });
     });
+  });
 
-    if (t.netReturnPct < 0) {
+  let currentStreak = 0;
+  let maxConsecLosses = 0;
+  allTrades.forEach(t => {
+    if (t.netReturnPct < -0.0001) {
       currentStreak++;
       if (currentStreak > maxConsecLosses) maxConsecLosses = currentStreak;
-    } else {
+    } else if (t.netReturnPct > 0.0001) {
       currentStreak = 0;
     }
   });

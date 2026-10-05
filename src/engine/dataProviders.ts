@@ -238,3 +238,11 @@ export class MockBrokerDataProvider implements BrokerDataProvider {
     return requireStock(this.universeCache, ticker, this.metadata.id).bandarmology.netForeignFlow;
   }
 }
+
+export {
+  GoogleFinanceMarketDataProvider,
+  toGoogleFinanceSymbol,
+  fromGoogleFinanceSymbol,
+  parseGoogleFinanceHistoricalCsv,
+} from './googleFinanceAdapter';
+export type { GoogleFinanceConfig } from './googleFinanceAdapter';

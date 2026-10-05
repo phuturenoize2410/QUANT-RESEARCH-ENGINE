@@ -7,6 +7,7 @@ import {
 } from '../strategyTypes';
 import { StockData } from '../../types';
 import { buildBacktestSummary } from './strategyBase';
+import { totalFrictionPct, DEFAULT_TOTAL_FRICTION_PCT } from '../executionPolicy';
 
 export const PullbackStrategy: StrategyEngine = {
   id: 'strategy-pullback-uptrend',
@@ -90,29 +91,34 @@ export const PullbackStrategy: StrategyEngine = {
       signal = 'AVOID';
     }
 
+    const stats = stock.historicalStats;
+    const dynamicWinRate = Math.min(88, Math.max(38, Math.round((stats.greenOpenRate * 0.65 + score * 0.35) * 10) / 10));
+    const dynamicExpectedReturn = Math.round(Math.max(0.6, (stock.expectedNetGap * 2.0 + (score > 70 ? 1.2 : 0))) * 10) / 10;
+    const dynamicProfitFactor = Math.round(Math.max(1.15, (dynamicWinRate / (100 - dynamicWinRate)) * 1.25) * 100) / 100;
+
     return {
       strategyId: this.id,
       strategyName: this.name,
       ticker: stock.ticker,
       score,
       signal,
-      confidenceScore: 85,
-      winRate: 67.3,
-      expectedReturnPct: 4.6,
-      profitFactor: 2.12,
-      tailRiskScore: 82, // High tail risk safety due to defined stop at MA20
-      badGapProbability: 6.8,
+      confidenceScore: stats.confidenceScore || 80,
+      winRate: dynamicWinRate,
+      expectedReturnPct: dynamicExpectedReturn,
+      profitFactor: dynamicProfitFactor,
+      tailRiskScore: Math.min(95, stock.tailRiskScore + 5), // High tail risk safety due to defined stop at MA20
+      badGapProbability: stats.badGap1PctProb,
       holdingPeriod: this.holdingPeriod,
       positiveFactors,
       riskFactors,
       regimeSuitability: 91,
-      matchedSetupsCount: 40,
+      matchedSetupsCount: stats.comparableSetupsCount || 35,
     };
   },
 
   backtest(stocks: StockData[], params?: Record<string, any>): StrategyBacktestResult {
     const trades: StrategyBacktestTrade[] = [];
-    const feePct = 0.40;
+    const frictionPct = params?.settings ? totalFrictionPct(params.settings) : DEFAULT_TOTAL_FRICTION_PCT;
 
     stocks.forEach((stock, sIdx) => {
       const bars = stock.historicalBars;
@@ -128,7 +134,7 @@ export const PullbackStrategy: StrategyEngine = {
 
         if (ma20 > ma50 && Math.abs(entryBar.close - ma20) / ma20 <= 0.035 && entryBar.close > entryBar.open) {
           const gross = ((exitBar.close - entryBar.close) / entryBar.close) * 100;
-          const net = gross - feePct;
+          const net = gross - frictionPct;
           const isWin = net > 0;
 
           const regimes: MarketRegime[] = ['BULLISH_TREND', 'SIDEWAYS_RANGE', 'HIGH_VOLATILITY', 'BEARISH_CORRECTION'];

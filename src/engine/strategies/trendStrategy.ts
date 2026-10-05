@@ -7,6 +7,7 @@ import {
 } from '../strategyTypes';
 import { StockData } from '../../types';
 import { buildBacktestSummary } from './strategyBase';
+import { totalFrictionPct, DEFAULT_TOTAL_FRICTION_PCT } from '../executionPolicy';
 
 export const TrendStrategy: StrategyEngine = {
   id: 'strategy-trend-follower',
@@ -88,6 +89,11 @@ export const TrendStrategy: StrategyEngine = {
     else if (score >= 45) signal = 'WATCH';
     else signal = 'AVOID';
 
+    const stats = stock.historicalStats;
+    const dynamicWinRate = Math.min(85, Math.max(40, Math.round((stats.greenOpenRate * 0.6 + score * 0.4) * 10) / 10));
+    const dynamicExpectedReturn = Math.round(Math.max(0.8, (stock.expectedNetGap * 2.4 + (score > 70 ? 1.4 : 0))) * 10) / 10;
+    const dynamicProfitFactor = Math.round(Math.max(1.2, (dynamicWinRate / (100 - dynamicWinRate)) * 1.3) * 100) / 100;
+
     return {
       strategyId: this.id,
       strategyName: this.name,
@@ -95,22 +101,22 @@ export const TrendStrategy: StrategyEngine = {
       score,
       signal,
       confidenceScore: Math.min(95, Math.round(score * 0.92)),
-      winRate: 67.8,
-      expectedReturnPct: 5.4,
-      profitFactor: 2.15,
-      tailRiskScore: 78,
-      badGapProbability: 8.2,
+      winRate: dynamicWinRate,
+      expectedReturnPct: dynamicExpectedReturn,
+      profitFactor: dynamicProfitFactor,
+      tailRiskScore: stock.tailRiskScore,
+      badGapProbability: stats.badGap1PctProb,
       holdingPeriod: this.holdingPeriod,
       positiveFactors,
       riskFactors,
       regimeSuitability: 95,
-      matchedSetupsCount: 42,
+      matchedSetupsCount: stats.comparableSetupsCount || 35,
     };
   },
 
   backtest(stocks: StockData[], params?: Record<string, any>): StrategyBacktestResult {
     const trades: StrategyBacktestTrade[] = [];
-    const feePct = 0.40;
+    const frictionPct = params?.settings ? totalFrictionPct(params.settings) : DEFAULT_TOTAL_FRICTION_PCT;
 
     stocks.forEach((stock, sIdx) => {
       const bars = stock.historicalBars;
@@ -126,7 +132,7 @@ export const TrendStrategy: StrategyEngine = {
 
         if (entryBar.close > ma20 && ma20 > ma50) {
           const gross = ((exitBar.close - entryBar.close) / entryBar.close) * 100;
-          const net = gross - feePct;
+          const net = gross - frictionPct;
           const isWin = net > 0;
 
           const regimes: MarketRegime[] = ['BULLISH_TREND', 'SIDEWAYS_RANGE', 'HIGH_VOLATILITY', 'BEARISH_CORRECTION'];

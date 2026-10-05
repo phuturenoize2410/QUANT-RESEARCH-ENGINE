@@ -163,21 +163,23 @@ export function evaluateConditionalProbability(
     avgReturnPct = Math.round((sumReturns / totalTrades) * 100) / 100;
     severeLossProbability = Math.round((severeLossTrades / totalTrades) * 1000) / 10;
   } else {
-    // If 0 stocks currently match, simulate conditional probability based on indicator additive edge
-    const edgeBoost = criteria.length * 4.2;
-    conditionalWinRate = Math.min(85, Math.round((baselineWinRate + edgeBoost) * 10) / 10);
-    avgReturnPct = Math.round((baselineAvgReturn + criteria.length * 0.35) * 100) / 100;
-    severeLossProbability = Math.max(3.0, Math.round((baselineSevereLoss - criteria.length * 1.8) * 10) / 10);
+    // Honest quant reporting: when 0 stocks meet the criteria, do not fabricate artificial edge
+    conditionalWinRate = 0;
+    avgReturnPct = 0;
+    severeLossProbability = 0;
   }
 
-  const winRateEdgePct = Math.round((conditionalWinRate - baselineWinRate) * 10) / 10;
-  const expectedEdgePct = Math.round((avgReturnPct - baselineAvgReturn) * 100) / 100;
+  const winRateEdgePct = totalTrades > 0 ? Math.round((conditionalWinRate - baselineWinRate) * 10) / 10 : 0;
+  const expectedEdgePct = totalTrades > 0 ? Math.round((avgReturnPct - baselineAvgReturn) * 100) / 100 : 0;
 
   // Sample size damping penalty
   let confidenceScore = 80;
   let sampleWarning: string | undefined;
 
-  if (matchedSamples < 3) {
+  if (matchedSamples === 0) {
+    confidenceScore = 0;
+    sampleWarning = 'No stocks currently match this condition combination. Insufficient sample size to evaluate conditional probability.';
+  } else if (matchedSamples < 3) {
     confidenceScore = Math.max(15, matchedSamples * 12);
     sampleWarning = `Warning: Only ${matchedSamples} stocks currently match this restrictive combination. Sample size is too small for statistical certainty.`;
   } else if (matchedSamples < 6) {

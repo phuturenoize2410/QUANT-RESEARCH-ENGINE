@@ -80,11 +80,12 @@ export class OvernightMLModel {
     }
 
     const rawProb = 1 / (1 + Math.exp(-logit));
-    const probGreenOpen = Math.min(94, Math.max(18, Math.round(rawProb * 100)));
+    const probGreenOpen = Math.min(90, Math.max(18, Math.round(rawProb * 100)));
     const netProbDamping = Math.min(12, Math.max(4, Math.round(roundTripCostPct * 12)));
     const probNetPositiveOpen = Math.max(12, probGreenOpen - netProbDamping);
-    const probFlatOpen = Math.round((100 - probGreenOpen) * 0.35);
-    const probNegativeOpen = Math.max(5, 100 - probGreenOpen - probFlatOpen);
+    const nonGreen = 100 - probGreenOpen;
+    const probFlatOpen = Math.round(nonGreen * 0.35);
+    const probNegativeOpen = nonGreen - probFlatOpen;
     const probGapBelowHalfPct = Math.round(probNegativeOpen * 0.70);
     const probGapBelowOnePct = Math.round(probNegativeOpen * 0.45);
     const probGapBelowTwoPct = Math.round(probNegativeOpen * 0.20);

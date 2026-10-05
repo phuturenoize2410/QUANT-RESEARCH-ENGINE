@@ -13,13 +13,18 @@ import { roundResearchRobustnessScore } from '../scorePolicy';
 export function calculateVaRAndCVaR(returns: number[], confidenceLevel: number = 0.95): { var95: number; cvar95: number } {
   if (returns.length === 0) return { var95: 0, cvar95: 0 };
   const sorted = [...returns].sort((a, b) => a - b);
-  const cutoffIndex = Math.max(0, Math.floor((1 - confidenceLevel) * sorted.length));
-  const var95 = Math.abs(sorted[cutoffIndex] ?? 0);
+  const cutoffIndex = Math.max(0, Math.floor((1 - confidenceLevel) * (sorted.length - 1)));
+  const cutoffReturn = sorted[cutoffIndex] ?? 0;
   
-  const tailLosses = sorted.slice(0, cutoffIndex + 1);
-  const cvar95 = tailLosses.length > 0 
-    ? Math.abs(tailLosses.reduce((sum, val) => sum + val, 0) / tailLosses.length)
-    : var95;
+  // Value at Risk is the loss at the (1 - confidenceLevel) quantile.
+  // If the quantile return is positive, there is no loss at this confidence level (VaR = 0).
+  const var95 = Math.max(0, -cutoffReturn);
+  
+  const tailReturns = sorted.slice(0, cutoffIndex + 1);
+  const avgTailReturn = tailReturns.length > 0 
+    ? tailReturns.reduce((sum, val) => sum + val, 0) / tailReturns.length
+    : cutoffReturn;
+  const cvar95 = Math.max(0, -avgTailReturn);
 
   return {
     var95: Math.round(var95 * 100) / 100,
@@ -33,7 +38,9 @@ export function calculateVaRAndCVaR(returns: number[], confidenceLevel: number =
 export function calculateSortinoRatio(returns: number[], avgReturn: number): number {
   if (returns.length === 0) return 0;
   const downsideReturns = returns.filter(r => r < 0);
-  if (downsideReturns.length === 0) return 3.5;
+  if (downsideReturns.length === 0) {
+    return avgReturn > 0 ? 5.0 : 0;
+  }
   const sumDownsideSquares = downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0);
   const downsideDeviation = Math.sqrt(sumDownsideSquares / returns.length);
   return downsideDeviation > 0 ? Math.round(((avgReturn / downsideDeviation) * Math.sqrt(240)) * 100) / 100 : 0;

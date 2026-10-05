@@ -14,8 +14,8 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { StockData } from '../types';
-import { buildStockQuantProfile } from '../engine/quantLabEngine';
-import { classifyMarketRegime } from '../engine/quantLabEngine';
+import { buildStockQuantProfile, classifyMarketRegime } from '../engine/quantLabEngine';
+import { calculateKellyPositionFraction } from '../engine/analytics';
 
 interface StockQuantProfileModalProps {
   stock: StockData;
@@ -34,6 +34,12 @@ export const StockQuantProfileModal: React.FC<StockQuantProfileModalProps> = ({
 }) => {
   const { regime } = classifyMarketRegime(universe);
   const profile = buildStockQuantProfile(stock, regime);
+  const kellyFraction = calculateKellyPositionFraction(
+    stock.historicalStats.greenOpenRate,
+    stock.expectedNetGap > 0 ? stock.expectedNetGap : 1.2,
+    stock.historicalStats.avgNegativeGap ? Math.abs(stock.historicalStats.avgNegativeGap) : 0.8,
+    0.5
+  );
 
   const radarMetrics = [
     { label: 'Trend Strength', value: profile.trendScore, color: 'emerald' },
@@ -122,13 +128,17 @@ export const StockQuantProfileModal: React.FC<StockQuantProfileModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3 font-mono text-xs">
+            <div className="px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-center">
+              <div className="text-[10px] text-emerald-300">Half-Kelly Size</div>
+              <div className="text-emerald-400 font-extrabold">{kellyFraction}%</div>
+            </div>
             <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700 text-center">
               <div className="text-[10px] text-slate-400">VaR (95%)</div>
-              <div className="text-rose-400 font-bold">-{profile.var95}%</div>
+              <div className="text-rose-400 font-bold">{profile.var95 > 0 ? `-${profile.var95}%` : '0.0%'}</div>
             </div>
             <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700 text-center">
               <div className="text-[10px] text-slate-400">Expected Shortfall</div>
-              <div className="text-rose-300 font-bold">-{profile.cvar95}%</div>
+              <div className="text-rose-300 font-bold">{profile.cvar95 > 0 ? `-${profile.cvar95}%` : '0.0%'}</div>
             </div>
             <div className="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700 text-center">
               <div className="text-[10px] text-slate-400">Overnight Score</div>

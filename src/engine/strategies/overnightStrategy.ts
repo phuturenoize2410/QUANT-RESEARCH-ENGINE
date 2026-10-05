@@ -8,6 +8,7 @@ import {
 import { StockData } from '../../types';
 import { computeOvernightEdgeScore, DEFAULT_STRATEGY_SETTINGS } from '../analytics';
 import { buildBacktestSummary } from './strategyBase';
+import { totalFrictionPct, DEFAULT_TOTAL_FRICTION_PCT } from '../executionPolicy';
 
 export const OvernightStrategy: StrategyEngine = {
   id: 'strategy-overnight-bsjp',
@@ -101,7 +102,7 @@ export const OvernightStrategy: StrategyEngine = {
 
   backtest(stocks: StockData[], params?: Record<string, any>): StrategyBacktestResult {
     const trades: StrategyBacktestTrade[] = [];
-    const feePct = 0.40; // 0.15% buy + 0.25% sell
+    const frictionPct = params?.settings ? totalFrictionPct(params.settings) : DEFAULT_TOTAL_FRICTION_PCT;
 
     stocks.forEach((stock, sIdx) => {
       const bars = stock.historicalBars;
@@ -118,7 +119,7 @@ export const OvernightStrategy: StrategyEngine = {
         
         if (bar.close >= ma10 && bar.volume > avgVol * 0.8) {
           const gross = ((bar.nextOpen - bar.close) / bar.close) * 100;
-          const net = gross - feePct;
+          const net = gross - frictionPct;
           const isWin = net > 0;
 
           const regimes: MarketRegime[] = ['BULLISH_TREND', 'SIDEWAYS_RANGE', 'HIGH_VOLATILITY', 'BEARISH_CORRECTION'];

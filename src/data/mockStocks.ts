@@ -229,6 +229,9 @@ function generateHistoricalBars(cfg: RawTickerConfig, tickerIndex: number): Dail
     const calculatedNextOpen = Math.round(bar.close * (1 + gapPct));
     bar.nextOpen = calculatedNextOpen;
     nextBar.open = calculatedNextOpen;
+    // Maintain OHLC validity: High >= max(Open, Close) and Low <= min(Open, Close)
+    nextBar.high = Math.max(nextBar.high, nextBar.open, nextBar.close);
+    nextBar.low = Math.min(nextBar.low, nextBar.open, nextBar.close);
   }
 
   // Enforce today's live closing candle accurately
@@ -240,6 +243,10 @@ function generateHistoricalBars(cfg: RawTickerConfig, tickerIndex: number): Dail
     const range = Math.max(10, Math.round(lastBar.close * 0.022));
     lastBar.low = Math.min(lastBar.close, prevBar.close) - Math.round(range * (1 - cfg.closePos));
     lastBar.high = Math.max(lastBar.close, prevBar.close) + Math.round(range * cfg.closePos);
+    // Ensure open is also bounded within [low, high]
+    lastBar.open = Math.min(lastBar.high, Math.max(lastBar.low, lastBar.open));
+    lastBar.high = Math.max(lastBar.high, lastBar.open, lastBar.close);
+    lastBar.low = Math.min(lastBar.low, lastBar.open, lastBar.close);
     lastBar.volume = Math.round(cfg.avgVolume * cfg.todayRelVol);
     lastBar.turnover = Math.round(lastBar.volume * lastBar.close);
   }
@@ -278,13 +285,33 @@ function computeTechnical(bars: DailyBar[], cfg: RawTickerConfig): TechnicalSign
   const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
   const rsi14 = Math.round((100 - (100 / (1 + rs))) * 10) / 10;
 
-  // MACD
-  const ema12 = calcMA(12);
-  const ema26 = calcMA(26);
-  const macd = ema12 - ema26;
-  const macdSignal = macd * 0.8;
-  const macdHist = macd - macdSignal;
-  const macdGoldenCross = macdHist > 0 && macd > 0;
+  // True Exponential Moving Average (EMA) and authentic MACD (12, 26, 9)
+  const calcEMA = (len: number, series: number[] = closes): number[] => {
+    if (series.length === 0) return [];
+    const k = 2 / (len + 1);
+    const emaValues: number[] = [series[0]];
+    for (let i = 1; i < series.length; i++) {
+      emaValues.push(series[i] * k + emaValues[i - 1] * (1 - k));
+    }
+    return emaValues;
+  };
+
+  const ema12Series = calcEMA(12);
+  const ema26Series = calcEMA(26);
+  const macdSeries: number[] = [];
+  for (let i = 0; i < n; i++) {
+    macdSeries.push((ema12Series[i] ?? currentClose) - (ema26Series[i] ?? currentClose));
+  }
+  const signalSeries = calcEMA(9, macdSeries);
+
+  const macd = Math.round((macdSeries[n - 1] ?? 0) * 10) / 10;
+  const macdSignal = Math.round((signalSeries[n - 1] ?? 0) * 10) / 10;
+  const macdHist = Math.round((macd - macdSignal) * 10) / 10;
+
+  // Real golden cross: previous MACD <= Signal and current MACD > Signal
+  const prevMacd = macdSeries[n - 2] ?? macd;
+  const prevSignal = signalSeries[n - 2] ?? macdSignal;
+  const macdGoldenCross = prevMacd <= prevSignal && macd > macdSignal;
 
   // Momentum
   const momentum5d = n >= 6 ? Math.round(((currentClose / closes[n - 6]) - 1) * 1000) / 10 : cfg.todayReturnPct;
